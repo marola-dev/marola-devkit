@@ -20,8 +20,8 @@ cur="$(git branch --show-current)"
 mip="$(tr 'A-Z' 'a-z' <<<"$mip")"
 git fetch -q origin 2>/dev/null || true
 
-# Every task branch of the MIP, local or remote, sorted by task number.
-branches="$( { git branch --list "$mip/*" --format='%(refname:short)'; git branch -r --list "origin/$mip/*" --format='%(refname:short)' | sed 's#^origin/##'; } | sort -u | sort -t/ -k2 -n)"
+# Every task branch of the MIP, local or remote, sorted by task number (scripts/stack.sh branches).
+branches="$(scripts/stack.sh branches "$mip")"
 [ -n "$branches" ] || { echo "uprds: no $mip/* branches" >&2; exit 1; }
 
 task_of() { sed -n 's#^mip-[0-9]\{4\}/\([0-9]*\)-.*#\1#p' <<<"$1"; }
@@ -75,3 +75,9 @@ while read -r b; do
   fi
   rm -f "$extra"
 done <<<"$branches"
+
+# GitHub's native Stack (the "Preview stack" box): `scripts/stack.sh link` — open PRs only,
+# bottom to top; it explains itself when gh is not logged in or the extension is missing.
+if [ "$dry" -eq 0 ]; then
+  scripts/stack.sh link "$mip" || echo "uprds: GitHub Stack not linked (see above) — 'just stack-setup' then 'just stack-link ${mip^^}'" >&2
+fi
