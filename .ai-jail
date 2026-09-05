@@ -1,0 +1,16 @@
+# Project-level ai-jail policy (untrusted layer — can only tighten the
+# sandbox, never grant capabilities; see ~/.ai-jail on each dev machine for
+# that). Mirrors this repo's secrets policy in .gitignore and AGENTS.md's
+# "never hardcode a credential" rule: an agent running inside `just jail-*`
+# should not be able to read real secrets even if one ends up on disk
+# locally (.env, a downloaded cert, etc).
+#
+# IMPORTANT: ai-jail's `--save-config` defaults to ON and rewrites this
+# file after every run (it persists the invoked command into a `command =
+# [...]` block, clobbering this comment in the process). Every `just
+# jail-*` recipe below passes `--no-save-config` specifically so this
+# stays a static, committed policy file instead of per-invocation local
+# state. If you run `ai-jail` directly rather than through `just`, pass
+# --no-save-config yourself or expect `git diff` to show churn here.
+
+mask = [".env", ".env.*", "*.pem", "*.key"]
