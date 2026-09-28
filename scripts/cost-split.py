@@ -152,9 +152,55 @@ def _session_message_files(pdir, session_prefix):
             yield sid, sf
 
 
-def messages(pdir, session_prefix):
-    """(timestamp, session, model, usage) per assistant message, deduplicated by message id."""
+def worktree_branches(root):
+    """{absolute worktree path: branch name}, from `git worktree list --porcelain` run at `root`
+    (always the main checkout, per `repo_root()`) — covers the main checkout itself plus every
+    live `.tmp/wt-*`. Used to resolve a message's `cwd` to the branch it actually ran on."""
+    out = {}
+    path = None
+    for line in sh("git", "worktree", "list", "--porcelain", cwd=root).splitlines():
+        if line.startswith("worktree "):
+            path = line.removeprefix("worktree ")
+        elif line.startswith("branch refs/heads/") and path:
+            out[path] = line.removeprefix("branch refs/heads/")
+            path = None
+    return out
+
+
+def _worktree_branch_for_cwd(cwd, wt_branches):
+    """The branch of the worktree that contains `cwd`, or None. Longest-match: a linked worktree
+    normally lives under the main checkout's own path (`.tmp/wt-*`), so the main checkout's path
+    is itself a prefix of it and the naive first-match would pick the wrong one."""
+    if not cwd:
+        return None
+    best = None
+    for path, branch in wt_branches.items():
+        if cwd == path or cwd.startswith(path + "/"):
+            if best is None or len(path) > len(best[0]):
+                best = (path, branch)
+    return best[1] if best else None
+
+
+def _under(cwd, root, linked):
+    """True if `cwd` is inside the main checkout's own tree, excluding any worktree's tree —
+    currently linked (`linked`) or since removed from git's registry. The second half matters:
+    `.tmp/wt-*` is routinely removed once a stacked task's worktree is done with (confirmed
+    against this project's real logs — a since-removed worktree's `cwd` is still `.tmp/wt-*`
+    shaped, so excluding only currently-`linked` paths would misclassify it as the main
+    checkout and trust its parent's inherited branch again)."""
+    if not cwd or not (cwd == str(root) or cwd.startswith(str(root) + "/")):
+        return False
+    if any(cwd == p or cwd.startswith(p + "/") for p in linked):
+        return False
+    return not cwd.startswith(str(root) + "/.tmp/wt-")
+
+
+def messages(pdir, session_prefix, root):
+    """(timestamp, session, model, usage, branch) per assistant message, deduplicated by message
+    id."""
     seen = {}
+    wt_branches = worktree_branches(root)
+    linked = {path: branch for path, branch in wt_branches.items() if path != str(root)}
     for sid, f in _session_message_files(pdir, session_prefix):
         with open(f, encoding="utf-8") as fh:
             for line in fh:
@@ -171,10 +217,20 @@ def messages(pdir, session_prefix):
                     continue
                 key = m.get("id") or d.get("requestId") or d.get("uuid")
                 ts = dt.datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00"))
-                # `gitBranch` is the checkout's branch when the message was made — a subagent
-                # transcript carries its worktree's branch. It is what lets usage follow the
-                # branch instead of the clock (see the attribution loop in main()).
-                seen[key] = (ts, sid, m.get("model", "?"), m["usage"], d.get("gitBranch") or "")
+                # `gitBranch` is the session directory's branch at message time — right for the
+                # long-lived, branch-switching main checkout, wrong for a *linked* worktree (every
+                # line of a subagent transcript there inherits its parent's value; issue #433).
+                # Only a linked worktree's own branch overrides it; a sidechain matching neither
+                # falls to "" rather than trust that inherited branch.
+                cwd = d.get("cwd")
+                wt_branch = _worktree_branch_for_cwd(cwd, linked)
+                if wt_branch is not None:
+                    branch = wt_branch
+                elif d.get("isSidechain") and not _under(cwd, root, linked):
+                    branch = ""
+                else:
+                    branch = d.get("gitBranch") or ""
+                seen[key] = (ts, sid, m.get("model", "?"), m["usage"], branch)
     return sorted(seen.values(), key=lambda x: x[0])
 
 
@@ -465,19 +521,35 @@ def estimate_usd(prices, tokens, model=DEFAULT_PRICE_MODEL):
     return tokens * rate
 
 
+def _tokens_str(n):
+    if n >= 100_000:
+        return f"{n / 1e6:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1e3:.0f}k"
+    return f"{n:.0f}"
+
+
 def format_tokens(tokens):
-    if tokens >= 100_000:
-        return f"~{tokens / 1e6:.1f}M tokens est."
-    if tokens >= 1_000:
-        return f"~{tokens / 1e3:.0f}k tokens est."
-    return f"~{tokens:.0f} tokens est."
+    return f"~{_tokens_str(tokens)} tokens est."
 
 
-def format_estimate_trailer(tokens, usd, changed_lines, today):
+def format_estimate_trailer(tokens, usd, changed_lines, today, stats):
+    """`stats` is calibrate()'s return. The point figure alone hides that this repo's own
+    tokens-per-line spread is ~5x (see calibrate()'s docstring) — scale calibrate()'s p25/p75 onto
+    this estimate's own token figure so the band is in the same units as the number next to it,
+    rather than inventing a new one. `stats["n"] == 0` (no calibration history) states that
+    plainly instead of printing a band it doesn't have."""
     usd_part = f"~${usd:.2f} est." if usd is not None else "$n/a est."
+    n = stats.get("n", 0)
+    if n and stats.get("median"):
+        lo = tokens * stats["p25"] / stats["median"]
+        hi = tokens * stats["p75"] / stats["median"]
+        band = f"IQR {_tokens_str(lo)}-{_tokens_str(hi)} tokens for this diff from {n} calibrated commits"
+    else:
+        band = "no calibration history — documented default, not a fit"
     return (
         f"Cost: {usd_part} · {format_tokens(tokens)} "
-        f"(diff-size model, {changed_lines} lines, no session log) "
+        f"(diff-size model, {changed_lines} lines, no session log, {band}) "
         f"· scripts/cost-split.py --estimate {today}"
     )
 
@@ -542,14 +614,55 @@ def self_test():
     assert estimate_usd(prices, 1_000_000, model="no-such-model") is None
     assert estimate_usd({}, 1_000_000) is None
 
-    # --- format_estimate_trailer: always carries "est." on both figures, never bare ---
-    trailer = format_estimate_trailer(912_345, 1.20, 210, "2026-09-05")
+    # --- format_estimate_trailer: always carries "est." on both figures, never bare, and now
+    # states its own band (issue #433 task 2: a point figure alone hides calibrate()'s ~5x IQR). ---
+    fitted_stats = {
+        "n": 5,
+        "median": 6000.0,
+        "p25": 3000.0,
+        "p75": 12000.0,
+        "min": 800.0,
+        "max": 40000.0,
+    }
+    trailer = format_estimate_trailer(912_345, 1.20, 210, "2026-09-05", fitted_stats)
     assert trailer.startswith("Cost: ~$1.20 est. ·"), trailer
     assert "tokens est." in trailer, trailer
     assert "210 lines, no session log" in trailer, trailer
     assert trailer.endswith("--estimate 2026-09-05"), trailer
-    no_price = format_estimate_trailer(500, None, 3, "2026-09-05")
+
+    # Parse the band back out of the rendered string — not calibrate()'s own p25/p75 formula — so
+    # this fails if the band stops bracketing the point figure or stops matching stats["n"], not
+    # only if the arithmetic happens to change.
+    def _parse_band(s):
+        m = re.search(
+            r"IQR ([\d.]+)(k|M)?-([\d.]+)(k|M)?\s*tokens for this diff from (\d+) calibrated", s
+        )
+        assert m, s
+        scale = {None: 1, "k": 1e3, "M": 1e6}
+        return (
+            float(m.group(1)) * scale[m.group(2)],
+            float(m.group(3)) * scale[m.group(4)],
+            int(m.group(5)),
+        )
+
+    lo, hi, shown_n = _parse_band(trailer)
+    assert lo < hi, (lo, hi)
+    assert lo <= 912_345 <= hi, (lo, 912_345, hi)  # the point figure sits inside its own band
+    assert shown_n == fitted_stats["n"], (shown_n, fitted_stats["n"])
+
+    no_price = format_estimate_trailer(500, None, 3, "2026-09-05", fitted_stats)
     assert no_price.startswith("Cost: $n/a est. ·"), no_price
+
+    # n == 0 (fresh checkout, no calibration history): well-formed, but reads as a documented
+    # default, never a fit — and differently from the fitted case above.
+    fresh = format_estimate_trailer(500, None, 3, "2026-09-05", {"n": 0})
+    assert fresh.startswith("Cost: $n/a est. ·"), fresh
+    assert "tokens est." in fresh, fresh
+    assert "3 lines, no session log" in fresh, fresh
+    assert fresh.endswith("--estimate 2026-09-05"), fresh
+    assert "documented default" in fresh, fresh
+    assert "documented default" not in trailer, trailer
+    assert "IQR" not in fresh, fresh
 
     # --- calibrate() + diff_stats() + estimate_commit(): a synthetic repo, so the fit is a known
     # number instead of depending on this checkout's ever-growing real history ---
@@ -651,6 +764,174 @@ def self_test():
         )
         assert not (outer / "x.txt").exists(), "inner repo's file leaked into the outer repo"
 
+    # --- messages(): a subagent transcript's own `gitBranch` is the *parent's*, not its own —
+    # `cwd` says which worktree it actually ran in (issue #433, confirmed live 2026-09-28). ---
+    with tempfile.TemporaryDirectory() as wt_tmp:
+        mrepo = Path(wt_tmp) / "main-checkout"
+        mrepo.mkdir()
+        sh("git", "init", "-q", "-b", "main", cwd=mrepo)
+        sh("git", "config", "user.email", "test@example.com", cwd=mrepo)
+        sh("git", "config", "user.name", "Test", cwd=mrepo)
+        (mrepo / "a.txt").write_text("a\n")
+        sh("git", "add", "a.txt", cwd=mrepo)
+        sh("git", "commit", "-q", "-m", "initial", cwd=mrepo)
+
+        worktree_dir = mrepo / ".tmp" / "wt-feature"
+        sh("git", "worktree", "add", "-q", "-b", "feature-x", str(worktree_dir), cwd=mrepo)
+        (worktree_dir / "b.txt").write_text("b\n")
+        sh("git", "add", "b.txt", cwd=worktree_dir)
+        sh("git", "commit", "-q", "-m", "the commit under test", cwd=worktree_dir)
+        target_sha = sh("git", "rev-parse", "HEAD", cwd=worktree_dir).strip()
+        target_when = dt.datetime.fromisoformat(
+            sh("git", "log", "-1", "--format=%aI", cwd=worktree_dir).strip()
+        )
+
+        pdir = Path(wt_tmp) / "project-logs"
+        sid = "ses-parent"
+        (pdir / sid / "subagents").mkdir(parents=True)
+
+        def jsonl_line(**fields):
+            return json.dumps(fields) + "\n"
+
+        usage_small = {"input_tokens": 100, "output_tokens": 20}
+        usage_big = {"input_tokens": 300_000, "output_tokens": 5_000}
+        usage_tiny = {"input_tokens": 7, "output_tokens": 3}
+
+        (pdir / f"{sid}.jsonl").write_text(
+            jsonl_line(
+                message={"id": "msg-parent", "usage": usage_small, "model": "claude-sonnet-5"},
+                timestamp="2000-01-01T10:00:00Z",
+                gitBranch="main",
+                cwd="/no/such/worktree",
+            )
+            + jsonl_line(
+                # cwd IS the main checkout; gitBranch names a branch other than its current one
+                # ("main" here). gitBranch is correct per-message history and must win.
+                message={
+                    "id": "msg-main-checkout",
+                    "usage": usage_tiny,
+                    "model": "claude-sonnet-5",
+                },
+                timestamp="2000-01-01T10:02:00Z",
+                gitBranch="feature-x",
+                cwd=str(mrepo),
+            )
+        )
+        sub_a = jsonl_line(
+            message={"id": "msg-sub-a", "usage": usage_big, "model": "claude-sonnet-5"},
+            timestamp="2000-01-01T10:05:00Z",
+            gitBranch="main",
+            cwd=str(worktree_dir),
+            isSidechain=True,
+        )
+        sub_b = jsonl_line(
+            message={"id": "msg-sub-b", "usage": usage_small, "model": "claude-sonnet-5"},
+            timestamp="2000-01-01T10:06:00Z",
+            gitBranch="main",
+            cwd="/no/such/worktree/either",
+            isSidechain=True,
+        )
+        sub_c = jsonl_line(
+            # Same as msg-main-checkout, but sidechain: must also keep gitBranch, not fall to ""
+            # just because it's a sidechain.
+            message={"id": "msg-sub-c", "usage": usage_tiny, "model": "claude-sonnet-5"},
+            timestamp="2000-01-01T10:07:00Z",
+            gitBranch="feature-x",
+            cwd=str(mrepo),
+            isSidechain=True,
+        )
+        sub_d = jsonl_line(
+            # cwd is a subdirectory of the main checkout, not its root — real logs have these
+            # (e.g. docs/img/logo). Still the main checkout's own tree, so still gitBranch.
+            message={"id": "msg-sub-d", "usage": usage_tiny, "model": "claude-sonnet-5"},
+            timestamp="2000-01-01T10:08:00Z",
+            gitBranch="feature-x",
+            cwd=str(mrepo / "docs" / "img" / "logo"),
+            isSidechain=True,
+        )
+        (pdir / sid / "subagents" / "agent-x.jsonl").write_text(sub_a + sub_b + sub_c + sub_d)
+
+        got = messages(pdir, None, mrepo)
+        assert len(got) == 6, got
+        parent_branch = got[0][4]
+        main_checkout_branch = got[1][4]
+        sub_a_branch = got[2][4]
+        sub_b_branch = got[3][4]
+        sub_c_branch = got[4][4]
+        sub_d_branch = got[5][4]
+
+        # Non-sidechain, cwd matches no known worktree: existing behaviour must not regress.
+        assert parent_branch == "main", parent_branch
+
+        # Non-sidechain, cwd IS the main checkout: keep gitBranch ("feature-x"), not
+        # worktree_branches()'s "current branch" entry for it ("main") — the main checkout's
+        # current branch says nothing about what branch it was on when a given message was made.
+        assert main_checkout_branch == "feature-x", main_checkout_branch
+
+        # Sidechain, cwd resolves to the feature-x worktree: use the worktree's branch, not the
+        # inherited (misleading) parent gitBranch.
+        assert sub_a_branch == "feature-x", sub_a_branch
+
+        # Sidechain, cwd matches no known worktree: "" (time-only rule), not the parent's branch —
+        # a wrong branch would be discarded outright, "" is only less precise.
+        assert sub_b_branch == "", sub_b_branch
+
+        # Sidechain, cwd IS the main checkout: keep gitBranch, same as the non-sidechain case —
+        # a parent that was itself running in the main checkout inherits correct history.
+        assert sub_c_branch == "feature-x", sub_c_branch
+
+        # Sidechain, cwd is a subdirectory of the main checkout (not its root): still gitBranch,
+        # not "" — real logs have these and a naive exact match would send them to the wrong arm.
+        assert sub_d_branch == "feature-x", sub_d_branch
+
+        # End to end (issue #433): run the fixture through `attribute()` itself — the same
+        # function main() calls — not a re-implementation of its `ts <= when` pairing or
+        # summation. `branches_containing`/`branches_with_equivalent` read the ambient cwd (no
+        # `cwd=` param, same as `commits()`), so chdir into the synthetic repo for the call.
+        cs = [(target_when, "feature-x", target_sha, "the commit under test")]
+        saved_cwd = os.getcwd()
+        try:
+            os.chdir(worktree_dir)
+            buckets = attribute(got, cs, {})
+        finally:
+            os.chdir(saved_cwd)
+
+        # sub_a lands on target_sha by branch (feature-x, resolved from cwd); msg-main-checkout,
+        # sub_c and sub_d land there too, by branch (their own gitBranch, "feature-x" — cwd'd in
+        # or under the main checkout); sub_b lands there by the time-only rule (its cwd matched no
+        # worktree, so its branch is ""), since cs holds only this one commit. parent (branch
+        # "main", not in {"feature-x"}) is discarded entirely — it must not appear anywhere, not
+        # even "uncommitted".
+        bucket = buckets[target_sha]
+        actual_total = bucket["in"] + bucket["out"] + bucket["cache_w"] + bucket["cache_r"]
+        tiny_total = usage_tiny["input_tokens"] + usage_tiny["output_tokens"]
+        expected_total = (
+            usage_big["input_tokens"]
+            + usage_big["output_tokens"]
+            + usage_small["input_tokens"]
+            + usage_small["output_tokens"]
+            + 3 * tiny_total  # msg-main-checkout + sub_c + sub_d, all usage_tiny
+        )
+        # Exact match, no tolerance: every field summed here is an int token count, so there is
+        # no rounding for a tolerance to absorb.
+        assert actual_total == expected_total, (
+            f"attribute() must land the subagent-shaped fixture's measured total on "
+            f"{target_sha[:7]} exactly (int summation, 0 tolerance): got {actual_total}, "
+            f"expected {expected_total} — a regression in the ts<=when pairing or the "
+            "summation would silently change this"
+        )
+        uncommitted_total = sum(
+            buckets["uncommitted"][k] for k in ("in", "out", "cache_w", "cache_r")
+        )
+        assert uncommitted_total == 0, (
+            f"the parent message's branch ({parent_branch!r}) doesn't carry the commit under "
+            f"test and must be discarded outright, not misrouted to uncommitted: {uncommitted_total}"
+        )
+        # attribute() just populated this module-global cache from the synthetic (about-to-vanish)
+        # repo above; reset it so a test block added later doesn't inherit it.
+        global _equivalents
+        _equivalents = None
+
     # --- messages_opencode(): a synthetic DB built against the real schema (MIP-0013 task 2,
     # confirmed live 2026-09-07 against opencode 1.18.25) — table/column names, tokens.{...} JSON
     # shape, session.directory filtering. No real ~/.local/share/opencode touched. ---
@@ -729,6 +1010,64 @@ def self_test():
 
 
 # ---------------------------------------------------------------------------------------------
+
+
+def attribute(msgs, cs, prices):
+    """[(ts, session, model, usage, branch)], [(when, branch, sha, subject)] -> sha/"uncommitted"
+    -> totals. A message counts toward a branch only if it was made *on* that branch (its
+    `mbranch`), then falls into the first commit whose author date is after it. Without the
+    branch test, every session on the machine that ran before a branch's first commit — other
+    agents, other features — landed on that commit (seen: 335M tokens on a 500-line commit). A
+    message with no branch (older logs, or a sidechain whose `cwd` matched no worktree) keeps the
+    time-only rule.
+
+    "On that branch" means: the message's branch contains the commit — a commit authored on
+    feat/a and now priced from feat/b (stacked on a) is still paid for by the messages made on
+    feat/a. Computed once per commit from `git branch -a --contains`.
+
+    Not pure despite the signature: `branches_containing`/`branches_with_equivalent` take no
+    `cwd` and read the process's actual working directory, so the caller must already be in (or
+    have chdir'd into) the repo `cs`'s commits belong to.
+    """
+    buckets = defaultdict(
+        lambda: {
+            "in": 0,
+            "out": 0,
+            "cache_w": 0,
+            "cache_r": 0,
+            "usd": 0.0,
+            "models": set(),
+            "sessions": set(),
+            "priced": True,
+        }
+    )
+    contains = {
+        sha: branches_containing(sha) | branches_with_equivalent(sha) for _w, _b, sha, _s in cs
+    }
+    ours = {c[1] for c in cs}.union(*contains.values()) if cs else set()
+    for ts, session, model, u, mbranch in msgs:
+        if mbranch and mbranch not in ours:
+            continue
+        target = "uncommitted"
+        for when, _cbranch, sha, _s in cs:
+            if mbranch and mbranch not in contains[sha]:
+                continue
+            if ts <= when:
+                target = sha
+                break
+        b = buckets[target]
+        b["in"] += u.get("input_tokens", 0)
+        b["out"] += u.get("output_tokens", 0)
+        b["cache_w"] += u.get("cache_creation_input_tokens", 0)
+        b["cache_r"] += u.get("cache_read_input_tokens", 0)
+        b["models"].add(model)
+        b["sessions"].add(session[:8])
+        usd = price(prices, model, u)
+        if usd is None:
+            b["priced"] = False
+        else:
+            b["usd"] += usd
+    return buckets
 
 
 def build_rows(cs, buckets, order, prices, do_estimate, coeff):
@@ -837,14 +1176,14 @@ def main():
                 f"cost-split --estimate-commit: {a.estimate_commit} has no diff to estimate from"
             )
         tokens, usd, changed = est
-        print(format_estimate_trailer(tokens, usd, changed, dt.date.today().isoformat()))
+        print(format_estimate_trailer(tokens, usd, changed, dt.date.today().isoformat(), stats))
         return
 
     msgs = []
     if a.harness in ("claude", "all"):
         pdir = project_dir(root)
         if pdir.is_dir():
-            msgs += messages(pdir, a.session)
+            msgs += messages(pdir, a.session, root)
         elif a.harness == "claude":
             sys.exit(f"no session logs at {pdir}")
     if a.harness in ("opencode", "all"):
@@ -859,55 +1198,8 @@ def main():
     if a.estimate:
         coeff, calib_stats = calibrate()
 
-    # Only sessions that overlap the commit window are relevant: from the first message of any
-    # session that produced a commit, up to now.
-    buckets = defaultdict(
-        lambda: {
-            "in": 0,
-            "out": 0,
-            "cache_w": 0,
-            "cache_r": 0,
-            "usd": 0.0,
-            "models": set(),
-            "sessions": set(),
-            "priced": True,
-        }
-    )
     order = [c[2] for c in cs] + ["uncommitted"]
-    # A message counts toward a branch only if it was made *on* that branch (its `gitBranch`),
-    # then falls into the first commit whose author date is after it. Without the branch test,
-    # every session on the machine that ran before a branch's first commit — other agents,
-    # other features — landed on that commit (seen: 335M tokens on a 500-line commit). A message
-    # with no `gitBranch` (older logs) keeps the time-only rule.
-    # "On that branch" means: the message's branch contains the commit — a commit authored on
-    # feat/a and now priced from feat/b (stacked on a) is still paid for by the messages made on
-    # feat/a. Computed once per commit from `git branch -a --contains`.
-    contains = {
-        sha: branches_containing(sha) | branches_with_equivalent(sha) for _w, _b, sha, _s in cs
-    }
-    ours = {c[1] for c in cs}.union(*contains.values()) if cs else set()
-    for ts, session, model, u, mbranch in msgs:
-        if mbranch and mbranch not in ours:
-            continue
-        target = "uncommitted"
-        for when, _cbranch, sha, _s in cs:
-            if mbranch and mbranch not in contains[sha]:
-                continue
-            if ts <= when:
-                target = sha
-                break
-        b = buckets[target]
-        b["in"] += u.get("input_tokens", 0)
-        b["out"] += u.get("output_tokens", 0)
-        b["cache_w"] += u.get("cache_creation_input_tokens", 0)
-        b["cache_r"] += u.get("cache_read_input_tokens", 0)
-        b["models"].add(model)
-        b["sessions"].add(session[:8])
-        usd = price(prices, model, u)
-        if usd is None:
-            b["priced"] = False
-        else:
-            b["usd"] += usd
+    buckets = attribute(msgs, cs, prices)
 
     rows = build_rows(cs, buckets, order, prices, a.estimate, coeff)
 
@@ -957,7 +1249,9 @@ def main():
     if estimated_rows:
         print("\nCost: trailers for commits with no session log (estimated — paste per commit):")
         for r in estimated_rows:
-            trailer = format_estimate_trailer(r["tokens"], r["usd"], r["changed_lines"], today)
+            trailer = format_estimate_trailer(
+                r["tokens"], r["usd"], r["changed_lines"], today, calib_stats
+            )
             print(f"  {r['commit']}: {trailer}")
 
     total = sum(r["usd"] or 0 for r in rows)
