@@ -35,6 +35,18 @@ body:
     validations:
       required: true
   - type: textarea
+    id: failing-test
+    attributes:
+      label: Failing test
+      description: >-
+        The file and test name that reproduces this, currently red (AGENTS.md: reproduce a bug
+        with a failing test before fixing it). Leave blank if you can't write Scala — a
+        maintainer will add one.
+      placeholder: |
+        core/src/test/scala/.../SomeSpec.scala — "some test name"
+    validations:
+      required: false
+  - type: textarea
     id: logs
     attributes:
       label: Relevant logs or output

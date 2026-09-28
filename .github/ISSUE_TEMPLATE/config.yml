@@ -6,3 +6,8 @@ contact_links:
   - name: Architecture and integrations
     url: https://github.com/h0ffmann/marola/blob/main/docs/ARCHITECTURE.md
     about: How the pipeline and its pluggable integrations fit together.
+  - name: Ask a question
+    url: https://github.com/marola-dev/marola/discussions
+    about: >-
+      "How do I…" questions — not a bug, task, story, or MIP (MIP-0063 §4.6). Discussions is off
+      today; this link works once a maintainer enables it.
