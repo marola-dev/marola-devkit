@@ -130,7 +130,7 @@ check_runner_labels() {
 
 check_disk() {
   local work free
-  work="${MAROLA_GHA_RUNNER_DIR:-/home/hoffmann/code/actions-runner}/_work"
+  work="${GHA_RUNNER_DIR:-}/_work"
   [ -d "$work" ] || work="$HOME"
   # statvfs on the directory itself, not `df` on a parent: finetune/README.md records the run where
   # `df /home` said 95 GB and statvfs on the repo said 7 TB, which is the whole answer here.

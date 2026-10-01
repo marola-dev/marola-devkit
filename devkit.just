@@ -67,6 +67,23 @@ stack *args:
 stack-link mip="":
     stack link {{ mip }}
 
+# Install the official `gh stack` extension GitHub's native Stacks need.
+stack-setup:
+    gh auth status >/dev/null 2>&1 || { echo "gh is not logged in — run: gh auth login" >&2; exit 1; }
+    gh extension list | grep -q 'github/gh-stack' || gh extension install github/gh-stack
+
+# The stack as GitHub sees it (PR numbers, states, bases).
+stack-view *args:
+    gh stack view {{ args }}
+
+# Restack after a bottom PR was squash-merged.
+stack-sync mip="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bottom="$(stack branches {{ mip }} | head -1)"
+    gh stack checkout "$bottom"
+    gh stack sync
+
 # Chain independent, un-merged docs/mip-NNNN-* branches.
 docs-mip-stack *args:
     docs-mip-stack {{ args }}

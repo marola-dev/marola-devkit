@@ -45,8 +45,9 @@ self_test() {
   local tmp; tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
 
-  # Skipped without `cs`: a cold coursier cache must not fail quality-other. $messy is written
-  # regardless — the JSON-path test below uses it.
+  # Skipped without `cs`: a cold coursier cache must not fail the gate this self-test runs under
+  # (a consuming repo's `quality-other`, `just quality` here). $messy is written regardless — the
+  # JSON-path test below uses it.
   local messy="$tmp/Messy.scala"
   printf 'package example\nfinal case class Messy(name:String,value:Int)\n' >"$messy"
   if command -v cs >/dev/null 2>&1; then
