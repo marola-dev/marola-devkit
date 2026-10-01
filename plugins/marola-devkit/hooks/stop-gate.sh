@@ -7,11 +7,12 @@ MARKER_DIR="${XDG_RUNTIME_DIR:-/tmp}/marola-stop-gate"
 
 # gate_command -> what to nag: $MAROLA_STOP_GATE when the consuming repo sets one (its gate may be
 # more than one command, e.g. "just build && just test && just quality" — a repo's `quality` does
-# not necessarily run tests), else "just stop-gate" when its own justfile defines that recipe,
-# else the plugin's own default.
+# not necessarily run tests), else "just stop-gate" when `just` itself reports that recipe (so a
+# Justfile/.justfile spelling, an `@`-prefixed recipe or one brought in via `import` all count,
+# unlike a plain grep of one literal filename), else the plugin's own default.
 gate_command() {
   [ -z "${MAROLA_STOP_GATE:-}" ] || { printf '%s' "$MAROLA_STOP_GATE"; return 0; }
-  if [ -f "$REPO_ROOT/justfile" ] && grep -qE '^stop-gate(:| )' "$REPO_ROOT/justfile" 2>/dev/null; then
+  if command -v just >/dev/null 2>&1 && (cd "$REPO_ROOT" 2>/dev/null && just --show stop-gate) >/dev/null 2>&1; then
     printf 'just stop-gate'; return 0
   fi
   printf 'just quality'
@@ -184,21 +185,44 @@ self_test() {
     fails=$((fails + 1))
   fi
 
-  # A \`stop-gate\` recipe in the repo's own justfile, no env override: name that instead.
+  # A \`stop-gate\` recipe, detected via \`just --show\` (not a literal-filename grep, so a
+  # Justfile/.justfile spelling, an @-prefixed recipe or one pulled in via \`import\` all count the
+  # same way). Stubbed rather than a real justfile+just: this host may not have \`just\` installed.
   printf 'object A { val x = 5 }\n' > "$repo/A.scala"
-  printf 'stop-gate:\n    @echo repo-specific gate\n' > "$repo/justfile"
+  local jf_bin="$tmp/jf-bin"
+  mkdir -p "$jf_bin"
+  cat > "$jf_bin/just" <<'STUB'
+#!/bin/sh
+[ "$1" = "--show" ] && [ "$2" = "stop-gate" ] && exit 0
+exit 1
+STUB
+  chmod +x "$jf_bin/just"
   local jf_session="self-test-session-justfile-$$" jf_out="" jf_rc=0
-  jf_out="$(check_stop "$jf_session" 2>&1 1>/dev/null)" || jf_rc=$?
-  rm -f "$repo/justfile"
+  jf_out="$(PATH="$jf_bin:$PATH" check_stop "$jf_session" 2>&1 1>/dev/null)" || jf_rc=$?
   if [ "$jf_rc" -eq 2 ] && printf '%s' "$jf_out" | grep -qF 'just stop-gate'; then
-    echo "  ok   a stop-gate recipe in the repo's justfile is nagged by name"
+    echo "  ok   a stop-gate recipe \`just\` reports is nagged by name"
   else
-    echo "  FAIL justfile stop-gate recipe was not named in the nag (exit $jf_rc): $jf_out"
+    echo "  FAIL stop-gate recipe reported by just was not named in the nag (exit $jf_rc): $jf_out"
     fails=$((fails + 1))
   fi
 
-  # Neither set: today's default, unchanged.
+  # \`just\` is on PATH but reports no stop-gate recipe: falls back to the default.
   printf 'object A { val x = 6 }\n' > "$repo/A.scala"
+  local nojf_bin="$tmp/nojf-bin"
+  mkdir -p "$nojf_bin"
+  printf '#!/bin/sh\nexit 1\n' > "$nojf_bin/just"
+  chmod +x "$nojf_bin/just"
+  local nojf_session="self-test-session-nojf-$$" nojf_out="" nojf_rc=0
+  nojf_out="$(PATH="$nojf_bin:$PATH" check_stop "$nojf_session" 2>&1 1>/dev/null)" || nojf_rc=$?
+  if [ "$nojf_rc" -eq 2 ] && printf '%s' "$nojf_out" | grep -qF 'just quality'; then
+    echo "  ok   just installed but no stop-gate recipe still defaults to just quality"
+  else
+    echo "  FAIL no-stop-gate-recipe case did not default (exit $nojf_rc): $nojf_out"
+    fails=$((fails + 1))
+  fi
+
+  # Neither env var nor \`just\` reachable at all: still defaults, never crashes.
+  printf 'object A { val x = 7 }\n' > "$repo/A.scala"
   local def_session="self-test-session-default-$$" def_out="" def_rc=0
   def_out="$(check_stop "$def_session" 2>&1 1>/dev/null)" || def_rc=$?
   if [ "$def_rc" -eq 2 ] && printf '%s' "$def_out" | grep -qF 'just quality'; then
