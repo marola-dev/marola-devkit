@@ -59,7 +59,7 @@
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.2.1";
+          version = "0.2.2";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];
