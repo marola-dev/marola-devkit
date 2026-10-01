@@ -202,7 +202,9 @@ def title_of(mip: str, row: dict) -> str:
 
 def repo_path(path: Path) -> str:
     # issues.sh hands over an absolute path, and one of those in a blob URL is a 404 nobody clicks.
-    root = Path(__file__).resolve().parents[2]
+    # cwd, not this file's own install location (a nix store path under the flake): issues.sh has
+    # already cd'd to the caller's repo root before running this as a subprocess.
+    root = Path.cwd()
     try:
         return path.resolve().relative_to(root).as_posix()
     except ValueError:
