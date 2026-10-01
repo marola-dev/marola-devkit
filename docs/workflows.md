@@ -15,12 +15,10 @@ time at that ref. Pin it to the same tag as the `uses:` line below — nothing k
 automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`, `python-ci` and `static-ci` need
 no such checkout.
 
-`devkit-ref` stays required (no default) rather than trying to infer "the ref this reusable
-workflow is itself running from": `github.workflow_ref`/`github.workflow_sha` might give that for
-free inside a called reusable workflow, which would let a caller drop the input entirely, but that
-needs to be checked against a real run before relying on it (does it name *this* file, or the
-top-level caller's own workflow file, when workflows call each other?) — not implemented here,
-worth checking the first time one of these actually runs as a `uses:` call.
+`devkit-ref` stays required because a called workflow cannot find out its own ref: inside one,
+`github.workflow_ref` and `github.workflow_sha` name the *caller's* workflow and commit, not the
+called file's (checked on marola-devkit#2's first run:
+`workflow_ref=marola-dev/marola-devkit/.github/workflows/pr.yml@refs/pull/2/merge`).
 
 These three also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
@@ -105,7 +103,7 @@ jobs:
 | `actionlint-version` | `"1.7.12"` | |
 | `hadolint-version` | `"2.15.1"` | |
 | `shellcheck-version` | `"0.11.0"` | |
-| `hadolint-files` | `""` | newline-separated Dockerfile paths; empty skips hadolint |
+| `hadolint-files` | `""` | Dockerfile paths or globs separated by spaces or newlines, expanded in the job; a glob matching nothing fails; empty skips hadolint |
 | `shellcheck-files` | `""` | globs separated by spaces or newlines, expanded in the job; a glob matching nothing fails; empty skips shellcheck |
 | `shellcheck-severity` | `error` | shellcheck `--severity`; `error` matches the devkit's own `just quality` |
 | `extra-commands` | `""` | newline-separated; empty runs none |

@@ -43,9 +43,3 @@ jobs:
     uses: ./.github/workflows/ci-short-circuit.yml
     permissions:
       actions: write
-
-  # Temporary (removed before merge): what github.workflow_ref/workflow_sha say inside a called
-  # workflow, which decides whether callers can stop passing devkit-ref by hand.
-  probe:
-    if: github.event.action != 'closed'
-    uses: marola-dev/marola-devkit/.github/workflows/context-probe.yml@t8-reusable-workflows
