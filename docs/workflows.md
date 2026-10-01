@@ -106,7 +106,8 @@ jobs:
 | `hadolint-version` | `"2.15.1"` | |
 | `shellcheck-version` | `"0.11.0"` | |
 | `hadolint-files` | `""` | newline-separated Dockerfile paths; empty skips hadolint |
-| `shellcheck-files` | `""` | newline-separated globs; empty skips shellcheck |
+| `shellcheck-files` | `""` | globs separated by spaces or newlines, expanded in the job; a glob matching nothing fails; empty skips shellcheck |
+| `shellcheck-severity` | `error` | shellcheck `--severity`; `error` matches the devkit's own `just quality` |
 | `extra-commands` | `""` | newline-separated; empty runs none |
 
 No secrets.

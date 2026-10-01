@@ -35,6 +35,10 @@ on:
           prints `shellcheck --version`; it never runs shellcheck against a file).
         type: string
         default: ""
+      shellcheck-severity:
+        description: "shellcheck's --severity (error | warning | info | style); error matches just quality"
+        type: string
+        default: error
       extra-commands:
         description: "Newline-separated shell commands run last, in the checkout's root. Empty runs none."
         type: string
@@ -96,16 +100,32 @@ jobs:
         run: |
           set -euo pipefail
           hadolint --version
-          xargs -a <(echo "$HADOLINT_FILES") hadolint
+          # Globs are the caller's to write, so expand them here; xargs would pass them verbatim.
+          read -ra pats -d "" <<<"$HADOLINT_FILES" || true
+          files=()
+          for p in "${pats[@]}"; do
+            mapfile -t matched < <(compgen -G "$p" || true)
+            [ "${#matched[@]}" -gt 0 ] || { echo "hadolint-files: '$p' matches nothing" >&2; exit 1; }
+            files+=( "${matched[@]}" )
+          done
+          hadolint "${files[@]}"
 
       - name: shellcheck
         if: inputs.shellcheck-files != ''
         env:
           SHELLCHECK_FILES: ${{ inputs.shellcheck-files }}
+          SHELLCHECK_SEVERITY: ${{ inputs.shellcheck-severity }}
         run: |
           set -euo pipefail
           shellcheck --version
-          xargs -a <(echo "$SHELLCHECK_FILES") shellcheck
+          read -ra pats -d "" <<<"$SHELLCHECK_FILES" || true
+          files=()
+          for p in "${pats[@]}"; do
+            mapfile -t matched < <(compgen -G "$p" || true)
+            [ "${#matched[@]}" -gt 0 ] || { echo "shellcheck-files: '$p' matches nothing" >&2; exit 1; }
+            files+=( "${matched[@]}" )
+          done
+          shellcheck --severity="$SHELLCHECK_SEVERITY" "${files[@]}"
 
       - name: caller extra commands
         if: inputs.extra-commands != ''
