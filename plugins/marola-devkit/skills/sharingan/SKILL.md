@@ -77,7 +77,8 @@ agent's own guesses stacked on top ("menos com menos dá menos"), and a whole mo
    - One eval case run by a subagent with the skill; the same case without it as a baseline when
      cheap (`writing-skills`). Report what the agent did, not what the skill says it should do.
    - A row in `docs/3-Working-on-the-repo/AGENT-SKILLS.md` §1 carrying the provenance; the
-     consuming repo's quality gate (`quality-other` in marola-app, `just quality` here).
+     consuming repo's quality gate (`quality-other` in a repo that splits `quality` that way,
+     `just quality` here).
    - Commit per `AGENTS.md`; a PR only when asked (`just pr`).
 
 ## Red flags

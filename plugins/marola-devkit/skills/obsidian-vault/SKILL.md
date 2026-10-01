@@ -18,9 +18,9 @@ V="${MAROLA_OBSIDIAN_VAULT:-$HOME/Documents/2nd-brain}"; D="$V/marola"
 ```
 
 `$V` must already exist and contain `.obsidian/`. If it doesn't, say so and stop — never create
-a vault anywhere else. Inside an ai-jail sandbox (`just jail-claude` in marola-app) most of `$HOME`
-is not mapped, so the vault is usually invisible there: add it to your own jail's `rw_maps`, or
-run the save from the host.
+a vault anywhere else. Inside an ai-jail sandbox (a consuming repo's own `jail-claude` recipe, if
+it has one) most of `$HOME` is not mapped, so the vault is usually invisible there: add it to your
+own jail's `rw_maps`, or run the save from the host.
 Create `$D/context/` on first write.
 
 ## Resume — "what was I working on", "load my last context"
