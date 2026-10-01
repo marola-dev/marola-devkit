@@ -1,0 +1,72 @@
+# notify-umbrella — tell the umbrella a repo's docs changed, so it rebuilds within minutes
+# instead of waiting for its daily cron (MIP-0070 §5.5). Modelled on h0ffmann/nix-config's
+# profile-ping.yml reusable workflow (see profile-activity.yml in the monorepo for that caller
+# style) — a plain repository_dispatch, no checkout needed on either side.
+#
+# A consumer adds about three lines:
+#
+#   on:
+#     push:
+#       branches: [main]
+#       paths: [README.md, docs/**]
+#   jobs:
+#     notify:
+#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.0
+#       secrets:
+#         token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
+#
+# UMBRELLA_DISPATCH_TOKEN: a fine-grained PAT with Contents: read & write on the umbrella —
+# repository_dispatch needs it; GITHUB_TOKEN cannot reach another repository. Unset is a notice,
+# never a failure: the umbrella's own daily cron still picks the change up.
+name: notify-umbrella
+
+on:
+  workflow_call:
+    inputs:
+      umbrella:
+        description: "owner/repo to dispatch to (MAROLA_UMBRELLA, MIP-0070 §5.6)."
+        type: string
+        default: marola-dev/marola
+      event-type:
+        description: "repository_dispatch event_type the umbrella's docs workflow listens for."
+        type: string
+        default: submodule-docs-updated
+      runner:
+        description: "Runner label for the dispatch job — a reusable workflow's runs-on resolves in the caller's repository."
+        type: string
+        default: ubuntu-latest
+    secrets:
+      token:
+        description: "Fine-grained PAT with Contents: read & write on the umbrella."
+        required: false
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 2
+    steps:
+      - name: repository_dispatch ${{ inputs.event-type }} -> ${{ inputs.umbrella }}
+        env:
+          TOKEN: ${{ secrets.token }}
+          UMBRELLA: ${{ inputs.umbrella }}
+          EVENT_TYPE: ${{ inputs.event-type }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::no umbrella-dispatch token set in $REPO — skipping; the umbrella's daily cron still picks this up"
+            exit 0
+          fi
+          body="$(jq -nc --arg repo "$REPO" --arg sha "$SHA" --arg event "$EVENT_TYPE" \
+            '{event_type: $event, client_payload: {repo: $repo, sha: $sha}}')"
+          code="$(curl -sS -o "$RUNNER_TEMP/notify-umbrella-response.txt" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$UMBRELLA/dispatches" -d "$body")"
+          if [ "$code" != 204 ]; then
+            echo "::warning::dispatch to $UMBRELLA answered HTTP $code: $(head -c 300 "$RUNNER_TEMP/notify-umbrella-response.txt")"
+            exit 0
+          fi
+          echo "dispatched $EVENT_TYPE for $REPO@$SHA to $UMBRELLA"

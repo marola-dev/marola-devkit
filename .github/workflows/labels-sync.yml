@@ -1,0 +1,75 @@
+# labels-sync — apply the devkit's own .github/labels.yml to the caller repo, so `agent-ready`
+# and the rest of the taxonomy mean the same thing everywhere (MIP-0070 §5.7). Reuses
+# scripts/issues.sh's `labels sync` rather than reimplementing the diff/plan/apply logic.
+#
+# issues.sh resolves which repo to act on with `gh repo view` run from its own script's directory
+# (cd "$root" in resolve_nwo) — not from cwd, and not from $GH_REPO (verified: `gh repo view`
+# ignores GH_REPO and always asks git for the enclosing repo). So the devkit checkout below has its
+# own .git stripped right after checkout: git and gh then search upward from inside it and find the
+# caller's real checkout at $GITHUB_WORKSPACE instead of the devkit's own remote. Same-repo
+# operation otherwise — no cross-repo token, GH_TOKEN is the default GITHUB_TOKEN scoped by this
+# workflow's own `issues: write` permission.
+#
+# The devkit checkout below uses the default GITHUB_TOKEN too, with no token input of its own —
+# that only works because marola-devkit is a public repo (MIP-0070 makes it public). A private
+# devkit would need a cross-repo PAT input here, the same shape as notify-umbrella's `token` secret.
+name: labels-sync
+
+on:
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit whose .github/labels.yml is the manifest to apply."
+        type: string
+        required: true
+      devkit-repo:
+        description: "owner/repo of marola-devkit."
+        type: string
+        default: marola-dev/marola-devkit
+      prune:
+        description: "Delete labels on the repo that are not in the manifest (issues.sh's --prune)."
+        type: boolean
+        default: false
+      force:
+        description: >-
+          Pass issues.sh's --force. Only needed alongside prune: true, and only when --prune would
+          delete more than half the repo's labels — issues.sh refuses that without --force, on the
+          theory that a diff that large is more likely the wrong manifest than a real cleanup.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Public repo — the default GITHUB_TOKEN can read it, no token input needed here (MIP-0070
+      # makes the devkit public). See docs/workflows.md for the fuller note.
+      - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/issues.sh, .github/labels.yml)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      # Strip the devkit checkout's own .git: see the header comment on why this matters for
+      # issues.sh's repo resolution.
+      - run: rm -rf .devkit-checkout/.git
+
+      - name: labels sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRUNE: ${{ inputs.prune }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          args=(labels sync --manifest "$PWD/.devkit-checkout/.github/labels.yml")
+          [ "$PRUNE" = "true" ] && args+=(--prune)
+          [ "$FORCE" = "true" ] && args+=(--force)
+          bash .devkit-checkout/scripts/issues.sh "${args[@]}"

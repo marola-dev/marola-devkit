@@ -1,15 +1,32 @@
 # pr-body — fill a pull request's description from its commits the moment it exists, so a PR
-# opened from the GitHub UI (or `gh pr create` without `just uprd`) never sits on the raw template
-# with its `<!-- fill -->` placeholders.
-name: PR body
+# opened from the GitHub UI (or `gh pr create` without the devkit's `pr-flow`) never sits on the
+# raw template with its `<!-- fill -->` placeholders. Callable version of the monorepo's
+# pr-body.yml (MIP-0070 §5.6/task 8): the caller repo is checked out as usual, but scripts/uprd.sh
+# and its scripts/lib/ now come from a pinned devkit checkout, since a split code repo carries none
+# of its own — uprd.sh's own git/gh calls are cwd-relative, so this needs no repo-resolution
+# workaround (contrast labels-sync.yml, which does).
+name: pr-body
 
 on:
-  pull_request:
-    # labeled/unlabeled only for task-partial, which flips Closes #N to Part of #N (#512).
-    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit for scripts/uprd.sh and scripts/lib/."
+        type: string
+        required: true
+      devkit-repo:
+        description: "owner/repo of marola-devkit."
+        type: string
+        default: marola-dev/marola-devkit
+      umbrella:
+        description: >-
+          owner/repo whose docs/MIPs resolves a MIP-scoped branch's doc link when this repo has
+          none locally (MAROLA_UMBRELLA, MIP-0070 §5.6). Empty defers to scripts/lib/mip_ref.sh's
+          own default (marola-dev/marola) — bash's ${VAR:-default} treats an empty MAROLA_UMBRELLA
+          the same as an unset one, so this default stays the one place that value lives.
+        type: string
+        default: ""
 
-# Every run reads live labels and commits, so a newer run supersedes an older one; without this a
-# synchronize run could write Closes after a task-partial labeled run wrote Part of.
 concurrency:
   group: pr-body-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -33,9 +50,19 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # uprd reads the whole branch range and both branches' tips
-      - name: fill the description from the commits (scripts/uprd.sh)
+
+      # Public repo — the default GITHUB_TOKEN can read it, no token input needed.
+      - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/uprd.sh, scripts/lib/)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      - name: fill the description from the commits (devkit's scripts/uprd.sh)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          MAROLA_UMBRELLA: ${{ inputs.umbrella }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
@@ -64,19 +91,21 @@ jobs:
             exit 0
           fi
           git config user.name "github-actions[bot]"   # uprd never commits; git only needs an identity for `fetch` warnings to stay quiet
-          scripts/uprd.sh "$PR"
+          bash .devkit-checkout/scripts/uprd.sh "$PR"
+
       - name: title from the first commit, when GitHub's default was kept
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          MAROLA_UMBRELLA: ${{ inputs.umbrella }}
           PR: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           set -euo pipefail
-          # shellcheck source=scripts/lib/uprd_title.sh.
-          source scripts/lib/uprd_title.sh
-          # shellcheck source=scripts/lib/mip_ref.sh.
-          source scripts/lib/mip_ref.sh
+          # shellcheck source=/dev/null
+          source .devkit-checkout/scripts/lib/uprd_title.sh
+          # shellcheck source=/dev/null
+          source .devkit-checkout/scripts/lib/mip_ref.sh
           mip_ref="$(detect_mip_ref "$HEAD_REF" "origin/$BASE_REF..origin/$HEAD_REF")"
           current="$(gh pr view "$PR" --json title -q .title)"
           norm() { tr '[:upper:]' '[:lower:]' <<<"$1" | sed -E 's/[^a-z0-9]+/ /g; s/^ //; s/ $//'; }
