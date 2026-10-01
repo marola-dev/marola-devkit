@@ -1,0 +1,17 @@
+name: labels
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    uses: ./.github/workflows/labels-sync.yml
+    permissions:
+      contents: read
+      issues: write
+    with:
+      devkit-ref: ${{ github.sha }}
