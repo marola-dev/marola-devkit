@@ -65,6 +65,11 @@ Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#u
 }
 ```
 
+A `github`-sourced `extraKnownMarketplaces` entry does take a `ref` (Claude Code's plugin
+marketplace reference: branch or tag, same as a plugin source's own `ref`) — the `ref` above pins
+the plugin to this tag the same way the flake input is pinned; a repo adopts a new release by
+bumping both together. Omitting `ref` tracks this repo's default branch instead.
+
 Skills then load as `/marola-devkit:mip`, `/marola-devkit:mip-tasks`, …, and the agents as
 `marola-devkit:mip-reviewer`. The plugin's hooks replace the repo's own `.claude/hooks/` entries.
 
