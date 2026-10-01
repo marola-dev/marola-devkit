@@ -5,7 +5,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest_default="$root/.github/labels.yml"
+# The caller's own .github/labels.yml, if it has one; otherwise this devkit's bundled default —
+# the same precedence `labels-sync` (the reusable workflow) gets by passing --manifest explicitly.
+if [ -f .github/labels.yml ]; then manifest_default=".github/labels.yml"
+else manifest_default="$root/.github/labels.yml"
+fi
 nwo=""
 
 # shellcheck source=scripts/lib/mip_ref.sh
@@ -320,12 +324,15 @@ require_gh() {
   gh_checked=1
 }
 
-# gh picks its target repo from the current directory, but everything this script acts on comes
-# from its own checkout. Run issues.sh from inside another clone and it would reconcile that repo
-# against marola's taxonomy — and --prune would delete the difference. Resolve once, from $root;
-# `gh api` has no --repo, so for those calls the pin is spelling $nwo into the path.
+# gh picks its target repo from the current directory, which post-extraction (MIP-0070 §5.1) is
+# exactly right: a consuming repo runs this via the flake's `issues` on PATH (or `just
+# labels-sync`) from its own checkout, and that checkout is what should get reconciled against
+# marola's taxonomy. $root — this script's own install location — is the one directory that must
+# never be used here instead: under the flake it is the read-only nix store, not even a git repo,
+# so `cd "$root" && gh repo view` used to fail outright (`not a git repository`) in every consuming
+# repo. `gh api` has no --repo, so for those calls the pin is spelling $nwo into the path.
 resolve_nwo() {
-  [ -n "$nwo" ] || nwo="$(cd "$root" && gh repo view --json nameWithOwner -q .nameWithOwner </dev/null)"
+  [ -n "$nwo" ] || nwo="$(gh repo view --json nameWithOwner -q .nameWithOwner </dev/null)"
 }
 
 # issue_payload <number> [repo] — [repo] defaults to $nwo; a caller acting on a MIP-0070 parent or
@@ -731,7 +738,7 @@ cmd_tasks_to_issues() {
   done
   [ -n "$arg" ] || { echo "issues.sh tasks-to-issues: expects <MIP-NNNN|path/to/MIP-NNNN.tasks.md>" >&2; usage >&2; exit 1; }
   case "$arg" in
-    MIP-[0-9][0-9][0-9][0-9]) file="$root/docs/MIPs/$arg.tasks.md" ;;
+    MIP-[0-9][0-9][0-9][0-9]) file="docs/MIPs/$arg.tasks.md" ;;
     *) file="$arg" ;;
   esac
 
@@ -755,12 +762,15 @@ cmd_tasks_to_issues() {
 
   # A code repo carries no docs/MIPs of its own post-split (§5.6) — fall back to the umbrella and
   # spool its content to a real path (named like the real file, not a random mktemp name, since
-  # tasks_issues.py's parser reads the MIP number back out of the filename).
+  # tasks_issues.py's parser reads the MIP number back out of the filename). resolve_mip_file runs
+  # against the real cwd, not $root: it is the caller's own tree that may carry docs/MIPs (the
+  # umbrella repo itself does), never this script's install location (same bug class as
+  # resolve_nwo's).
   local resolved_dir=""
   if [ ! -f "$file" ] && [[ "$arg" =~ ^MIP-[0-9]{4}$ ]]; then
     resolved_dir="$(mktemp -d)"
     local resolved_tmp="$resolved_dir/$arg.tasks.md"
-    if (cd "$root" && resolve_mip_file "$arg" tasks) >"$resolved_tmp" 2>/dev/null && [ -s "$resolved_tmp" ]; then
+    if resolve_mip_file "$arg" tasks >"$resolved_tmp" 2>/dev/null && [ -s "$resolved_tmp" ]; then
       file="$resolved_tmp"
     else
       rm -rf "$resolved_dir"; resolved_dir=""
@@ -819,7 +829,7 @@ cmd_tasks_to_issues() {
   # already starts with "MIP-NNNN: " — stripped here so `parent_title` doesn't double it up.
   local mip_from_file mip_doc mip_title
   mip_from_file="$(basename "$file" .tasks.md)"
-  mip_doc="$(cd "$root" && resolve_mip_file "$mip_from_file" doc 2>/dev/null)" || mip_doc=""
+  mip_doc="$(resolve_mip_file "$mip_from_file" doc 2>/dev/null)" || mip_doc=""
   mip_title="$(sed -n 's/^# *//p' <<<"$mip_doc" | head -1 | sed -E 's/^MIP-[0-9]{4}: *//')"
   [ -n "$mip_title" ] || t2i_fail "could not resolve $mip_from_file's own H1 (needed for a stable parent-issue title) — is its MIP doc reachable?"
 
@@ -1301,7 +1311,7 @@ tasks_slug_of() {
 # makes the printed line something to paste rather than something to go and look up.
 tasks_slug() {
   local content
-  content="$(cd "$root" && resolve_mip_file "MIP-$1" tasks)" || return 0
+  content="$(resolve_mip_file "MIP-$1" tasks)" || return 0
   [ -n "$content" ] || return 0
   tasks_slug_of "$content" "$2"
 }
@@ -1325,7 +1335,7 @@ stack_line() {
   ref="$(task_ref "$1")"
   if [ -n "$ref" ]; then
     mip="${ref%% *}"
-    content="$(cd "$root" && resolve_mip_file "MIP-$mip" tasks)" || content=""
+    content="$(resolve_mip_file "MIP-$mip" tasks)" || content=""
   fi
   stack_line_of "$content" "$1"
 }
@@ -1406,7 +1416,7 @@ mip_reference() {
     [0-9][0-9][0-9][0-9]) ;;
     *) echo "issues.sh milestone new: --mip wants MIP-NNNN, got \"$1\"" >&2; return 1 ;;
   esac
-  IFS=$'\t' read -r source path < <(cd "$root" && resolve_mip_path "MIP-$n" doc) || {
+  IFS=$'\t' read -r source path < <(resolve_mip_path "MIP-$n" doc) || {
     echo "issues.sh milestone new: no docs/MIPs/MIP-$n-*.md found locally or via \$MAROLA_UMBRELLA — is MIP-$n written?" >&2
     return 1
   }
@@ -1744,8 +1754,13 @@ phase_titles_of() {
 # second thing to keep true; the self-test pins the five it must yield, which turns a rename in
 # PHASES.md into a failed build rather than a sixth gate issue.
 phase_titles() {
-  local section
-  section="$(awk '/^# Development phases/ { s = 1; next } s && /^# / { exit } s' "$root/docs/PHASES.md")"
+  local content section
+  # resolve_phases_file: this repo, then ../, then gh api $MAROLA_UMBRELLA — never $root (this
+  # script's own install location, same bug class as resolve_nwo's), since a code repo carries no
+  # docs/PHASES.md of its own once it splits off the umbrella.
+  content="$(resolve_phases_file)" || return 1
+  [ -n "$content" ] || return 1
+  section="$(awk '/^# Development phases/ { s = 1; next } s && /^# / { exit } s' <<<"$content")"
   phase_titles_of "$section"
 }
 
@@ -1755,10 +1770,10 @@ cmd_board_gates() {
   resolve_nwo
 
   local titles n_titles
-  titles="$(phase_titles)"
+  titles="$(phase_titles)" || titles=""
   n_titles="$(grep -c . <<<"$titles" || true)"
   [ "$n_titles" -eq 5 ] || {
-    echo "issues.sh board gates: docs/PHASES.md yielded $n_titles phase titles, not 5 — refusing to file gate issues from a file this script no longer parses." >&2
+    echo "issues.sh board gates: docs/PHASES.md yielded $n_titles phase titles, not 5 (found locally, in ../, or via \$MAROLA_UMBRELLA?) — refusing to file gate issues from a file this script no longer parses." >&2
     exit 1
   }
 
@@ -2319,7 +2334,13 @@ row-3"
   # indentation-based subset GitHub issue forms use — mappings, block/flow sequences, quoted and
   # literal-block scalars — and errors on anything left over rather than silently truncating, the
   # same trade manifest_json makes for labels.yml's fixed shape.
-  local form_dir="$root/.github/ISSUE_TEMPLATE" form_parser
+  # The caller's own forms when it has them (the shape a consuming repo's own --self-test run
+  # would exercise), else this devkit's bundled copies (what this script's own self-test always
+  # finds, since it runs against this checkout) — same precedence as manifest_default.
+  local form_dir form_parser
+  if [ -d .github/ISSUE_TEMPLATE ]; then form_dir=".github/ISSUE_TEMPLATE"
+  else form_dir="$root/.github/ISSUE_TEMPLATE"
+  fi
   form_parser="$tmp/parse_form.py"
   cat > "$form_parser" <<'PYEOF'
 import json, re, sys
@@ -3205,14 +3226,47 @@ EOF
     "Phase 0 — POC pipeline + six pluggable integrations|Phase 1 — Telegram bot|Phase 2 — Go live on a cloud backend, deliberately|Phase 3 — Deploy|Phase 4 — Harden & calibrate|"
   check "PHASES.md marks phase 0 done, so that gate is filed closed" \
     "$(phase_titles_of "$phases_fixture" | awk -F'\t' '$3 == "done" { print $1 }')" "0"
-  # Row 6's own named test ("issues.sh --self-test parses PHASES.md"): the real file, when this
-  # checkout has one — guarded, not required, since this script moves to marola-devkit, which
-  # carries none.
-  if [ -f "$root/docs/PHASES.md" ]; then
-    check "the real docs/PHASES.md parses into five phase titles" "$(phase_titles | wc -l | tr -d ' ')" "5"
-  else
-    echo "ok: no docs/PHASES.md here (marola-devkit) — skipped"
-  fi
+  # Row 6's own named test ("issues.sh --self-test parses PHASES.md"): devkit carries no
+  # docs/PHASES.md of its own, so this builds a stand-in consuming repo and resolves from its cwd —
+  # phase_titles used to read "$root/docs/PHASES.md" (this script's own install dir) instead and so
+  # found nothing in any real consumer; same bug class as resolve_nwo's.
+  local pt_dir="$tmp/phases-repo"
+  mkdir -p "$pt_dir/docs"
+  cat > "$pt_dir/docs/PHASES.md" <<'EOF'
+# Development phases
+
+1. **Phase 0: POC pipeline + six pluggable integrations (done, this change).** Beach discovery.
+2. **Phase 1: Telegram bot.** Long-polling loop.
+EOF
+  check "the real docs/PHASES.md parses, resolved from the caller's cwd" \
+    "$(cd "$pt_dir" && phase_titles | cut -f2 | tr '\n' '|')" \
+    "Phase 0 — POC pipeline + six pluggable integrations|Phase 1 — Telegram bot|"
+
+  # resolve_phases_file's other two tiers — same three-step order as a MIP (§5.6).
+  local pt_umbrella="$tmp/phases-umbrella" pt_code_repo="$tmp/phases-umbrella/code-repo"
+  mkdir -p "$pt_umbrella/docs" "$pt_code_repo"
+  cat > "$pt_umbrella/docs/PHASES.md" <<'EOF'
+# Development phases
+
+1. **Phase 0: umbrella copy.** Found via ../.
+EOF
+  check "../docs/PHASES.md when this checkout (a code repo) has none of its own" \
+    "$(cd "$pt_code_repo" && phase_titles | cut -f2)" "Phase 0 — umbrella copy"
+
+  local pt_bare="$tmp/phases-bare" pt_bin="$tmp/phases-bin"
+  mkdir -p "$pt_bare" "$pt_bin"
+  cat > "$pt_bin/gh" <<'STUB'
+#!/bin/sh
+cat >/dev/null
+case "$*" in
+  *"repos/marola-dev/marola/contents/docs/PHASES.md"*)
+    printf '# Development phases\n\n1. **Phase 0: gh api copy.** Found over the network.\n' ;;
+  *) exit 1 ;;
+esac
+STUB
+  chmod +x "$pt_bin/gh"
+  check "gh api \$MAROLA_UMBRELLA/.../docs/PHASES.md when nothing is local or in ../" \
+    "$(cd "$pt_bare" && PATH="$pt_bin:$PATH" phase_titles | cut -f2)" "Phase 0 — gh api copy"
 
   echo
   echo "-- claim prints a branch command carrying the slug the tasks file actually has --"
@@ -3677,6 +3731,57 @@ EOF
     *"no X-OAuth-Scopes header"*) echo "ok: and it says why it went ahead anyway" ;;
     *) echo "FAILED: expected the fine-grained-PAT warning, got:" >&2; sed 's/^/  /' <<<"$claim_got" >&2; failed=1 ;;
   esac
+
+  echo "-- resolve_nwo: the repo comes from the caller's cwd, never from this script's own (possibly non-git, e.g. a flake install's read-only nix store) directory --"
+  local rn_root="$tmp/rn-nongit-root" rn_work="$tmp/rn-work-repo" rn_bin="$tmp/rn-bin" rn_out rn_rc=0
+  mkdir -p "$rn_root/scripts/lib" "$rn_root/.github" "$rn_bin"
+  cp "$root/scripts/issues.sh" "$rn_root/scripts/issues.sh"
+  cp "$root/scripts/lib/mip_ref.sh" "$rn_root/scripts/lib/mip_ref.sh"
+  cp "$root/.github/labels.yml" "$rn_root/.github/labels.yml"
+  git -C "$rn_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    && { echo "FAILED: test setup bug — rn_root must not itself be a git repo" >&2; failed=1; }
+  git init -q "$rn_work"
+  cat > "$rn_bin/gh" <<'STUB'
+#!/bin/sh
+# Unlike write_gh_stub's own "repo view" branch (pure string matching, blind to cwd), this one
+# asks git the way the real `gh repo view` does — the only way to reproduce "not a git repository"
+# for a $root that is not one, without a live gh binary or network.
+case "$*" in
+  *"auth status"*) exit 0 ;;
+  *"repo view"*)
+    git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "fatal: not a git repository (or any of the parent directories): .git" >&2; exit 1; }
+    echo "rn-work/repo" ;;
+  *) echo '[]' ;;
+esac
+STUB
+  chmod +x "$rn_bin/gh"
+  rn_out="$(cd "$rn_work" && PATH="$rn_bin:$PATH" bash "$rn_root/scripts/issues.sh" deps list 1 2>&1)" || rn_rc=$?
+  check "deps list exits clean when the script lives outside any git repo but cwd is one" "$rn_rc" "0"
+  check "and the \"not a git repository\" failure this bug produced does not leak through" \
+    "$(grep -c 'not a git repository' <<<"$rn_out" || true)" "0"
+
+  echo "-- manifest_default: the caller's own .github/labels.yml, over this script's install dir --"
+  local md_caller="$tmp/md-caller" md_out md_rc=0
+  mkdir -p "$md_caller/.github"
+  printf "# this caller's own manifest, deliberately empty\n" > "$md_caller/.github/labels.yml"
+  md_out="$(cd "$md_caller" && bash "$rn_root/scripts/issues.sh" labels sync 2>&1)" || md_rc=$?
+  check "labels sync refuses on the caller's own (empty) manifest" "$md_rc" "1"
+  check "naming the caller's relative path, not this script's install dir" \
+    "$(grep -o '[^ ]*\.github/labels\.yml defines no labels' <<<"$md_out")" \
+    ".github/labels.yml defines no labels"
+
+  echo "-- and falls back to this devkit's bundled labels.yml when the caller has none of its own --"
+  local md_bare="$tmp/md-bare-caller" md_noauth_bin="$tmp/md-noauth-bin" md_out2 md_rc2=0
+  mkdir -p "$md_bare" "$md_noauth_bin"
+  cat > "$md_noauth_bin/gh" <<'STUB'
+#!/bin/sh
+exit 1
+STUB
+  chmod +x "$md_noauth_bin/gh"
+  md_out2="$(cd "$md_bare" && PATH="$md_noauth_bin:$PATH" bash "$rn_root/scripts/issues.sh" labels sync 2>&1)" || md_rc2=$?
+  check "it gets past the empty-manifest refusal (the bundled default has real labels)..." "$md_rc2" "1"
+  check "...failing only once it needs a real, authenticated gh" \
+    "$(grep -c 'gh is not logged in' <<<"$md_out2" || true)" "1"
 
   echo
   if [ "$failed" -eq 1 ]; then echo "issues.sh self-test: FAILED" >&2; return 1; fi
