@@ -1,0 +1,14 @@
+{
+  "name": "marola-devkit",
+  "description": "marola's shared dev-flow harness for Claude Code",
+  "owner": {
+    "name": "marola-dev"
+  },
+  "plugins": [
+    {
+      "name": "marola-devkit",
+      "source": "./plugins/marola-devkit",
+      "description": "MIP and issue-flow skills, the MIP reviewer agents, and the format/stop/session hooks"
+    }
+  ]
+}

@@ -4,10 +4,6 @@
     "pr": "",
     "sessionUrl": false
   },
-  "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true
-  },
   "statusLine": {
     "type": "command",
     "command": "bash \"$(git rev-parse --show-toplevel)/.claude/statusline.sh\""
@@ -24,24 +20,20 @@
       "Bash(gh stack:*)",
       "Bash(just uprd:*)",
       "Bash(just uprds:*)",
+      "Bash(just quality*)",
+      "Bash(uprd:*)",
+      "Bash(uprds:*)",
+      "Bash(stack:*)",
+      "Bash(cost-split:*)",
       "Bash(scripts/uprd.sh:*)",
       "Bash(scripts/uprds.sh:*)",
       "Bash(scripts/stack.sh:*)",
-      "Bash(just build*)",
-      "Bash(just test*)",
-      "Bash(just quality*)",
-      "Bash(just fmt*)",
-      "Bash(sbt *)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
       "Bash(git fetch*)",
       "Bash(git rev-parse*)",
-      "Bash(javap*)",
-      "Bash(jar tf*)",
-      "Bash(unzip -l*)",
-      "Bash(command -v *)",
-      "Bash(python3 scripts/cost-split.py *)"
+      "Bash(command -v *)"
     ],
     "deny": [
       "Read(.env)",
@@ -52,42 +44,6 @@
       "Bash(gh stack merge*)",
       "Bash(gh stack unstack*)",
       "Bash(gh stack delete*)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.sh\"",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-gate.sh\"",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\"",
-            "timeout": 10
-          }
-        ]
-      }
     ]
   }
 }

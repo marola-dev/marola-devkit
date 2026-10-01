@@ -1,0 +1,10 @@
+{
+  "name": "marola-devkit",
+  "version": "0.1.0",
+  "description": "MIP and issue-flow skills, the MIP reviewer agents, and the format/stop/session hooks shared by every marola repo (MIP-0070)",
+  "author": {
+    "name": "marola-dev"
+  },
+  "repository": "https://github.com/marola-dev/marola-devkit",
+  "keywords": ["mip", "stacked-prs", "issues", "cost"]
+}
