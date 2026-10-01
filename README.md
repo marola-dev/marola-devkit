@@ -39,11 +39,17 @@ repo implements is two recipes in its own justfile:
 | Recipe | Run by | Should be |
 |---|---|---|
 | `precommit` | `.githooks/pre-commit` | fast checks on what is staged (seconds) |
-| `prepush` | `.githooks/pre-push` | the gates CI would fail the push on |
+| `prepush *args` | `.githooks/pre-push` | the gates CI would fail the push on |
 
 A hook whose recipe the repo doesn't define prints one line and lets the commit or push through.
 With no `just` to run it (outside `nix develop`, no nix fallback) the hook fails; `--no-verify`
 bypasses.
+
+`prepush` receives git's own pre-push arguments as positional args (`<remote name> <remote URL>`)
+and, as `MAROLA_PUSH_REFS_FILE`, the path to a file of git's `<local ref> <local sha1> <remote ref>
+<remote sha1>` lines — one per pushed ref — so a recipe that wants the real push range instead of
+assuming HEAD's can read it. Declare the recipe `prepush *args:` even when it ignores them, so
+`just` doesn't refuse the extra arguments.
 Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#uprd`.
 
 **Claude Code plugin** — in the repo's `.claude/settings.json`:
