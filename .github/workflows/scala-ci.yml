@@ -66,7 +66,5 @@ jobs:
       - name: Format check, scalafix, compile, test
         env:
           SBT_TASKS: ${{ inputs.sbt-tasks }}
-        # SC2086: unquoted on purpose — sbt-tasks is a space-separated command line, not one word.
-        run: |
-          # shellcheck disable=SC2086
-          sbt $SBT_TASKS
+        # xargs, not unquoted $SBT_TASKS: word splitting keeps quotes literal; xargs honours them.
+        run: xargs sbt <<<"$SBT_TASKS"
