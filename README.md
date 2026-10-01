@@ -11,7 +11,7 @@ version, and its own AGENTS.md says which pieces it opts out of.
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.1.0";
+  url = "github:marola-dev/marola-devkit/v0.2.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -24,7 +24,7 @@ shellHook = marola-devkit.lib.${system}.shellHook + ''
 
 `lib.<system>.tools` puts `stack`, `uprd`, `uprds`, `pr-flow` (the PR workflow; not `pr`, which
 is coreutils'), `issues`, `cost-split`, `cost-fill`, `agents-check` (and the rest in `flake.nix`)
-on `PATH`. Docs tooling (`mkdocs`) is not in v0.1.0; it comes with MIP-0070 task 10. The shellHook links the pinned
+on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.0 either; it comes with MIP-0070 task 10. The shellHook links the pinned
 tree at `.devkit` (gitignore it), so the justfile can take the shared recipes:
 
 ```just
@@ -44,14 +44,16 @@ repo implements is two recipes in its own justfile:
 A hook whose recipe the repo doesn't define prints one line and lets the commit or push through.
 With no `just` to run it (outside `nix develop`, no nix fallback) the hook fails; `--no-verify`
 bypasses.
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.1.0#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#uprd`.
 
 **Claude Code plugin** — in the repo's `.claude/settings.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit" } }
+    "marola-devkit": {
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.0" }
+    }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
 }
@@ -68,8 +70,21 @@ devkit's copy (`MAROLA_INVARIANTS_BLOCK` is set by the wrapper).
 checkout), then `gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs`. `MAROLA_UMBRELLA` defaults to
 `marola-dev/marola`.
 
-Reusable workflows (`scala-ci`, `python-ci`, `static-ci`, `notify-umbrella`, `labels-sync`, …) come
-in the next release (MIP-0070 task 8).
+**Reusable workflows** — eight `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
+`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`); every input,
+secret and example caller is in [docs/workflows.md](docs/workflows.md). One caller, needing a
+second checkout of this repo for its own scripts:
+
+```yaml
+jobs:
+  agents-check:
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.0
+    with:
+      devkit-ref: v0.2.0
+```
+
+This repo runs all eight against its own pull requests (`.github/workflows/pr.yml`), so a change
+to one of them is exercised by a real caller before a tag is cut.
 
 ## Work on it
 
