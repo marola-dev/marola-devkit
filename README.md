@@ -39,17 +39,20 @@ repo implements is two recipes in its own justfile:
 | Recipe | Run by | Should be |
 |---|---|---|
 | `precommit` | `.githooks/pre-commit` | fast checks on what is staged (seconds) |
-| `prepush *args` | `.githooks/pre-push` | the gates CI would fail the push on |
+| `prepush` | `.githooks/pre-push` | the gates CI would fail the push on |
 
 A hook whose recipe the repo doesn't define prints one line and lets the commit or push through.
 With no `just` to run it (outside `nix develop`, no nix fallback) the hook fails; `--no-verify`
 bypasses.
 
-`prepush` receives git's own pre-push arguments as positional args (`<remote name> <remote URL>`)
-and, as `MAROLA_PUSH_REFS_FILE`, the path to a file of git's `<local ref> <local sha1> <remote ref>
-<remote sha1>` lines — one per pushed ref — so a recipe that wants the real push range instead of
-assuming HEAD's can read it. Declare the recipe `prepush *args:` even when it ignores them, so
-`just` doesn't refuse the extra arguments.
+`prepush` takes no positional arguments — a parameterless recipe (today's norm) must keep working,
+and `just prepush <remote>` would otherwise try to run a recipe named `<remote>`. git's own pre-push
+data reaches the recipe through three environment variables instead: `MAROLA_PUSH_REMOTE` and
+`MAROLA_PUSH_URL` (the remote's name and URL), and `MAROLA_PUSH_REFS_FILE`, the path to a file of
+git's `<local ref> <local sha1> <remote ref> <remote sha1>` lines, one per pushed ref, each one a
+deletion annotated `(delete)` — so a recipe that wants the real push range instead of assuming
+HEAD's, or wants to skip deletions, can read it. A recipe that reads none of the three keeps
+working exactly as before.
 
 Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.1#uprd`.
 
@@ -69,10 +72,21 @@ Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.1#u
 A `github`-sourced `extraKnownMarketplaces` entry does take a `ref` (Claude Code's plugin
 marketplace reference: branch or tag, same as a plugin source's own `ref`) — the `ref` above pins
 the plugin to this tag the same way the flake input is pinned; a repo adopts a new release by
-bumping both together. Omitting `ref` tracks this repo's default branch instead.
+bumping both together. Omitting `ref` tracks this repo's default branch instead. Background
+auto-update is off by default for a third-party marketplace like this one, so bumping the pinned
+`ref` — not waiting on a background refresh — is how a consumer picks up a release.
 
 Skills then load as `/marola-devkit:mip`, `/marola-devkit:mip-tasks`, …, and the agents as
 `marola-devkit:mip-reviewer`. The plugin's hooks replace the repo's own `.claude/hooks/` entries.
+
+The Stop hook nags once per session, after an uncommitted change, to run the repo's own gate — by
+default `just quality`, or `just stop-gate` when the repo's own justfile defines that recipe (any
+`just`-visible spelling: `Justfile`/`.justfile`, an `@`-prefixed recipe, one pulled in via
+`import`). `MAROLA_STOP_GATE` overrides both, naming the exact command(s) to nag for (it can be
+more than one, e.g. `"just build && just test && just quality"`, for a repo whose `quality` does
+not itself run tests). Since the hook runs inside Claude Code's own process, not a login shell,
+`MAROLA_STOP_GATE` must reach it explicitly — a plain repo-level export is not enough; set it in
+`.claude/settings.json`'s `env` (or `.claude/settings.local.json`'s, to keep it out of git).
 
 **Status line** — the pinned tree carries one at `.devkit/.claude/statusline.sh`
 (model/effort, dir, git branch and ahead/behind, context-window bar, cost, cache hit ratio, rate
