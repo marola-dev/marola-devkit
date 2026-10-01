@@ -11,7 +11,7 @@ version, and its own AGENTS.md says which pieces it opts out of.
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.2.0";
+  url = "github:marola-dev/marola-devkit/v0.2.1";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -24,7 +24,7 @@ shellHook = marola-devkit.lib.${system}.shellHook + ''
 
 `lib.<system>.tools` puts `stack`, `uprd`, `uprds`, `pr-flow` (the PR workflow; not `pr`, which
 is coreutils'), `issues`, `cost-split`, `cost-fill`, `agents-check` (and the rest in `flake.nix`)
-on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.0 either; it comes with MIP-0070 task 10. The shellHook links the pinned
+on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.1 either; it comes with MIP-0070 task 10. The shellHook links the pinned
 tree at `.devkit` (gitignore it), so the justfile can take the shared recipes:
 
 ```just
@@ -50,7 +50,8 @@ and, as `MAROLA_PUSH_REFS_FILE`, the path to a file of git's `<local ref> <local
 <remote sha1>` lines — one per pushed ref — so a recipe that wants the real push range instead of
 assuming HEAD's can read it. Declare the recipe `prepush *args:` even when it ignores them, so
 `just` doesn't refuse the extra arguments.
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#uprd`.
+
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.1#uprd`.
 
 **Claude Code plugin** — in the repo's `.claude/settings.json`:
 
@@ -58,7 +59,7 @@ Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#u
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.0" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.1" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -101,9 +102,9 @@ second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.1
     with:
-      devkit-ref: v0.2.0
+      devkit-ref: v0.2.1
 ```
 
 This repo runs all eight against its own pull requests (`.github/workflows/pr.yml`), so a change
