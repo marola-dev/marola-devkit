@@ -1,0 +1,48 @@
+# agents-check — verify this repo's AGENTS.md invariants block still matches the pinned devkit's
+# copy, never the umbrella's tree (MIP-0070 §5.6). Pure local file comparison (scripts/agents-check.sh
+# has no `git`/`gh` dependency), so — unlike labels-sync — no repo-resolution subtlety here.
+#
+# The devkit checkout below uses the default GITHUB_TOKEN, no token input — works only because
+# marola-devkit is a public repo (MIP-0070 makes it public); see docs/workflows.md.
+name: agents-check
+
+on:
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit whose agents/invariants.md is the source of truth."
+        type: string
+        required: true
+      devkit-repo:
+        description: "owner/repo of marola-devkit."
+        type: string
+        default: marola-dev/marola-devkit
+      agents-file:
+        description: "Path to this repo's AGENTS.md."
+        type: string
+        default: AGENTS.md
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # Public repo — the default GITHUB_TOKEN can read it, no token input needed.
+      - name: checkout marola-devkit@${{ inputs.devkit-ref }} (agents/invariants.md, scripts/agents-check.sh)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      - name: agents-check
+        env:
+          AGENTS_FILE: ${{ inputs.agents-file }}
+        run: |
+          bash .devkit-checkout/scripts/agents-check.sh "$AGENTS_FILE" \
+            --block .devkit-checkout/agents/invariants.md

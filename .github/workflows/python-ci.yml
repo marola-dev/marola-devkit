@@ -1,0 +1,61 @@
+# python-ci — reusable workflow: ruff check + format, then a caller-supplied list of self-test
+# commands (one per line — the `scripts/*.py --self-test` / `scripts/*.sh --self-test` lines that
+# used to live hardcoded in ci.yml's quality-other job, MIP-0070 §5.6/task 8). Each repo owns its
+# own list because each repo owns a different set of scripts.
+name: python-ci
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "CPython version for actions/setup-python."
+        type: string
+        default: "3.12"
+      ruff-version:
+        description: "ruff version to pip-install (pinned so CI and a laptop's nix shell agree)."
+        type: string
+        default: "0.16.9"
+      self-test-commands:
+        description: "Newline-separated shell commands, run after ruff, in the checkout's root. Empty runs none."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  python-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: install ruff ${{ inputs.ruff-version }}
+        env:
+          RUFF_VERSION: ${{ inputs.ruff-version }}
+        run: pip install "ruff==$RUFF_VERSION"
+
+      - name: tool versions
+        run: ruff --version
+
+      - name: ruff check (every .py in the repo)
+        run: ruff check .
+
+      - name: ruff format --check
+        run: ruff format --check .
+
+      - name: caller self-tests
+        if: inputs.self-test-commands != ''
+        env:
+          SELF_TEST_COMMANDS: ${{ inputs.self-test-commands }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r cmd; do
+            [ -n "$cmd" ] || continue
+            echo "+ $cmd"
+            eval "$cmd"
+          done <<<"$SELF_TEST_COMMANDS"

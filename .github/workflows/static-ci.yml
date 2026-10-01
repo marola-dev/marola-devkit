@@ -1,0 +1,140 @@
+# static-ci — reusable workflow: actionlint (always, against this repo's own .github/workflows),
+# hadolint and shellcheck (each only when the caller names files, since not every repo has a
+# Dockerfile), then a caller-supplied list of extra commands (`node --check …`, `docker compose
+# config`, …) — the rest of ci.yml's quality-other job that wasn't Python. MIP-0070 §5.6/task 8.
+#
+# shellcheck here is new, not parity: today's quality-other only prints `shellcheck --version`, it
+# never runs shellcheck against any file. This workflow makes it a real, opt-in gate — a caller
+# passes shellcheck-files to turn it on.
+#
+# Tools are pinned, downloaded binaries rather than `nix develop .#lint`: a reusable workflow
+# shouldn't require every consumer to carry a compatible flake just to lint. Versions match what
+# this org's nix lint shell pins today (verified against the running toolchain during authoring).
+name: static-ci
+
+on:
+  workflow_call:
+    inputs:
+      actionlint-version:
+        type: string
+        default: "1.7.12"
+      hadolint-version:
+        type: string
+        default: "2.15.1"
+      shellcheck-version:
+        type: string
+        default: "0.11.0"
+      hadolint-files:
+        description: "Newline-separated Dockerfile paths to hadolint. Empty skips hadolint."
+        type: string
+        default: ""
+      shellcheck-files:
+        description: >-
+          Newline-separated shell file globs to shellcheck. Empty skips shellcheck — this is a new,
+          stricter, opt-in gate, not parity with today's monorepo (its quality-other job only
+          prints `shellcheck --version`; it never runs shellcheck against a file).
+        type: string
+        default: ""
+      shellcheck-severity:
+        description: "shellcheck's --severity (error | warning | info | style); error matches just quality"
+        type: string
+        default: error
+      extra-commands:
+        description: "Newline-separated shell commands run last, in the checkout's root. Empty runs none."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  static-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: install actionlint ${{ inputs.actionlint-version }} (pinned, official download script)
+        # The download script expects its output dir to already exist, else it exits non-zero
+        # printing its own usage text — confusing to debug blind, so create the dir first.
+        env:
+          ACTIONLINT_VERSION: ${{ inputs.actionlint-version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          bash <(curl -fsSL "https://raw.githubusercontent.com/rhysd/actionlint/v$ACTIONLINT_VERSION/scripts/download-actionlint.bash") \
+            "$ACTIONLINT_VERSION" "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: install hadolint ${{ inputs.hadolint-version }} (pinned release binary)
+        if: inputs.hadolint-files != ''
+        env:
+          HADOLINT_VERSION: ${{ inputs.hadolint-version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/bin/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v$HADOLINT_VERSION/hadolint-Linux-x86_64"
+          chmod +x "$RUNNER_TEMP/bin/hadolint"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: install shellcheck ${{ inputs.shellcheck-version }} (pinned release binary)
+        if: inputs.shellcheck-files != ''
+        env:
+          SHELLCHECK_VERSION: ${{ inputs.shellcheck-version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP" "shellcheck-v$SHELLCHECK_VERSION/shellcheck"
+          mv "$RUNNER_TEMP/shellcheck-v$SHELLCHECK_VERSION/shellcheck" "$RUNNER_TEMP/bin/shellcheck"
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: tool versions
+        run: actionlint -version | head -1
+
+      - name: actionlint (this repo's own workflow files)
+        run: actionlint
+
+      - name: hadolint
+        if: inputs.hadolint-files != ''
+        env:
+          HADOLINT_FILES: ${{ inputs.hadolint-files }}
+        run: |
+          set -euo pipefail
+          hadolint --version
+          # Globs are the caller's to write, so expand them here; xargs would pass them verbatim.
+          read -ra pats -d "" <<<"$HADOLINT_FILES" || true
+          files=()
+          for p in "${pats[@]}"; do
+            mapfile -t matched < <(compgen -G "$p" || true)
+            [ "${#matched[@]}" -gt 0 ] || { echo "hadolint-files: '$p' matches nothing" >&2; exit 1; }
+            files+=( "${matched[@]}" )
+          done
+          hadolint "${files[@]}"
+
+      - name: shellcheck
+        if: inputs.shellcheck-files != ''
+        env:
+          SHELLCHECK_FILES: ${{ inputs.shellcheck-files }}
+          SHELLCHECK_SEVERITY: ${{ inputs.shellcheck-severity }}
+        run: |
+          set -euo pipefail
+          shellcheck --version
+          read -ra pats -d "" <<<"$SHELLCHECK_FILES" || true
+          files=()
+          for p in "${pats[@]}"; do
+            mapfile -t matched < <(compgen -G "$p" || true)
+            [ "${#matched[@]}" -gt 0 ] || { echo "shellcheck-files: '$p' matches nothing" >&2; exit 1; }
+            files+=( "${matched[@]}" )
+          done
+          shellcheck --severity="$SHELLCHECK_SEVERITY" "${files[@]}"
+
+      - name: caller extra commands
+        if: inputs.extra-commands != ''
+        env:
+          EXTRA_COMMANDS: ${{ inputs.extra-commands }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r cmd; do
+            [ -n "$cmd" ] || continue
+            echo "+ $cmd"
+            eval "$cmd"
+          done <<<"$EXTRA_COMMANDS"

@@ -1,12 +1,13 @@
-# A merged (or closed) PR's runs keep going: the merge starts a run in ci-<main>'s concurrency
-# group, the PR's run sits in ci-<pull/N/merge>'s, so cancel-in-progress never sees them
-# together. Cancel by head SHA — pull_request runs record the PR head commit, so one query
-# catches CI, docker and pr-body for this PR and nothing else.
-name: ci short-circuit on PR close
+# ci-short-circuit — a merged (or closed) PR's runs keep going: the merge starts a run in
+# ci-<main>'s concurrency group, the PR's run sits in ci-<pull/N/merge>'s, so cancel-in-progress
+# never sees them together. Cancel by head SHA — pull_request runs record the PR head commit, so
+# one query catches every workflow's run for this PR and nothing else. Callable version of the
+# monorepo's ci-short-circuit-pr-close.yml (MIP-0070 §5.6/task 8) — no devkit checkout needed,
+# it only calls the GitHub API for the caller's own repo.
+name: ci-short-circuit
 
 on:
-  pull_request:
-    types: [closed]
+  workflow_call:
 
 permissions:
   actions: write
@@ -15,6 +16,7 @@ jobs:
   cancel:
     # Not self-hosted: it would queue behind the very run it is meant to cancel.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: cancel this PR's in-flight runs
         env:

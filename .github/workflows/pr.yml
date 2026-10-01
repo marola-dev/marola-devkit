@@ -1,0 +1,45 @@
+name: PR
+
+# The devkit runs its own reusable workflows on its own pull requests (MIP-0070 task 8), so every
+# change to them is exercised by a real caller before a tag is cut.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, closed]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    if: github.event.action != 'closed'
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      self-test-commands: |
+        bash tests/self-tests.sh
+
+  static:
+    if: github.event.action != 'closed'
+    uses: ./.github/workflows/static-ci.yml
+    with:
+      shellcheck-files: scripts/*.sh scripts/lib/*.sh .githooks/* plugins/marola-devkit/hooks/*.sh
+
+  agents:
+    if: github.event.action != 'closed'
+    uses: ./.github/workflows/agents-check.yml
+    with:
+      devkit-ref: ${{ github.event.pull_request.head.sha }}
+
+  body:
+    if: github.event.action != 'closed'
+    uses: ./.github/workflows/pr-body.yml
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      devkit-ref: ${{ github.event.pull_request.head.sha }}
+
+  short-circuit:
+    if: github.event.action == 'closed' && !github.event.pull_request.merged
+    uses: ./.github/workflows/ci-short-circuit.yml
+    permissions:
+      actions: write
