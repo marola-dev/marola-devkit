@@ -19,7 +19,7 @@ branch_line() {
 }
 
 jail_caveat_lines() {
-  echo "▸ jail caveat: .env.example and .ai-jail read empty inside \`just jail-claude\` — never \`git add -A\`, stage by name"
+  echo "▸ jail caveat: .env.example and .ai-jail read empty inside an ai-jail sandbox — never \`git add -A\`, stage by name"
   echo "▸ jail caveat: gh has no ~/.config/gh inside the jail — push works over SSH, PRs need GH_TOKEN or by hand"
 }
 

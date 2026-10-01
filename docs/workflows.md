@@ -35,7 +35,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.1
 ```
 
 | Input | Default | Notes |
@@ -54,7 +54,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.1
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -87,7 +87,7 @@ caller that still has a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.1
     with:
       hadolint-files: |
         Dockerfile
@@ -125,7 +125,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.1
     secrets:
       token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
 ```
@@ -141,8 +141,11 @@ Unset is a notice, not a failure — the umbrella's daily cron still catches the
 
 ## labels-sync
 
-Applies this repo's own `.github/labels.yml` to the caller repo via `scripts/issues.sh labels
-sync`, so `agent-ready` means the same thing everywhere (MIP-0070 §5.7).
+Reconciles the caller repo's labels against `scripts/issues.sh labels sync`'s own default manifest
+(the caller's own `.github/labels.yml` when it has one, else this devkit's bundled copy — no
+`--manifest` override, the same rule `just labels-sync` gets run locally), so `agent-ready` means
+the same thing everywhere (MIP-0070 §5.7) and CI can never prune against a different manifest than
+a human's own run would.
 
 ```yaml
 name: labels sync
@@ -153,9 +156,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.1
     with:
-      devkit-ref: v0.2.0
+      devkit-ref: v0.2.1
 ```
 
 | Input | Default | Notes |
@@ -175,25 +178,23 @@ repo resource under the Issues API). Uses the default `GITHUB_TOKEN` for both ch
 sync — same-repo operation, no PAT — see the public-repo note above.
 
 Implementation note: `scripts/issues.sh` resolves which repo to act on via `gh repo view` run from
-its own script directory, not from cwd or `$GH_REPO` (verified while authoring this workflow: `gh
-repo view` ignores `GH_REPO` and always asks git for the enclosing repository). So this workflow
-strips the `.git` out of its devkit checkout right after cloning it — `gh`/`git` then search
-upward from inside that directory and land on the caller's real checkout instead of the devkit's
-own remote. This is specific to `issues.sh`'s resolution style; `agents-check` and `pr-body` do not
-need it (see their own notes below).
+cwd (`$GITHUB_WORKSPACE`, the caller's own checkout — this job never `cd`s into `.devkit-checkout`),
+not `$GH_REPO` (verified while authoring this workflow: `gh repo view` ignores `GH_REPO` and always
+asks git for the enclosing repository). No extra step is needed to make that resolve correctly, so
+unlike an earlier version of this workflow, `.devkit-checkout`'s own `.git` is left in place.
 
 ## agents-check
 
 Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `agents/invariants.md`
 — never the umbrella's tree (MIP-0070 §5.6). Pure local file comparison, no `git`/`gh` call inside
-`scripts/agents-check.sh`, so none of `labels-sync`'s repo-resolution workaround is needed here.
+`scripts/agents-check.sh`, so it needs no `gh repo view`-style repo resolution at all.
 
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.1
     with:
-      devkit-ref: v0.2.0
+      devkit-ref: v0.2.1
 ```
 
 | Input | Default | Notes |
@@ -219,9 +220,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.1
     with:
-      devkit-ref: v0.2.0
+      devkit-ref: v0.2.1
 ```
 
 | Input | Default | Notes |
@@ -250,7 +251,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.0
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.1
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the

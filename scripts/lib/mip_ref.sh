@@ -89,3 +89,12 @@ resolve_mip_file() {
     gh api "repos/$MAROLA_UMBRELLA/contents/$path" -H 'Accept: application/vnd.github.raw' </dev/null 2>/dev/null
   fi
 }
+
+# resolve_phases_file -> docs/PHASES.md's content on stdout. Same three-step order as a MIP
+# (§5.6): phases are an org rule, so the umbrella keeps this file once an app repo splits off and
+# carries none of its own. Exit 1, nothing on stdout, when unresolved everywhere.
+resolve_phases_file() {
+  if [ -f docs/PHASES.md ]; then cat docs/PHASES.md; return 0; fi
+  if [ -f ../docs/PHASES.md ]; then cat ../docs/PHASES.md; return 0; fi
+  gh api "repos/$MAROLA_UMBRELLA/contents/docs/PHASES.md" -H 'Accept: application/vnd.github.raw' </dev/null 2>/dev/null
+}

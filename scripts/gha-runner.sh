@@ -7,7 +7,7 @@
 #   just runner-logs      # tail -f the log
 #   just runner-down      # graceful stop (SIGTERM; the runner finishes its current job)
 #
-# MAROLA_GHA_RUNNER_DIR (default /home/hoffmann/code/actions-runner) is where config.sh and run.sh
+# GHA_RUNNER_DIR (no default — point it at your own checkout) is where config.sh and run.sh
 # live — the runner is registered there, not in this repo. flake.nix ships the runner itself and
 # documents the one-time `config.sh --labels marola-sea,dependabot` registration.
 #
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-resolve_runner_dir() { printf '%s' "${MAROLA_GHA_RUNNER_DIR:-/home/hoffmann/code/actions-runner}"; }
+resolve_runner_dir() { printf '%s' "${GHA_RUNNER_DIR:-}"; }
 runner_dir="$(resolve_runner_dir)"
 repo_default() { printf '%s' "${MAROLA_REPO:-marola-dev/marola}"; }
 log="$repo_root/.tmp/gha-runner.log"
@@ -52,8 +52,12 @@ up() {
     echo "$(count "$live") runner(s) already listening on this machine — 'just gha' to see where, 'just ghas' to stop them" >&2
     exit 1
   fi
+  [ -n "$runner_dir" ] || {
+    echo "GHA_RUNNER_DIR is not set — point it at your actions-runner checkout (see flake.nix)" >&2
+    exit 1
+  }
   [ -x "$runner_dir/run.sh" ] || {
-    echo "no runner at $runner_dir/run.sh — set MAROLA_GHA_RUNNER_DIR, or register one there first (see flake.nix)" >&2
+    echo "no runner at $runner_dir/run.sh — register one there first (see flake.nix)" >&2
     exit 1
   }
   "$(dirname "${BASH_SOURCE[0]}")/runner-preflight.sh" || {
@@ -149,10 +153,10 @@ self_test() {
   t "our own pid is alive" "$(is_running $$ && echo yes || echo no)" yes
   t "an impossible pid is not" "$(is_running 999999999 && echo yes || echo no)" no
   t "an empty pid is not a process" "$(is_running "" && echo yes || echo no)" no
-  t "the runner dir honours MAROLA_GHA_RUNNER_DIR" \
-    "$(MAROLA_GHA_RUNNER_DIR=/tmp/x resolve_runner_dir)" /tmp/x
-  t "and falls back to the registered location" \
-    "$(unset MAROLA_GHA_RUNNER_DIR; resolve_runner_dir)" /home/hoffmann/code/actions-runner
+  t "the runner dir honours GHA_RUNNER_DIR" \
+    "$(GHA_RUNNER_DIR=/tmp/x resolve_runner_dir)" /tmp/x
+  t "and is empty, not a personal path, when unset" \
+    "$(unset GHA_RUNNER_DIR; resolve_runner_dir)" ""
   t "status's repo lookup honours MAROLA_REPO" \
     "$(MAROLA_REPO=other/repo repo_default)" other/repo
   t "and falls back to the marola-dev org" \

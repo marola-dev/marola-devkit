@@ -92,7 +92,7 @@ those directly, and note them in `docs/4-Research-and-plans/FABLE_REVIEW.md` or 
 | **Gain** | one or more of `user value`, `infra/dev-loop`, `cost/ops`, each with one clause |
 | **Effort vs Gain** | `do next` / `do when X lands` / `cheap win` / `expensive, defer` / `park` — one sentence why |
 | **Depends on** | prose, for humans: other MIPs it needs or that need it, whether Phase 1 or a paid cloud resource gates it (`AGENTS.md`), and any non-blocking coordination (shared files, shared design decisions) — say the relationship in words, this field is never parsed |
-| **Blocked by** | machine-readable, for `scripts/mip_graph.py`: a comma-separated list of MIP numbers that must land first, or the literal `none`. Numbers only — no prose, no phase gates, no "not really, but". If a relationship doesn't cleanly reduce to "MIP-NNNN must merge before this one can", it belongs in `Depends on` only, not here — a wrong edge in the generated graph is worse than a missing one |
+| **Blocked by** | machine-readable, for the umbrella's `scripts/mip_graph.py`: a comma-separated list of MIP numbers that must land first, or the literal `none`. Numbers only — no prose, no phase gates, no "not really, but". If a relationship doesn't cleanly reduce to "MIP-NNNN must merge before this one can", it belongs in `Depends on` only, not here — a wrong edge in the generated graph is worse than a missing one |
 | **Risk** | the one thing most likely to make this not worth it |
 | **Cost so far** | the summed `Cost:` trailers of its merged PRs, or "—" if nothing has merged yet |
 
@@ -114,7 +114,7 @@ licence/key, what was verified (URL + date) and what wasn't. End with the pick a
 Modules and files touched, new traits/case classes, the local default and the opt-in path,
 how it plugs into `Recommender` / `Swimability` / `Main` / the MCP server. Sketch the Scala
 signatures. Say what is deterministic and what (if anything) goes through the LLM.
-A flow, lifecycle, schema or multi-actor exchange gets a diagram (`.claude/rules/docs.md` §Diagrams).
+A flow, lifecycle, schema or multi-actor exchange gets a diagram (the umbrella's `.claude/rules/docs.md` §Diagrams).
 
 ## 6. Scoring / safety impact
 Exactly how `Swimability.score` and notes change, with the thresholds. "None" if none.
@@ -172,11 +172,11 @@ assumed from memory. Say so here rather than letting it read as verified by omis
 Cost so far |` (`Verdict` = the MIP's `Effort vs Gain` field). Keep it sorted by number. Create it
 with the first MIP if it doesn't exist.
 
-**Dependency graph.** `just mip-graph` regenerates a Mermaid graph from every MIP's `Blocked by`
-field into `docs/MIPs/README.md` (between `<!-- mip-graph:start -->`/`-end -->` markers);
-`just quality`'s `quality-other` fails if it's stale, same as any other generated-and-checked-in
-artifact here. `just mip-graph --parallel NNNN MMMM` answers "can these two be worked on at once":
-no path between them in the `Blocked by` graph **and** no overlap in the backticked source paths
-their §5 Design sections name: the graph alone only catches the first kind of collision, not two
-MIPs quietly touching the same file.
+**Dependency graph.** In the umbrella, `just mip-graph` (`scripts/mip_graph.py`) regenerates a
+Mermaid graph from every MIP's `Blocked by` field into `docs/MIPs/README.md` (between
+`<!-- mip-graph:start -->`/`-end -->` markers); its `quality-other` fails if the graph is stale,
+same as any other generated-and-checked-in artifact there. `--parallel NNNN MMMM` answers "can
+these two be worked on at once": no path between them in the `Blocked by` graph **and** no overlap
+in the backticked source paths their §5 Design sections name — the graph alone only catches the
+first kind of collision, not two MIPs quietly touching the same file.
 </content>

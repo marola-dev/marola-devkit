@@ -202,7 +202,9 @@ def title_of(mip: str, row: dict) -> str:
 
 def repo_path(path: Path) -> str:
     # issues.sh hands over an absolute path, and one of those in a blob URL is a 404 nobody clicks.
-    root = Path(__file__).resolve().parents[2]
+    # cwd, not this file's own install location (a nix store path under the flake): issues.sh has
+    # already cd'd to the caller's repo root before running this as a subprocess.
+    root = Path.cwd()
     try:
         return path.resolve().relative_to(root).as_posix()
     except ValueError:
@@ -276,9 +278,12 @@ def parent_body(path: Path, umbrella: str, mip: str, rows: list[dict]) -> str:
         "",
     ]
     for row in rows:
-        note = (
-            " — filed in the umbrella; its own repo does not exist yet" if row["fallback"] else ""
-        )
+        if row["prefiled"]:
+            note = f" — filed in the umbrella before `{row['repo_name']}` existed"
+        elif row["fallback"]:
+            note = " — filed in the umbrella; its own repo does not exist yet"
+        else:
+            note = ""
         lines.append(f"- {title_of(mip, row)} (`{row['repo']}`){note}")
     lines.append("")
     return "\n".join(lines)
@@ -373,7 +378,14 @@ def plan(
             {
                 **row,
                 "repo": repo,
+                "repo_name": row["repo"],
                 "fallback": named is not None and repo != named,
+                # Already filed outside its own repo, which exists now: filed before it did, and
+                # left where it is — not "its repo is missing".
+                "prefiled": named is not None
+                and repo != named
+                and found_number is not None
+                and row["repo"] in existing,
                 "issue": found_number,
             }
         )
@@ -742,6 +754,11 @@ def self_test() -> int:
         assert pk2["rows"][1]["issue"] == 900
         assert pk2["rows"][1]["repo"] == umbrella, "an already-filed fallback must not be moved"
         assert pk2["rows"][1]["fallback"] is True
+        assert pk2["rows"][1]["prefiled"] is True, "its repo exists now: filed before, not missing"
+        assert "filed in the umbrella before `marola-devkit` existed" in pk2["parent"]["body"]
+        assert (
+            "does not exist yet" not in pk2["parent"]["body"].split("0097-T2", 1)[1].split("\n")[0]
+        )
 
         # 5. Shape errors are errors, not skipped rows.
         for name, text in [

@@ -45,6 +45,9 @@ Read the MIP, `AGENTS.md`, and the code it touches. Write `docs/MIPs/MIP-NNNN.ta
 | 4 | scheduling | site.yml workflow, docs | actionlint | 3 |
 ```
 
+(A real MIP's table, trimmed: `site-build` here is that consuming repo's own justfile recipe,
+never a `devkit.just` one.)
+
 Rules for a good list:
 
 - **Each task is one reviewable PR**: ≤ ~400 changed lines, one concern, its own tests, green on

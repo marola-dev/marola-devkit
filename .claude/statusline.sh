@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Project-scoped status line for marola (shared via .claude/settings.json).
+# Project-scoped status line (shared via .claude/settings.json).
 set -u
 input=$(cat)
 MODEL=$(printf '%s' "$input" | jq -r '.model.display_name // empty')
@@ -111,3 +111,4 @@ LINE3=""
 printf '%b\n' "$LINE1"
 printf '%b\n' "$LINE2"
 [ -n "$LINE3" ] && printf '%b\n' "$LINE3"
+exit 0

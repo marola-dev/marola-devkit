@@ -2,7 +2,7 @@
 name: voice-to-feature
 description: Presentation/demo pipeline — turn a recorded voice note directly into a scaffolded feature branch and a Draft PR, in one pass. Transcribe, draft a MIP, scaffold the implementation shape, open a Draft PR, stop. Use only when the user explicitly asks to demo turning a voice memo into a feature end-to-end, or invokes /voice-to-feature. NOT the normal marola dev flow — see the mip skill for that.
 disable-model-invocation: true
-allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py *) Bash(git *) Bash(sbt *) Bash(just *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh project *) Bash(gh issue *)
+allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py *) Bash(git *) Bash(just *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh project *) Bash(gh issue *)
 disallowed-tools: Bash(gh pr merge*) Bash(gh pr close*)
 ---
 

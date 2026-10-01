@@ -1,9 +1,22 @@
 #!/usr/bin/env bash
-# stop-gate — Stop hook: nudge once per session to run the repo's `just quality` after an edit. MIP-0011.
+# stop-gate — Stop hook: nudge once per session to run the repo's own gate after an edit. MIP-0011.
 set -euo pipefail
 
 REPO_ROOT="${STOP_GATE_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"
 MARKER_DIR="${XDG_RUNTIME_DIR:-/tmp}/marola-stop-gate"
+
+# gate_command -> what to nag: $MAROLA_STOP_GATE when the consuming repo sets one (its gate may be
+# more than one command, e.g. "just build && just test && just quality" — a repo's `quality` does
+# not necessarily run tests), else "just stop-gate" when `just` itself reports that recipe (so a
+# Justfile/.justfile spelling, an `@`-prefixed recipe or one brought in via `import` all count,
+# unlike a plain grep of one literal filename), else the plugin's own default.
+gate_command() {
+  [ -z "${MAROLA_STOP_GATE:-}" ] || { printf '%s' "$MAROLA_STOP_GATE"; return 0; }
+  if command -v just >/dev/null 2>&1 && (cd "$REPO_ROOT" 2>/dev/null && just --show stop-gate) >/dev/null 2>&1; then
+    printf 'just stop-gate'; return 0
+  fi
+  printf 'just quality'
+}
 
 extract_field() {   # hook JSON on stdin -> .$1 (empty when absent or input isn't valid JSON)
   local field="$1"
@@ -32,8 +45,9 @@ check_stop() {
   [ -f "$marker" ] && return 0        # already nagged this session
   changed_since_head || return 0   # nothing changed — nothing to gate
   touch "$marker" 2>/dev/null || return 0   # same fail-open rule as the mkdir above
-  echo "stop-gate: files changed since HEAD and this session hasn't run \`just quality\` yet." >&2
-  echo "Run \`just quality\` (the repo's own gate) before stopping, or say why this change doesn't need it. This nag only fires once per session." >&2
+  local gate; gate="$(gate_command)"
+  echo "stop-gate: files changed since HEAD and this session hasn't run \`$gate\` yet." >&2
+  echo "Run \`$gate\` (the repo's own gate) before stopping, or say why this change doesn't need it. This nag only fires once per session." >&2
   return 2
 }
 
@@ -157,6 +171,64 @@ self_test() {
     echo "  ok   an unwritable marker dir allows (fails open), never exits 1"
   else
     echo "  FAIL unwritable marker dir gave exit $unwritable_result, expected 0"
+    fails=$((fails + 1))
+  fi
+
+  # MAROLA_STOP_GATE: the consuming repo names its own gate (its `quality` may not run tests).
+  printf 'object A { val x = 4 }\n' > "$repo/A.scala"
+  local env_session="self-test-session-env-$$" env_out="" env_rc=0
+  env_out="$(MAROLA_STOP_GATE='just build && just test && just quality' check_stop "$env_session" 2>&1 1>/dev/null)" || env_rc=$?
+  if [ "$env_rc" -eq 2 ] && printf '%s' "$env_out" | grep -qF 'just build && just test && just quality'; then
+    echo "  ok   MAROLA_STOP_GATE overrides the nagged command"
+  else
+    echo "  FAIL MAROLA_STOP_GATE did not override the nag (exit $env_rc): $env_out"
+    fails=$((fails + 1))
+  fi
+
+  # A \`stop-gate\` recipe, detected via \`just --show\` (not a literal-filename grep, so a
+  # Justfile/.justfile spelling, an @-prefixed recipe or one pulled in via \`import\` all count the
+  # same way). Stubbed rather than a real justfile+just: this host may not have \`just\` installed.
+  printf 'object A { val x = 5 }\n' > "$repo/A.scala"
+  local jf_bin="$tmp/jf-bin"
+  mkdir -p "$jf_bin"
+  cat > "$jf_bin/just" <<'STUB'
+#!/bin/sh
+[ "$1" = "--show" ] && [ "$2" = "stop-gate" ] && exit 0
+exit 1
+STUB
+  chmod +x "$jf_bin/just"
+  local jf_session="self-test-session-justfile-$$" jf_out="" jf_rc=0
+  jf_out="$(PATH="$jf_bin:$PATH" check_stop "$jf_session" 2>&1 1>/dev/null)" || jf_rc=$?
+  if [ "$jf_rc" -eq 2 ] && printf '%s' "$jf_out" | grep -qF 'just stop-gate'; then
+    echo "  ok   a stop-gate recipe \`just\` reports is nagged by name"
+  else
+    echo "  FAIL stop-gate recipe reported by just was not named in the nag (exit $jf_rc): $jf_out"
+    fails=$((fails + 1))
+  fi
+
+  # \`just\` is on PATH but reports no stop-gate recipe: falls back to the default.
+  printf 'object A { val x = 6 }\n' > "$repo/A.scala"
+  local nojf_bin="$tmp/nojf-bin"
+  mkdir -p "$nojf_bin"
+  printf '#!/bin/sh\nexit 1\n' > "$nojf_bin/just"
+  chmod +x "$nojf_bin/just"
+  local nojf_session="self-test-session-nojf-$$" nojf_out="" nojf_rc=0
+  nojf_out="$(PATH="$nojf_bin:$PATH" check_stop "$nojf_session" 2>&1 1>/dev/null)" || nojf_rc=$?
+  if [ "$nojf_rc" -eq 2 ] && printf '%s' "$nojf_out" | grep -qF 'just quality'; then
+    echo "  ok   just installed but no stop-gate recipe still defaults to just quality"
+  else
+    echo "  FAIL no-stop-gate-recipe case did not default (exit $nojf_rc): $nojf_out"
+    fails=$((fails + 1))
+  fi
+
+  # Neither env var nor \`just\` reachable at all: still defaults, never crashes.
+  printf 'object A { val x = 7 }\n' > "$repo/A.scala"
+  local def_session="self-test-session-default-$$" def_out="" def_rc=0
+  def_out="$(check_stop "$def_session" 2>&1 1>/dev/null)" || def_rc=$?
+  if [ "$def_rc" -eq 2 ] && printf '%s' "$def_out" | grep -qF 'just quality'; then
+    echo "  ok   with neither set, the nag still defaults to just quality"
+  else
+    echo "  FAIL default nag changed unexpectedly (exit $def_rc): $def_out"
     fails=$((fails + 1))
   fi
 

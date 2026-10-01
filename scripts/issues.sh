@@ -5,7 +5,15 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest_default="$root/.github/labels.yml"
+# Everything below that is not an explicit $root reference (labels.yml's default, docs/MIPs,
+# docs/PHASES.md, .github/ISSUE_TEMPLATE) resolves against the caller's repo root, not wherever
+# they happened to invoke this from — a subdirectory otherwise means "no .github/labels.yml
+# here" and "../docs/MIPs is one level above the subdirectory", neither true.
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+if [ -f .github/labels.yml ]; then manifest_default="$(pwd)/.github/labels.yml"
+else manifest_default="$root/.github/labels.yml"
+fi
 nwo=""
 
 # shellcheck source=scripts/lib/mip_ref.sh
@@ -320,12 +328,12 @@ require_gh() {
   gh_checked=1
 }
 
-# gh picks its target repo from the current directory, but everything this script acts on comes
-# from its own checkout. Run issues.sh from inside another clone and it would reconcile that repo
-# against marola's taxonomy — and --prune would delete the difference. Resolve once, from $root;
-# `gh api` has no --repo, so for those calls the pin is spelling $nwo into the path.
+# gh picks its target repo from cwd — a consuming repo's own checkout, reached via the flake's
+# `issues` on PATH or `just labels-sync`. Never $root (this script's own install location): under
+# the flake that is the read-only nix store, not even a git repo. `gh api` has no --repo, so for
+# those calls the pin is spelling $nwo into the path.
 resolve_nwo() {
-  [ -n "$nwo" ] || nwo="$(cd "$root" && gh repo view --json nameWithOwner -q .nameWithOwner </dev/null)"
+  [ -n "$nwo" ] || nwo="$(gh repo view --json nameWithOwner -q .nameWithOwner </dev/null)"
 }
 
 # issue_payload <number> [repo] — [repo] defaults to $nwo; a caller acting on a MIP-0070 parent or
@@ -606,6 +614,10 @@ cmd_labels_sync() {
     esac
   done
 
+  local manifest_abs
+  manifest_abs="$(readlink -f "$manifest" 2>/dev/null || printf '%s' "$manifest")"
+  echo "issues.sh labels sync: manifest $manifest_abs" >&2
+
   local mjson n_manifest
   mjson="$(manifest_json "$manifest")"
   n_manifest="$(jq 'length' <<<"$mjson")"
@@ -731,7 +743,7 @@ cmd_tasks_to_issues() {
   done
   [ -n "$arg" ] || { echo "issues.sh tasks-to-issues: expects <MIP-NNNN|path/to/MIP-NNNN.tasks.md>" >&2; usage >&2; exit 1; }
   case "$arg" in
-    MIP-[0-9][0-9][0-9][0-9]) file="$root/docs/MIPs/$arg.tasks.md" ;;
+    MIP-[0-9][0-9][0-9][0-9]) file="docs/MIPs/$arg.tasks.md" ;;
     *) file="$arg" ;;
   esac
 
@@ -755,12 +767,14 @@ cmd_tasks_to_issues() {
 
   # A code repo carries no docs/MIPs of its own post-split (§5.6) — fall back to the umbrella and
   # spool its content to a real path (named like the real file, not a random mktemp name, since
-  # tasks_issues.py's parser reads the MIP number back out of the filename).
+  # tasks_issues.py's parser reads the MIP number back out of the filename). resolve_mip_file runs
+  # against cwd, not $root: the caller's own tree may carry docs/MIPs, this script's install
+  # location never does.
   local resolved_dir=""
   if [ ! -f "$file" ] && [[ "$arg" =~ ^MIP-[0-9]{4}$ ]]; then
     resolved_dir="$(mktemp -d)"
     local resolved_tmp="$resolved_dir/$arg.tasks.md"
-    if (cd "$root" && resolve_mip_file "$arg" tasks) >"$resolved_tmp" 2>/dev/null && [ -s "$resolved_tmp" ]; then
+    if resolve_mip_file "$arg" tasks >"$resolved_tmp" 2>/dev/null && [ -s "$resolved_tmp" ]; then
       file="$resolved_tmp"
     else
       rm -rf "$resolved_dir"; resolved_dir=""
@@ -819,7 +833,7 @@ cmd_tasks_to_issues() {
   # already starts with "MIP-NNNN: " — stripped here so `parent_title` doesn't double it up.
   local mip_from_file mip_doc mip_title
   mip_from_file="$(basename "$file" .tasks.md)"
-  mip_doc="$(cd "$root" && resolve_mip_file "$mip_from_file" doc 2>/dev/null)" || mip_doc=""
+  mip_doc="$(resolve_mip_file "$mip_from_file" doc 2>/dev/null)" || mip_doc=""
   mip_title="$(sed -n 's/^# *//p' <<<"$mip_doc" | head -1 | sed -E 's/^MIP-[0-9]{4}: *//')"
   [ -n "$mip_title" ] || t2i_fail "could not resolve $mip_from_file's own H1 (needed for a stable parent-issue title) — is its MIP doc reachable?"
 
@@ -836,7 +850,9 @@ cmd_tasks_to_issues() {
   n_rows="$(jq '.rows | length' <<<"$plan")"
   n_fallback="$(jq '[.rows[] | select(.fallback)] | length' <<<"$plan")"
   echo "tasks-to-issues: MIP-$mip, $n_rows rows → $umbrella + $(jq 'length' <<<"$existing_json") repo(s)${milestone:+   (milestone: $milestone)}${deliverable:+   (deliverable: $deliverable)}"
-  jq -r --arg mip "$mip" '.rows[] | select(.fallback) | "  fallback: \($mip)-T\(.id) -> \(.repo) (its own repo is not there yet)"' <<<"$plan"
+  jq -r --arg mip "$mip" --arg owner "${umbrella%%/*}" '.rows[] | select(.fallback) |
+    if .prefiled then "  prefiled: \($mip)-T\(.id) -> \(.repo) (filed before \($owner)/\(.repo_name) existed; left where it is)"
+    else "  fallback: \($mip)-T\(.id) -> \(.repo) (its own repo is not there yet)" end' <<<"$plan"
 
   # §5.1/§5.7 makes the milestone or Deliverable the thing an issue belongs to, so filing with
   # neither is a real choice, not a default. Said once, and only when this run would actually
@@ -1301,7 +1317,7 @@ tasks_slug_of() {
 # makes the printed line something to paste rather than something to go and look up.
 tasks_slug() {
   local content
-  content="$(cd "$root" && resolve_mip_file "MIP-$1" tasks)" || return 0
+  content="$(resolve_mip_file "MIP-$1" tasks)" || return 0
   [ -n "$content" ] || return 0
   tasks_slug_of "$content" "$2"
 }
@@ -1325,7 +1341,7 @@ stack_line() {
   ref="$(task_ref "$1")"
   if [ -n "$ref" ]; then
     mip="${ref%% *}"
-    content="$(cd "$root" && resolve_mip_file "MIP-$mip" tasks)" || content=""
+    content="$(resolve_mip_file "MIP-$mip" tasks)" || content=""
   fi
   stack_line_of "$content" "$1"
 }
@@ -1406,7 +1422,7 @@ mip_reference() {
     [0-9][0-9][0-9][0-9]) ;;
     *) echo "issues.sh milestone new: --mip wants MIP-NNNN, got \"$1\"" >&2; return 1 ;;
   esac
-  IFS=$'\t' read -r source path < <(cd "$root" && resolve_mip_path "MIP-$n" doc) || {
+  IFS=$'\t' read -r source path < <(resolve_mip_path "MIP-$n" doc) || {
     echo "issues.sh milestone new: no docs/MIPs/MIP-$n-*.md found locally or via \$MAROLA_UMBRELLA — is MIP-$n written?" >&2
     return 1
   }
@@ -1744,8 +1760,12 @@ phase_titles_of() {
 # second thing to keep true; the self-test pins the five it must yield, which turns a rename in
 # PHASES.md into a failed build rather than a sixth gate issue.
 phase_titles() {
-  local section
-  section="$(awk '/^# Development phases/ { s = 1; next } s && /^# / { exit } s' "$root/docs/PHASES.md")"
+  local content section
+  # resolve_phases_file: this repo, then ../, then gh api $MAROLA_UMBRELLA — never $root, since a
+  # code repo carries no docs/PHASES.md of its own once it splits off the umbrella.
+  content="$(resolve_phases_file)" || return 1
+  [ -n "$content" ] || return 1
+  section="$(awk '/^# Development phases/ { s = 1; next } s && /^# / { exit } s' <<<"$content")"
   phase_titles_of "$section"
 }
 
@@ -1755,10 +1775,10 @@ cmd_board_gates() {
   resolve_nwo
 
   local titles n_titles
-  titles="$(phase_titles)"
+  titles="$(phase_titles)" || titles=""
   n_titles="$(grep -c . <<<"$titles" || true)"
   [ "$n_titles" -eq 5 ] || {
-    echo "issues.sh board gates: docs/PHASES.md yielded $n_titles phase titles, not 5 — refusing to file gate issues from a file this script no longer parses." >&2
+    echo "issues.sh board gates: docs/PHASES.md yielded $n_titles phase titles, not 5 (found locally, in ../, or via \$MAROLA_UMBRELLA?) — refusing to file gate issues from a file this script no longer parses." >&2
     exit 1
   }
 
@@ -2141,8 +2161,12 @@ EOF
 
   echo
   echo "-- the repo's own manifest --"
-  got="$(manifest_json "$manifest_default")"
-  check "$(basename "$manifest_default") parses" "$(jq -r 'length > 0' <<<"$got")" "true"
+  # $root, not $manifest_default: this tests this devkit's own bundled labels.yml, hermetically —
+  # $manifest_default also depends on the caller's cwd (production's caller-first precedence),
+  # which must not change what this self-test checks.
+  local own_manifest="$root/.github/labels.yml"
+  got="$(manifest_json "$own_manifest")"
+  check "$(basename "$own_manifest") parses" "$(jq -r 'length > 0' <<<"$got")" "true"
   check "layer/azure is not in the manifest" "$(jq -r '[.[] | select(.name == "layer/azure")] | length' <<<"$got")" "0"
   check "the four new labels are" \
     "$(jq -r '[.[] | select(.name | IN("agent-ready","size/S","size/M","size/L"))] | length' <<<"$got")" "4"
@@ -2233,13 +2257,13 @@ row-3"
   # Parsed again here rather than reusing $got from an earlier section: a shared scratch variable
   # across sections meant inserting a test in between silently broke this one.
   local mj entry n c d want_c want_d
-  mj="$(manifest_json "$manifest_default")"
+  mj="$(manifest_json "$own_manifest")"
   for entry in "${PR_LABEL_TAXONOMY[@]}"; do
     n="${entry%%:*}"; c="${entry#*:}"; c="$(tr 'A-Z' 'a-z' <<<"${c%%:*}")"; d="${entry#*:*:}"
     want_c="$(jq -r --arg n "$n" '.[] | select(.name == $n) | .color' <<<"$mj")"
     want_d="$(jq -r --arg n "$n" '.[] | select(.name == $n) | .description' <<<"$mj")"
     if [ -z "$want_c" ]; then
-      echo "FAILED: $n is in PR_LABEL_TAXONOMY but not in $(basename "$manifest_default")" >&2; failed=1
+      echo "FAILED: $n is in PR_LABEL_TAXONOMY but not in $(basename "$own_manifest")" >&2; failed=1
     elif [ "$c" != "$want_c" ] || [ "$d" != "$want_d" ]; then
       echo "FAILED: $n differs between PR_LABEL_TAXONOMY and the manifest" >&2
       echo "  pr_labels.sh: $c / $d" >&2
@@ -2319,7 +2343,11 @@ row-3"
   # indentation-based subset GitHub issue forms use — mappings, block/flow sequences, quoted and
   # literal-block scalars — and errors on anything left over rather than silently truncating, the
   # same trade manifest_json makes for labels.yml's fixed shape.
-  local form_dir="$root/.github/ISSUE_TEMPLATE" form_parser
+  # $root, not the caller's cwd: this checks devkit's own bundled forms against dor_rules' own
+  # hardcoded headings, hermetically — a real consuming repo's forms (if it even keeps its own
+  # copy rather than the ones synced from here) are a different, unrelated set of files.
+  local form_dir form_parser
+  form_dir="$root/.github/ISSUE_TEMPLATE"
   form_parser="$tmp/parse_form.py"
   cat > "$form_parser" <<'PYEOF'
 import json, re, sys
@@ -2893,6 +2921,8 @@ EOF
     MAROLA_UMBRELLA=marola-dev/marola cmd_tasks_to_issues "$t2r_file" 2>&1)" || failed=1
   check "row 2 is not moved once marola-devkit exists — it is still found in the umbrella" \
     "$(grep -c '0097-T2.*already filed (marola-dev/marola)$' <<<"$t2r_out")" "1"
+  check "and it is reported as filed before its repo existed, not as missing its repo" \
+    "$(grep -c 'prefiled: 0097-T2 -> marola-dev/marola (filed before marola-dev/marola-devkit existed; left where it is)' <<<"$t2r_out")$(grep -c 'fallback: 0097-T2' <<<"$t2r_out")" "10"
 
   echo
   echo "-- tasks-to-issues: three target repos, every one probed despite sharing stdin with gh (§5.7) --"
@@ -3205,14 +3235,45 @@ EOF
     "Phase 0 — POC pipeline + six pluggable integrations|Phase 1 — Telegram bot|Phase 2 — Go live on a cloud backend, deliberately|Phase 3 — Deploy|Phase 4 — Harden & calibrate|"
   check "PHASES.md marks phase 0 done, so that gate is filed closed" \
     "$(phase_titles_of "$phases_fixture" | awk -F'\t' '$3 == "done" { print $1 }')" "0"
-  # Row 6's own named test ("issues.sh --self-test parses PHASES.md"): the real file, when this
-  # checkout has one — guarded, not required, since this script moves to marola-devkit, which
-  # carries none.
-  if [ -f "$root/docs/PHASES.md" ]; then
-    check "the real docs/PHASES.md parses into five phase titles" "$(phase_titles | wc -l | tr -d ' ')" "5"
-  else
-    echo "ok: no docs/PHASES.md here (marola-devkit) — skipped"
-  fi
+  # Row 6's own named test ("issues.sh --self-test parses PHASES.md"): devkit carries no
+  # docs/PHASES.md of its own, so this builds a stand-in consuming repo and resolves from its cwd.
+  local pt_dir="$tmp/phases-repo"
+  mkdir -p "$pt_dir/docs"
+  cat > "$pt_dir/docs/PHASES.md" <<'EOF'
+# Development phases
+
+1. **Phase 0: POC pipeline + six pluggable integrations (done, this change).** Beach discovery.
+2. **Phase 1: Telegram bot.** Long-polling loop.
+EOF
+  check "the real docs/PHASES.md parses, resolved from the caller's cwd" \
+    "$(cd "$pt_dir" && phase_titles | cut -f2 | tr '\n' '|')" \
+    "Phase 0 — POC pipeline + six pluggable integrations|Phase 1 — Telegram bot|"
+
+  # resolve_phases_file's other two tiers — same three-step order as a MIP (§5.6).
+  local pt_umbrella="$tmp/phases-umbrella" pt_code_repo="$tmp/phases-umbrella/code-repo"
+  mkdir -p "$pt_umbrella/docs" "$pt_code_repo"
+  cat > "$pt_umbrella/docs/PHASES.md" <<'EOF'
+# Development phases
+
+1. **Phase 0: umbrella copy.** Found via ../.
+EOF
+  check "../docs/PHASES.md when this checkout (a code repo) has none of its own" \
+    "$(cd "$pt_code_repo" && phase_titles | cut -f2)" "Phase 0 — umbrella copy"
+
+  local pt_bare="$tmp/phases-bare" pt_bin="$tmp/phases-bin"
+  mkdir -p "$pt_bare" "$pt_bin"
+  cat > "$pt_bin/gh" <<'STUB'
+#!/bin/sh
+cat >/dev/null
+case "$*" in
+  *"repos/marola-dev/marola/contents/docs/PHASES.md"*)
+    printf '# Development phases\n\n1. **Phase 0: gh api copy.** Found over the network.\n' ;;
+  *) exit 1 ;;
+esac
+STUB
+  chmod +x "$pt_bin/gh"
+  check "gh api \$MAROLA_UMBRELLA/.../docs/PHASES.md when nothing is local or in ../" \
+    "$(cd "$pt_bare" && PATH="$pt_bin:$PATH" phase_titles | cut -f2)" "Phase 0 — gh api copy"
 
   echo
   echo "-- claim prints a branch command carrying the slug the tasks file actually has --"
@@ -3677,6 +3738,84 @@ EOF
     *"no X-OAuth-Scopes header"*) echo "ok: and it says why it went ahead anyway" ;;
     *) echo "FAILED: expected the fine-grained-PAT warning, got:" >&2; sed 's/^/  /' <<<"$claim_got" >&2; failed=1 ;;
   esac
+
+  echo "-- resolve_nwo: the repo comes from the caller's cwd, never from this script's own (possibly non-git, e.g. a flake install's read-only nix store) directory --"
+  local rn_root="$tmp/rn-nongit-root" rn_work="$tmp/rn-work-repo" rn_bin="$tmp/rn-bin" rn_out rn_rc=0
+  mkdir -p "$rn_root/scripts/lib" "$rn_root/.github" "$rn_bin"
+  cp "$root/scripts/issues.sh" "$rn_root/scripts/issues.sh"
+  cp "$root/scripts/lib/mip_ref.sh" "$rn_root/scripts/lib/mip_ref.sh"
+  cp "$root/.github/labels.yml" "$rn_root/.github/labels.yml"
+  git -C "$rn_root" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    && { echo "FAILED: test setup bug — rn_root must not itself be a git repo" >&2; failed=1; }
+  git init -q "$rn_work"
+  cat > "$rn_bin/gh" <<'STUB'
+#!/bin/sh
+# Unlike write_gh_stub's own "repo view" branch (pure string matching, blind to cwd), this one
+# asks git the way the real `gh repo view` does — the only way to reproduce "not a git repository"
+# for a $root that is not one, without a live gh binary or network.
+case "$*" in
+  *"auth status"*) exit 0 ;;
+  *"repo view"*)
+    git rev-parse --show-toplevel >/dev/null 2>&1 || { echo "fatal: not a git repository (or any of the parent directories): .git" >&2; exit 1; }
+    echo "rn-work/repo" ;;
+  *) echo '[]' ;;
+esac
+STUB
+  chmod +x "$rn_bin/gh"
+  rn_out="$(cd "$rn_work" && PATH="$rn_bin:$PATH" bash "$rn_root/scripts/issues.sh" deps list 1 2>&1)" || rn_rc=$?
+  check "deps list exits clean when the script lives outside any git repo but cwd is one" "$rn_rc" "0"
+  check "and the \"not a git repository\" failure this bug produced does not leak through" \
+    "$(grep -c 'not a git repository' <<<"$rn_out" || true)" "0"
+
+  echo "-- manifest_default: the caller's own .github/labels.yml, over this script's install dir --"
+  local md_caller="$tmp/md-caller" md_out md_rc=0
+  mkdir -p "$md_caller/.github"
+  printf "# this caller's own manifest, deliberately empty\n" > "$md_caller/.github/labels.yml"
+  md_out="$(cd "$md_caller" && bash "$rn_root/scripts/issues.sh" labels sync 2>&1)" || md_rc=$?
+  check "labels sync refuses on the caller's own (empty) manifest" "$md_rc" "1"
+  check "naming the caller's own full path, not this script's install dir" \
+    "$(grep -o '[^ ]*\.github/labels\.yml defines no labels' <<<"$md_out")" \
+    "$md_caller/.github/labels.yml defines no labels"
+
+  echo "-- and falls back to this devkit's bundled labels.yml when the caller has none of its own --"
+  local md_bare="$tmp/md-bare-caller" md_noauth_bin="$tmp/md-noauth-bin" md_out2 md_rc2=0
+  mkdir -p "$md_bare" "$md_noauth_bin"
+  cat > "$md_noauth_bin/gh" <<'STUB'
+#!/bin/sh
+exit 1
+STUB
+  chmod +x "$md_noauth_bin/gh"
+  md_out2="$(cd "$md_bare" && PATH="$md_noauth_bin:$PATH" bash "$rn_root/scripts/issues.sh" labels sync 2>&1)" || md_rc2=$?
+  check "it gets past the empty-manifest refusal (the bundled default has real labels)..." "$md_rc2" "1"
+  check "...failing only once it needs a real, authenticated gh" \
+    "$(grep -c 'gh is not logged in' <<<"$md_out2" || true)" "1"
+
+  echo "-- and from a subdirectory of the caller's repo, not just its root --"
+  local sub_repo="$tmp/sub-repo" sub_out sub_rc=0
+  mkdir -p "$sub_repo/.github" "$sub_repo/nested/deeper"
+  printf '%s\n' '- name: "area/subdir-test"' '  color: "112233"' \
+    '  description: "proves subdirectory resolution"' > "$sub_repo/.github/labels.yml"
+  git init -q "$sub_repo"
+  sub_out="$(cd "$sub_repo/nested/deeper" && PATH="$md_noauth_bin:$PATH" bash "$rn_root/scripts/issues.sh" labels sync 2>&1)" || sub_rc=$?
+  check "invoked two levels down, it still reaches the real gh call (the manifest was not empty)" \
+    "$(grep -c 'gh is not logged in' <<<"$sub_out" || true)" "1"
+  check "...because it found the repo's own manifest, not this script's bundled default" \
+    "$(grep -o 'manifest .*\.github/labels\.yml' <<<"$sub_out")" "manifest $sub_repo/.github/labels.yml"
+
+  # NOT a nested `--self-test` subprocess: this very section would run again inside it, forever.
+  # Checked in-process instead — a `cd` in a command-substitution subshell, which cannot leak back
+  # into self_test()'s own cwd.
+  echo "-- own_manifest/form_dir stay pinned to \$root even when cwd has a different .github --"
+  local herm_dir="$tmp/hermetic-cwd"
+  mkdir -p "$herm_dir/.github/ISSUE_TEMPLATE"
+  printf '%s\n' '- name: "totally/different"' '  color: "abcdef"' '  description: "decoy"' \
+    > "$herm_dir/.github/labels.yml"
+  check "own_manifest still reads this devkit's own labels.yml from a cwd with a different one" \
+    "$(cd "$herm_dir" && manifest_json "$own_manifest" | jq -r 'length > 0')" "true"
+  check "...not the decoy label from that fake cwd" \
+    "$(cd "$herm_dir" && manifest_json "$own_manifest" | jq -r '[.[] | select(.name == "totally/different")] | length')" "0"
+  check "form_dir still points at this devkit's own ISSUE_TEMPLATE, not the fake cwd's" \
+    "$(cd "$herm_dir" && [ -f "$form_dir/bug_report.yml" ] && echo yes || echo no)" "yes"
 
   echo
   if [ "$failed" -eq 1 ]; then echo "issues.sh self-test: FAILED" >&2; return 1; fi

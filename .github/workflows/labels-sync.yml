@@ -1,25 +1,22 @@
-# labels-sync — apply the devkit's own .github/labels.yml to the caller repo, so `agent-ready`
-# and the rest of the taxonomy mean the same thing everywhere (MIP-0070 §5.7). Reuses
-# scripts/issues.sh's `labels sync` rather than reimplementing the diff/plan/apply logic.
+# labels-sync — reconcile the caller repo's labels against a manifest, so `agent-ready` and the
+# rest of the taxonomy mean the same thing everywhere (MIP-0070 §5.7). No --manifest override:
+# issues.sh resolves its own default from cwd ($GITHUB_WORKSPACE, the caller's checkout) — the
+# caller's own .github/labels.yml when it has one, else this devkit's bundled copy — the same rule
+# `just labels-sync` gets locally, so CI and a human's own run can never prune against different
+# manifests. No `.git` stripping either: issues.sh's `gh repo view` already resolves from cwd.
 #
-# issues.sh resolves which repo to act on with `gh repo view` run from its own script's directory
-# (cd "$root" in resolve_nwo) — not from cwd, and not from $GH_REPO (verified: `gh repo view`
-# ignores GH_REPO and always asks git for the enclosing repo). So the devkit checkout below has its
-# own .git stripped right after checkout: git and gh then search upward from inside it and find the
-# caller's real checkout at $GITHUB_WORKSPACE instead of the devkit's own remote. Same-repo
-# operation otherwise — no cross-repo token, GH_TOKEN is the default GITHUB_TOKEN scoped by this
-# workflow's own `issues: write` permission.
-#
-# The devkit checkout below uses the default GITHUB_TOKEN too, with no token input of its own —
-# that only works because marola-devkit is a public repo (MIP-0070 makes it public). A private
-# devkit would need a cross-repo PAT input here, the same shape as notify-umbrella's `token` secret.
+# The devkit checkout below uses the default GITHUB_TOKEN, with no token input of its own — that
+# only works because marola-devkit is a public repo (MIP-0070 makes it public). A private devkit
+# would need a cross-repo PAT input here, the same shape as notify-umbrella's `token` secret.
 name: labels-sync
 
 on:
   workflow_call:
     inputs:
       devkit-ref:
-        description: "git ref of marola-devkit whose .github/labels.yml is the manifest to apply."
+        description: >-
+          git ref of marola-devkit, whose scripts/issues.sh runs the sync and whose own
+          .github/labels.yml is the fallback manifest when the caller repo has none of its own.
         type: string
         required: true
       devkit-repo:
@@ -58,10 +55,6 @@ jobs:
           ref: ${{ inputs.devkit-ref }}
           path: .devkit-checkout
 
-      # Strip the devkit checkout's own .git: see the header comment on why this matters for
-      # issues.sh's repo resolution.
-      - run: rm -rf .devkit-checkout/.git
-
       - name: labels sync
         env:
           GH_TOKEN: ${{ github.token }}
@@ -69,7 +62,7 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
-          args=(labels sync --manifest "$PWD/.devkit-checkout/.github/labels.yml")
+          args=(labels sync)
           [ "$PRUNE" = "true" ] && args+=(--prune)
           [ "$FORCE" = "true" ] && args+=(--force)
           bash .devkit-checkout/scripts/issues.sh "${args[@]}"

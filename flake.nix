@@ -59,7 +59,7 @@
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.1.0";
+          version = "0.2.1";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];
@@ -69,6 +69,8 @@
             share=$out/share/marola-devkit
             mkdir -p $share $out/bin
             cp -r scripts agents plugins .githooks .github devkit.just $share/
+            mkdir -p $share/.claude
+            cp .claude/statusline.sh $share/.claude/statusline.sh
             ${lib.concatStrings (lib.mapAttrsToList (name: path: ''
               makeWrapper $share/${path} $out/bin/${name} \
                 --prefix PATH : $out/bin:${lib.makeBinPath runtimeDeps} \

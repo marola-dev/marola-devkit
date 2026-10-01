@@ -11,7 +11,7 @@ version, and its own AGENTS.md says which pieces it opts out of.
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.1.0";
+  url = "github:marola-dev/marola-devkit/v0.2.1";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -24,7 +24,7 @@ shellHook = marola-devkit.lib.${system}.shellHook + ''
 
 `lib.<system>.tools` puts `stack`, `uprd`, `uprds`, `pr-flow` (the PR workflow; not `pr`, which
 is coreutils'), `issues`, `cost-split`, `cost-fill`, `agents-check` (and the rest in `flake.nix`)
-on `PATH`. Docs tooling (`mkdocs`) is not in v0.1.0; it comes with MIP-0070 task 10. The shellHook links the pinned
+on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.1 either; it comes with MIP-0070 task 10. The shellHook links the pinned
 tree at `.devkit` (gitignore it), so the justfile can take the shared recipes:
 
 ```just
@@ -44,21 +44,61 @@ repo implements is two recipes in its own justfile:
 A hook whose recipe the repo doesn't define prints one line and lets the commit or push through.
 With no `just` to run it (outside `nix develop`, no nix fallback) the hook fails; `--no-verify`
 bypasses.
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.1.0#uprd`.
+
+`prepush` takes no positional arguments — a parameterless recipe (today's norm) must keep working,
+and `just prepush <remote>` would otherwise try to run a recipe named `<remote>`. git's own pre-push
+data reaches the recipe through three environment variables instead: `MAROLA_PUSH_REMOTE` and
+`MAROLA_PUSH_URL` (the remote's name and URL), and `MAROLA_PUSH_REFS_FILE`, the path to a file of
+git's `<local ref> <local sha1> <remote ref> <remote sha1>` lines, one per pushed ref, each one a
+deletion annotated `(delete)` — so a recipe that wants the real push range instead of assuming
+HEAD's, or wants to skip deletions, can read it. A recipe that reads none of the three keeps
+working exactly as before.
+
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.1#uprd`.
 
 **Claude Code plugin** — in the repo's `.claude/settings.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit" } }
+    "marola-devkit": {
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.1" }
+    }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
 }
 ```
 
+A `github`-sourced `extraKnownMarketplaces` entry does take a `ref` (Claude Code's plugin
+marketplace reference: branch or tag, same as a plugin source's own `ref`) — the `ref` above pins
+the plugin to this tag the same way the flake input is pinned; a repo adopts a new release by
+bumping both together. Omitting `ref` tracks this repo's default branch instead. Background
+auto-update is off by default for a third-party marketplace like this one, so bumping the pinned
+`ref` — not waiting on a background refresh — is how a consumer picks up a release.
+
 Skills then load as `/marola-devkit:mip`, `/marola-devkit:mip-tasks`, …, and the agents as
 `marola-devkit:mip-reviewer`. The plugin's hooks replace the repo's own `.claude/hooks/` entries.
+
+The Stop hook nags once per session, after an uncommitted change, to run the repo's own gate — by
+default `just quality`, or `just stop-gate` when the repo's own justfile defines that recipe (any
+`just`-visible spelling: `Justfile`/`.justfile`, an `@`-prefixed recipe, one pulled in via
+`import`). `MAROLA_STOP_GATE` overrides both, naming the exact command(s) to nag for (it can be
+more than one, e.g. `"just build && just test && just quality"`, for a repo whose `quality` does
+not itself run tests). Since the hook runs inside Claude Code's own process, not a login shell,
+`MAROLA_STOP_GATE` must reach it explicitly — a plain repo-level export is not enough; set it in
+`.claude/settings.json`'s `env` (or `.claude/settings.local.json`'s, to keep it out of git).
+
+**Status line** — the pinned tree carries one at `.devkit/.claude/statusline.sh`
+(model/effort, dir, git branch and ahead/behind, context-window bar, cost, cache hit ratio, rate
+limits — nothing marola-specific). A repo wires it in its own `.claude/settings.json`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "bash \"$(git rev-parse --show-toplevel)/.devkit/.claude/statusline.sh\"" }
+}
+```
+
+A repo that wants its own instead keeps using its own `.claude/statusline.sh` path.
 
 **Invariants** — keep the block from `agents/invariants.md` between `<!-- invariants:start -->` and
 `<!-- invariants:end -->` in the repo's AGENTS.md; `agents-check` compares it against the pinned
@@ -68,10 +108,26 @@ devkit's copy (`MAROLA_INVARIANTS_BLOCK` is set by the wrapper).
 checkout), then `gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs`. `MAROLA_UMBRELLA` defaults to
 `marola-dev/marola`.
 
-Reusable workflows (`scala-ci`, `python-ci`, `static-ci`, `notify-umbrella`, `labels-sync`, …) come
-in the next release (MIP-0070 task 8).
+**Reusable workflows** — eight `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
+`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`); every input,
+secret and example caller is in [docs/workflows.md](docs/workflows.md). One caller, needing a
+second checkout of this repo for its own scripts:
+
+```yaml
+jobs:
+  agents-check:
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.1
+    with:
+      devkit-ref: v0.2.1
+```
+
+This repo runs all eight against its own pull requests (`.github/workflows/pr.yml`), so a change
+to one of them is exercised by a real caller before a tag is cut.
 
 ## Work on it
 
 See [AGENTS.md](AGENTS.md). `nix develop`, then `just quality`. Docs for the aggregated site are in
-[docs/](docs/index.md).
+[docs/](docs/index.md). A release that changes behaviour for consumers moves three things
+together: `plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`, `flake.nix`'s package
+`version`, and a new git tag — Claude Code uses the plugin version to decide when to refresh an
+installed copy.

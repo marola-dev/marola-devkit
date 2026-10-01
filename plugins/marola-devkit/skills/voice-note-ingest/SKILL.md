@@ -58,8 +58,9 @@ only: it loads no model and needs no audio file or installed backend:
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py --self-test
 ```
 
-This is a skill helper, not repo tooling. It is *not* wired into `just quality`/`quality-other`
-or CI. Run it by hand after touching the script, before trusting it on a real voice note.
+This is a skill helper, not repo tooling. It is *not* wired into the repo's quality gate
+(`just quality`, or `quality-other` in a repo that splits it) or CI. Run it by hand after touching
+the script, before trusting it on a real voice note.
 
 ## Installing a backend
 
