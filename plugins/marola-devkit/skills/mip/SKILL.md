@@ -46,14 +46,14 @@ those directly, and note them in `docs/4-Research-and-plans/FABLE_REVIEW.md` or 
    is a separate PR that flips the status to `Implemented` and links the PR. If the user asks for
    both, do the MIP first and confirm the design before writing code.
 9. **Before pushing a new draft branch, check for an existing one.** Run `just docs-mip-stack list`
-   (`scripts/docs-mip-stack.sh`) first: it discovers pending, un-merged `docs/mip-NNNN-*` design-doc
+   (`docs-mip-stack`) first: it discovers pending, un-merged `docs/mip-NNNN-*` design-doc
    branches and flags duplicates/staleness for the same MIP number. A real scan of this repo found
    several MIPs with *more than one* candidate branch (an original `docs/mip-NNNN-*` draft and a
    later rebuilt `mips/YYYY-MM-DD/K-mip-NNNN-*` branch, not always identical); several turned out to
    be already-merged duplicates nobody had cleaned up, with the merged MIP's own Status field still
    pointing at the stale branch name. `just docs-mip-stack plan <branch> ...` chains the drafts you
    pick into a base-linked stack of `gh pr create` commands once you've resolved which is canonical.
-   It never guesses for you. This is distinct from `just mip-stack` (`scripts/mip-stack.sh`), which
+   It never guesses for you. This is distinct from `just mip-stack` (`mip-stack`), which
    stacks an *implementation* task's PRs (`mip-NNNN/k-*` branches against a `.tasks.md`), not design
    docs.
 10. **After a merge, double-check the MIP's own Status field names the branch/PR that actually
@@ -138,7 +138,7 @@ MIP's own Design section.
 ### Checked live
 One line per external fact you fetched: the URL, the date, and what it actually returned —
 including a failure ("404", "requires an auth token now", "no such endpoint found after checking
-the page's own JS"). This is what `mip-claims-auditor` (`.claude/agents/mip-claims-auditor.md`)
+the page's own JS"). This is what `mip-claims-auditor` (`marola-devkit:mip-claims-auditor`)
 reads first — a claim in §4/§5/§6/§9 that doesn't trace to a line here is exactly the failure mode
 that subagent exists to catch, cheaply, before anyone re-fetches anything.
 

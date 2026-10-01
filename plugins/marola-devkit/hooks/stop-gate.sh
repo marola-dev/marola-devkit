@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# stop-gate — Stop hook: nudge once per session to run `just test` after a .scala edit. MIP-0011.
+# stop-gate — Stop hook: nudge once per session to run the repo's `just quality` after an edit. MIP-0011.
 set -euo pipefail
 
-REPO_ROOT="${STOP_GATE_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+REPO_ROOT="${STOP_GATE_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"
 MARKER_DIR="${XDG_RUNTIME_DIR:-/tmp}/marola-stop-gate"
 
 extract_field() {   # hook JSON on stdin -> .$1 (empty when absent or input isn't valid JSON)
@@ -16,11 +16,11 @@ except Exception: pass" "$field" 2>/dev/null || true
   fi
 }
 
-scala_changed_since_head() {
-  # Tracked changes (`git diff`) miss a brand-new .scala file the Write tool created but nothing
+changed_since_head() {
+  # Tracked changes (`git diff`) miss a brand-new file the Write tool created but nothing
   # `git add`ed yet — `git diff` is diff-only by design and never sees untracked paths.
-  git -C "$REPO_ROOT" diff --name-only HEAD -- '*.scala' 2>/dev/null | grep -q . && return 0
-  git -C "$REPO_ROOT" ls-files --others --exclude-standard -- '*.scala' 2>/dev/null | grep -q .
+  git -C "$REPO_ROOT" diff --name-only HEAD 2>/dev/null | grep -q . && return 0
+  git -C "$REPO_ROOT" ls-files --others --exclude-standard 2>/dev/null | grep -q .
 }
 
 # check_stop <session_id>: 0 = allow, 2 = block (and writes the marker so the next call allows).
@@ -30,10 +30,10 @@ check_stop() {
   mkdir -p "$MARKER_DIR" 2>/dev/null || return 0   # can't write a marker -> allow, don't nag
   local marker="$MARKER_DIR/$session_id"
   [ -f "$marker" ] && return 0        # already nagged this session
-  scala_changed_since_head || return 0   # nothing scala-shaped changed — nothing to gate
+  changed_since_head || return 0   # nothing changed — nothing to gate
   touch "$marker" 2>/dev/null || return 0   # same fail-open rule as the mkdir above
-  echo "stop-gate: .scala files changed since HEAD and this session hasn't run \`just test\` yet." >&2
-  echo "Run \`just test\` (and \`just quality\`) before stopping, or say why this change doesn't need it. This nag only fires once per session." >&2
+  echo "stop-gate: files changed since HEAD and this session hasn't run \`just quality\` yet." >&2
+  echo "Run \`just quality\` (the repo's own gate) before stopping, or say why this change doesn't need it. This nag only fires once per session." >&2
   return 2
 }
 
@@ -48,7 +48,7 @@ self_test() {
   export XDG_RUNTIME_DIR="$tmp/runtime"
   MARKER_DIR="$XDG_RUNTIME_DIR/marola-stop-gate"
 
-  # A throwaway git repo with an uncommitted .scala change, so scala_changed_since_head is true.
+  # A throwaway git repo with an uncommitted .scala change, so changed_since_head is true.
   local repo="$tmp/repo"
   git init -q "$repo"
   git -C "$repo" config user.email test@example.com

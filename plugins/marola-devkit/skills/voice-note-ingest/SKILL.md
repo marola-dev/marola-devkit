@@ -14,7 +14,7 @@ says.
 ## What it does
 
 ```bash
-python3 .claude/skills/voice-note-ingest/scripts/transcribe.py <audio> [--model small] [--language pt]
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py <audio> [--model small] [--language pt]
 ```
 
 - Tries `faster_whisper` first, falls back to `whisper` (openai-whisper) if that's what's
@@ -55,7 +55,7 @@ The script has a `--self-test` mode that exercises argument parsing and the outp
 only: it loads no model and needs no audio file or installed backend:
 
 ```bash
-python3 .claude/skills/voice-note-ingest/scripts/transcribe.py --self-test
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py --self-test
 ```
 
 This is a skill helper, not repo tooling. It is *not* wired into `just quality`/`quality-other`

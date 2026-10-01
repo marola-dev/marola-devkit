@@ -20,7 +20,7 @@ git fetch -q origin 2>/dev/null || true
 
 # Every task branch of the MIP, local or remote, sorted by task number (scripts/stack.sh
 # branches).
-branches="$(scripts/stack.sh branches "$mip")"
+branches="$("$script_dir/stack.sh" branches "$mip")"
 [ -n "$branches" ] || { echo "uprds: no $mip/* branches" >&2; exit 1; }
 
 task_of() { sed -n 's#^mip-[0-9]\{4\}/\([0-9]*\)-.*#\1#p' <<<"$1"; }
@@ -52,7 +52,7 @@ stack_section() {   # $1 = the branch this body is for
     done <<<"$(cost_of "$b")"
   done <<<"$branches"
   echo
-  echo "Merge bottom-up; after each squash-merge run \`scripts/stack.sh restack\` on the next branch."
+  echo "Merge bottom-up; after each squash-merge run \`stack restack\` on the next branch."
   echo "Stack cost so far: **~\$$total** (sum of every \`Cost:\` trailer in the stack; \`just cost-split ${mip^^}\` recomputes it from the session logs)."
 }
 
@@ -63,13 +63,13 @@ while read -r b; do
   extra="$(mktemp)"; stack_section "$b" > "$extra"
   if [ "$dry" -eq 1 ]; then
     echo "===== $b (base: $base) ====="
-    BRANCH="$b" BASE="$base" EXTRA_FILE="$extra" scripts/uprd.sh --dry-run
+    BRANCH="$b" BASE="$base" EXTRA_FILE="$extra" "$script_dir/uprd.sh" --dry-run
     echo
   else
     if ! gh pr view "$b" --json number -q .number >/dev/null 2>&1; then
       git rev-parse --verify -q "origin/$b" >/dev/null || git push -q -u origin "$b"
     fi
-    BRANCH="$b" BASE="$base" EXTRA_FILE="$extra" scripts/uprd.sh
+    BRANCH="$b" BASE="$base" EXTRA_FILE="$extra" "$script_dir/uprd.sh"
     # Base and title follow the branch, not what the PR was opened with: a restacked lane gets its
     # new base, and a retitled tip commit renames the PR (same rule as uprd.sh's create path — the
     # first commit's subject on base..branch, capped at 70 chars, so every PR of the stack reads
@@ -85,5 +85,5 @@ done <<<"$branches"
 # GitHub's native Stack (the "Preview stack" box): `scripts/stack.sh link` — open PRs only, bottom
 # to top; it explains itself when gh is not logged in or the extension is missing.
 if [ "$dry" -eq 0 ]; then
-  scripts/stack.sh link "$mip" || echo "uprds: GitHub Stack not linked (see above) — 'just stack-setup' then 'just stack-link ${mip^^}'" >&2
+  "$script_dir/stack.sh" link "$mip" || echo "uprds: GitHub Stack not linked (see above) — 'just stack-setup' then 'just stack-link ${mip^^}'" >&2
 fi

@@ -15,7 +15,7 @@ actually show.
 If not given directly in the dispatch prompt, work them out yourself:
 
 - `BASE_SHA`: `git rev-parse origin/<base branch>` (task `k`'s base is task `k-1`'s branch, or
-  `main` for task 1; see `scripts/stack.sh`'s own `base_for` logic if unsure).
+  `main` for task 1; see `stack`'s own `base_for` logic if unsure).
 - `HEAD_SHA`: `git rev-parse origin/<task branch>`.
 - `PLAN_OR_REQUIREMENTS`: the task's own row in its `docs/MIPs/MIP-NNNN.tasks.md` (the `delivers`
   and `tests` columns), plus the parent MIP's §6 (Scoring/safety impact) and §7 (Verification

@@ -197,7 +197,7 @@ for r in rows:
     cache_read = r.get("cache_read", 0)
     share = f"{100 * cache_read / tokens:.0f}% cache reads" if tokens else "no tokens"
     models = ", ".join(r.get("models", []))
-    print(f"Cost: {usd} · {tok}, {share} ({models}) · scripts/cost-split.py, just cost-fill")
+    print(f"Cost: {usd} · {tok}, {share} ({models}) · cost-split, just cost-fill")
     break
 PY
 }

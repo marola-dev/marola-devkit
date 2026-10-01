@@ -4,7 +4,7 @@
 set -euo pipefail
 
 TIMEOUT_SECS=30
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 scalafmt_version() {
   sed -n 's/^version *= *"\(.*\)"/\1/p' "$REPO_ROOT/.scalafmt.conf" | head -1
@@ -26,6 +26,7 @@ format_file() {
   [ -f "$path" ] || return 0
   case "$path" in
     *.scala)
+      [ -f "$REPO_ROOT/.scalafmt.conf" ] || return 0
       local ver; ver="$(scalafmt_version)"
       [ -n "$ver" ] || return 0
       timeout "${TIMEOUT_SECS}s" cs launch "org.scalameta:scalafmt-cli_2.13:$ver" -- \

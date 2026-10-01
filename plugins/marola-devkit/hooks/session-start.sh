@@ -3,7 +3,7 @@
 # caveats from FABLE_REVIEW.md §3, once, as session context. MIP-0011.
 set -euo pipefail
 
-REPO_ROOT="${SESSION_START_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+REPO_ROOT="${SESSION_START_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"
 
 branch_line() {
   local branch; branch="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "(no branch)")"

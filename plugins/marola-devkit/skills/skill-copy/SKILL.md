@@ -7,5 +7,5 @@ model: claude-opus-5-5
 effort: xhigh
 ---
 
-Read `${CLAUDE_PROJECT_DIR}/.claude/skills/sharingan/SKILL.md` and follow it with these arguments:
+Read `${CLAUDE_PLUGIN_ROOT}/skills/sharingan/SKILL.md` and follow it with these arguments:
 $ARGUMENTS

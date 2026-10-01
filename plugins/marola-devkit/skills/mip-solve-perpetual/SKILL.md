@@ -2,7 +2,7 @@
 name: mip-solve-perpetual
 description: Overnight/unattended MIP-tasks runner. Works through one or more MIP*.tasks.md files, one task at a time, opening a Draft PR per task, throttling model/effort to stretch usage, and stopping cleanly on a usage limit or a real blocker. Only ever invoked explicitly — never auto-triggered.
 disable-model-invocation: true
-allowed-tools: Bash(just build*) Bash(just test*) Bash(just quality*) Bash(just pr*) Bash(sbt *) Bash(scripts/stack.sh *) Bash(git *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh pr view *) Bash(gh project *) Bash(gh auth status*) Read Grep Glob
+allowed-tools: Bash(just build*) Bash(just test*) Bash(just quality*) Bash(just pr*) Bash(sbt *) Bash(stack *) Bash(git *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh pr view *) Bash(gh project *) Bash(gh auth status*) Read Grep Glob
 disallowed-tools: Bash(gh pr merge*) Bash(gh pr close*)
 ---
 
@@ -57,7 +57,7 @@ the next start is a human keystroke again. Do not schedule this command for a la
 expect it to run. Stage everything so the typed command works first try instead.
 
 **Rules, no exceptions:**
-- One task = one branch = one PR via `scripts/stack.sh` (never bundle two tasks in one commit).
+- One task = one branch = one PR via `stack` (never bundle two tasks in one commit).
 - Before every commit: `just build && just test && just quality` must be green.
 - Every commit gets `Tested:`/`Cost:` trailers per `AGENTS.md`, plus the Co-Authored-By line.
 - Push and open the PR with `just pr`. **Never** run `gh pr merge` or `gh pr close`, under any
@@ -77,7 +77,7 @@ expect it to run. Stage everything so the typed command works first try instead.
      for. Every branch in the stack gets its own block, even ones from earlier tasks that were
      already pushed. The file is the one place a human reads to catch every pending `gh` call,
      not just the latest.
-  3. Once every task in the current run is done, append one `scripts/stack.sh link MIP-NNNN`
+  3. Once every task in the current run is done, append one `stack link MIP-NNNN`
      command to link the whole stack, after the human has created the PRs above.
   4. Treat the task as done for `/goal` purposes: "an open PR" is satisfied by "pushed + its
      exact `gh pr create` logged in `GH_POST_MORTEM.md`" when `gh` has no session auth. This is
@@ -124,7 +124,7 @@ against, not a myth to dismiss.
    design: before switching, estimate this task's likely cost at Fable rates (use the measured
    `Cost:` trailers already on this MIP's earlier task commits, e.g. `git log --grep "^Cost:" -F
    --all -- docs/MIPs/MIP-$ARGUMENTS.tasks.md`'s sibling branches, or `python3
-   scripts/cost-split.py --estimate`, as a per-task baseline, then scale by Fable's list price
+   cost-split --estimate`, as a per-task baseline, then scale by Fable's list price
    vs. the default model's from the `claude-api` skill reference) and check it against the
    **projected remaining headroom** computed in the usage guard below for whichever window is
    more constraining. If Fable's estimated burn would push that window's projected end-of-window
@@ -138,7 +138,7 @@ against, not a myth to dismiss.
 **Usage guard: real math before every task, not a single flat threshold:**
 - Primary, run before *every* task (not just once): read the current `used_percentage` and
   `resets_at` for both windows (`/heavy-usage:usage --json` if wired; otherwise fall back to
-  `python3 scripts/cost-split.py --estimate`'s running session total against a dollar budget
+  `cost-split --estimate`'s running session total against a dollar budget
   stated when this run was started, and treat the 5-hour/weekly window math below as unavailable
   until `/usage setup` is run). For whichever window is more constraining, compute:
   - `elapsed_frac = (window_seconds - (resets_at - now)) / window_seconds` (5h = 18000s, weekly =

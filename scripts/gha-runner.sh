@@ -16,7 +16,7 @@
 # confusing "already running" from the service side rather than anything about this script.
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 resolve_runner_dir() { printf '%s' "${MAROLA_GHA_RUNNER_DIR:-/home/hoffmann/code/actions-runner}"; }
 runner_dir="$(resolve_runner_dir)"
 repo_default() { printf '%s' "${MAROLA_REPO:-marola-dev/marola}"; }
@@ -56,7 +56,7 @@ up() {
     echo "no runner at $runner_dir/run.sh — set MAROLA_GHA_RUNNER_DIR, or register one there first (see flake.nix)" >&2
     exit 1
   }
-  "$repo_root/scripts/runner-preflight.sh" || {
+  "$(dirname "${BASH_SOURCE[0]}")/runner-preflight.sh" || {
     echo "" >&2
     echo "preflight failed — fix the above, or 'just runner-up --force' to start anyway" >&2
     [ "${force:-0}" -eq 1 ] || exit 1

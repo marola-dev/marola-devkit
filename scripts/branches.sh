@@ -38,7 +38,7 @@ case "${1:-}" in
   open)
     for b in $(other_branches); do
       if is_stack_branch "$b"; then
-        echo "skip $b (mip stack branch — use 'scripts/stack.sh pr' or 'just uprds ${b%%/*}')"
+        echo "skip $b (mip stack branch — use 'stack pr' or 'just uprds ${b%%/*}')"
         continue
       fi
       ahead="$(git rev-list --count origin/main.."$b" 2>/dev/null || echo 0)"

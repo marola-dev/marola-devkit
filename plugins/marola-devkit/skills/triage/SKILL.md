@@ -69,7 +69,7 @@ M 100–400, L means split it, so an L is a prompt to cut the issue in two).
 
 Read the draft against the five rules yourself: acceptance criteria, a named test, `area/*` **and**
 `layer/*`, `size/*`, no open `blocked by` dependency. Name anything the issue would be blocked by;
-those edges are drawn with `scripts/issues.sh deps add <issue> --blocked-by <n>` once it exists.
+those edges are drawn with `issues deps add <issue> --blocked-by <n>` once it exists.
 
 Then show the person the body, the labels, and the command:
 
@@ -87,7 +87,7 @@ bypasses that. The label is what selects the heading set: `issues.sh` reads the 
 against `### Acceptance criteria` / `### Named test`, does not have them, and fails rules 1 and 2
 on nothing the author did wrong.
 
-After they file it, `just issue-ready <n>` (or `scripts/issues.sh ready <n>`, when `just` is not on
+After they file it, `just issue-ready <n>` (or `issues ready <n>`, when `just` is not on
 PATH outside `nix develop`) runs the same five rules against the real issue and
 adds `agent-ready` on an all-pass — that is the authoritative check; this step only avoids filing
 something that will obviously fail it. A `mip` proposal is refused by `issue-ready` outright,

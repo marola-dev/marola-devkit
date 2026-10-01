@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 A MIP says *what* and *why*. This skill produces the *how, in order*, and keeps delivery organised:
 every task is a branch stacked on the previous one, with its own small PR, so review happens in
-pieces and `main` only ever receives green, tested steps. Mechanics live in `scripts/stack.sh`.
+pieces and `main` only ever receives green, tested steps. Mechanics live in `stack`.
 
 ## Arguments
 
@@ -82,13 +82,13 @@ and `docs/3-Working-on-the-repo/ISSUE-FLOW.md` have the rest.
 Start a fresh session per task (`/clear`, `/rename mip-NNNN/k-slug`), then:
 
 ```bash
-scripts/stack.sh start MIP-NNNN <k> <slug>   # branch mip-nnnn/k-slug off the previous task's branch
+stack start MIP-NNNN <k> <slug>   # branch mip-nnnn/k-slug off the previous task's branch
 # implement — test first (superpowers' test-driven-development), commit with a Cost: trailer
 just build && just test && just quality        # + a live check if a data path changed
-scripts/stack.sh pr                            # push, open/update the PR with base = previous task
+stack pr                            # push, open/update the PR with base = previous task
 ```
 
-The PR body is generated (`scripts/uprd.sh`) and starts with "Stacked on `<base>` — part of
+The PR body is generated (`uprd`) and starts with "Stacked on `<base>` — part of
 MIP-NNNN". Review and merge **in order, bottom of the stack first**, squash-merging as this repo
 does.
 
@@ -105,8 +105,8 @@ until it is rebased onto `main`:
 
 ```bash
 git checkout mip-nnnn/<k+1>-...
-scripts/stack.sh restack        # rebase --onto origin/main <fork point>, force-push with lease
-scripts/stack.sh status         # every branch of the MIP: base, PR number, state
+stack restack        # rebase --onto origin/main <fork point>, force-push with lease
+stack status         # every branch of the MIP: base, PR number, state
 ```
 
 GitHub retargets the child PR to `main` automatically when the merged base branch is deleted;
@@ -118,7 +118,7 @@ rather than rebasing onto `main` blind, which would replay every already-merged 
 Unblock it, and the rest of the stack, by naming the commit yourself:
 
 ```bash
-scripts/stack.sh restack --onto-base <sha>   # <sha> = the merged base branch's head
+stack restack --onto-base <sha>   # <sha> = the merged base branch's head
 ```
 
 ## Step 4 — finish
@@ -132,7 +132,7 @@ branches, and put the summed `Cost:` figures from the PRs into the MIP's status 
   `AGENTS.md`'s `Cost:` trailer per commit.
 - Never stack by accident: a follow-up to an *already merged* PR is a new branch off `main`, not a
   child of the old branch (memory: single PR per deliverable). Stacks are for planned task lists.
-- `gh` needs a login (not available inside the ai-jail sandbox): `scripts/stack.sh pr --dry-run`
+- `gh` needs a login (not available inside the ai-jail sandbox): `stack pr --dry-run`
   prints the commands; run them from the host if needed.
 - GitHub's native Stacks: `just stack-setup` once (installs the official `gh stack` extension),
   then `just stack-link MIP-NNNN` links the PRs bottom-to-top into a Stack; `just uprds` does

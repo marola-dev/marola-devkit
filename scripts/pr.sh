@@ -36,8 +36,8 @@ if [ "$dry_run" -eq 1 ]; then
   echo "pr --dry-run on $branch (mip task: $([ "$is_mip_task" -eq 1 ] && echo yes || echo no)):"
   echo
   if [ "$is_mip_task" -eq 1 ]; then
-    echo "+ scripts/stack.sh pr   # runs cost-fill.sh itself — base = the previous task's branch, PR body via uprd.sh"
-    scripts/stack.sh pr --dry-run
+    echo "+ stack pr   # runs cost-fill.sh itself — base = the previous task's branch, PR body via uprd.sh"
+    "$script_dir/stack.sh" pr --dry-run
   else
     echo "+ just cost-fill"
     "$script_dir/cost-fill.sh" --dry-run
@@ -50,7 +50,7 @@ if [ "$dry_run" -eq 1 ]; then
 fi
 
 if [ "$is_mip_task" -eq 1 ]; then
-  scripts/stack.sh pr
+  "$script_dir/stack.sh" pr
 else
   before_head="$(git rev-parse HEAD)"
   "$script_dir/cost-fill.sh"

@@ -12,6 +12,7 @@
 #   --onto-base <sha>             restack's fork point, when it refuses because it found none
 #   --self-test                   run this script's own checks
 set -euo pipefail
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dry=0; onto_base=""; selftest=0; args=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,7 +50,7 @@ base_for() {   # base branch of a task branch, or "" once that branch is gone
 # `sed 1d` drops uprd's dry-run banner, and nothing else: the body's `Closes #N` (#512) must survive.
 new_pr_body() {   # <base>
   echo "Stacked on \`$1\` — part of ${cur%%/*}. Merge order: base first."; echo
-  "${STACK_SELFTEST_UPRD:-scripts/uprd.sh}" --dry-run 2>/dev/null | sed '1d'
+  "${STACK_SELFTEST_UPRD:-$script_dir/uprd.sh}" --dry-run 2>/dev/null | sed '1d'
 }
 
 pr_window=200
@@ -338,7 +339,7 @@ case "${1:-}" in
     # for a mip task branch (.claude/skills/mip-tasks/SKILL.md), and it decides on its own
     # whether anything needs a trailer upgrade or a Closes #N line. A rewritten HEAD needs
     # --force-with-lease, same as restack below, since the branch may already be pushed.
-    cost_fill="${STACK_SELFTEST_COST_FILL:-scripts/cost-fill.sh}"
+    cost_fill="${STACK_SELFTEST_COST_FILL:-$script_dir/cost-fill.sh}"
     # The parent's pushed tip, since that is what the PR diffs against; without it cost-fill's
     # origin/main range would re-amend the parent's commits and see the parent's Closes line.
     cf_ref="$base"; [ -z "$base" ] || [ "$base" = main ] || cf_ref="origin/$base"
@@ -371,7 +372,7 @@ case "${1:-}" in
     run "${push[@]}"
     if gh pr view "$cur" --json number -q .number >/dev/null 2>&1; then
       run gh pr edit "$cur" --base "$base"
-      run scripts/uprd.sh
+      run "$script_dir/uprd.sh"
     else
       title="$(git log --reverse --format=%s "origin/$base..HEAD" 2>/dev/null | head -1)"
       [ -n "$title" ] || title="$(git log -1 --format=%s)"
@@ -390,14 +391,14 @@ case "${1:-}" in
         echo "  (it may equally be unavailable or logged out here — a jail has no gh login)."
         echo "  Rebasing onto main without that point would replay the already-merged commits and conflict on each."
         echo "  Pass the previous task branch's last commit yourself:"
-        echo "    scripts/stack.sh restack --onto-base <sha>"; } >&2
+        echo "    stack restack --onto-base <sha>"; } >&2
       exit 1
     fi
     if ! git merge-base --is-ancestor "$fork" "$cur" 2>/dev/null; then
       { echo "restack: ${fork:0:7} is not an ancestor of $cur, so it cannot be where its commits begin."
         echo "  Cutting there would replay unrelated history onto main and force-push the result."
         echo "  Pass the previous task branch's last commit instead:"
-        echo "    scripts/stack.sh restack --onto-base <sha>"; } >&2
+        echo "    stack restack --onto-base <sha>"; } >&2
       exit 1
     fi
     run git rebase --onto origin/main "$fork" "$cur"

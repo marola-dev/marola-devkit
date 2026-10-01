@@ -28,7 +28,7 @@
 # Needs `gh auth status` except for --dry-run/--from-json/--self-test. Run from the host, not ai-jail.
 set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 # shellcheck source=scripts/lib/stack_link.sh.
 source "$script_dir/lib/stack_link.sh"
 # shellcheck source=scripts/lib/uprd_title.sh.
