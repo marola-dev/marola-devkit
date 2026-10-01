@@ -112,4 +112,7 @@ to one of them is exercised by a real caller before a tag is cut.
 ## Work on it
 
 See [AGENTS.md](AGENTS.md). `nix develop`, then `just quality`. Docs for the aggregated site are in
-[docs/](docs/index.md).
+[docs/](docs/index.md). A release that changes behaviour for consumers moves three things
+together: `plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`, `flake.nix`'s package
+`version`, and a new git tag — Claude Code uses the plugin version to decide when to refresh an
+installed copy.
