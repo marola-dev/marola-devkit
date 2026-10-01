@@ -29,5 +29,4 @@ precommit:
     shellcheck --severity=error scripts/*.sh scripts/lib/*.sh plugins/marola-devkit/hooks/*.sh .githooks/* .claude/statusline.sh tests/*.sh
     scripts/agents-check.sh
 
-# *args: the pushed-to remote's name and URL (.githooks/pre-push), unused here.
-prepush *args: quality
+prepush: quality
