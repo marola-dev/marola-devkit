@@ -68,6 +68,18 @@ Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.0#u
 Skills then load as `/marola-devkit:mip`, `/marola-devkit:mip-tasks`, …, and the agents as
 `marola-devkit:mip-reviewer`. The plugin's hooks replace the repo's own `.claude/hooks/` entries.
 
+**Status line** — the pinned tree carries one at `.devkit/.claude/statusline.sh`
+(model/effort, dir, git branch and ahead/behind, context-window bar, cost, cache hit ratio, rate
+limits — nothing marola-specific). A repo wires it in its own `.claude/settings.json`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "bash \"$(git rev-parse --show-toplevel)/.devkit/.claude/statusline.sh\"" }
+}
+```
+
+A repo that wants its own instead keeps using its own `.claude/statusline.sh` path.
+
 **Invariants** — keep the block from `agents/invariants.md` between `<!-- invariants:start -->` and
 `<!-- invariants:end -->` in the repo's AGENTS.md; `agents-check` compares it against the pinned
 devkit's copy (`MAROLA_INVARIANTS_BLOCK` is set by the wrapper).

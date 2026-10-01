@@ -69,6 +69,8 @@
             share=$out/share/marola-devkit
             mkdir -p $share $out/bin
             cp -r scripts agents plugins .githooks .github devkit.just $share/
+            mkdir -p $share/.claude
+            cp .claude/statusline.sh $share/.claude/statusline.sh
             ${lib.concatStrings (lib.mapAttrsToList (name: path: ''
               makeWrapper $share/${path} $out/bin/${name} \
                 --prefix PATH : $out/bin:${lib.makeBinPath runtimeDeps} \
