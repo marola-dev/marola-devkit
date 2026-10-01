@@ -1,0 +1,83 @@
+# devkit-ci — marola-devkit's own CI, not a reusable workflow (plain push/pull_request). This is
+# the first real verification of the devkit's flake.nix: nothing else in this repo's history has
+# run Nix. The gate itself is `just quality` (ruff, shellcheck, actionlint, and whatever else that
+# recipe defines) run inside the flake's own devShell — not reimplemented here, so this workflow
+# can't drift from what a contributor runs locally. tests/self-tests.sh and agents-check.sh are
+# also run directly, for a clear pass/fail per script in this job's own log.
+#
+# The devkit is pushed untagged; v0.1.0 is tagged only after this workflow is green with a
+# committed flake.lock. Until flake.lock exists, this workflow creates it and uploads it as an
+# artifact for a human/controller to download and commit — it never commits on its own.
+name: devkit CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+
+      - name: flake.lock — create if absent, verify current if present
+        id: lock
+        run: |
+          set -euo pipefail
+          if [ ! -f flake.lock ]; then
+            echo "flake.lock is absent — this is the devkit's first Nix run; generating it now."
+            nix flake lock
+            echo "created=true" >>"$GITHUB_OUTPUT"
+          else
+            cp flake.lock "$RUNNER_TEMP/flake.lock.before"
+            nix flake lock --no-update-lock-file
+            if ! cmp -s flake.lock "$RUNNER_TEMP/flake.lock.before"; then
+              echo "::error::flake.lock is out of date for flake.nix's current inputs — run 'nix flake lock' locally and commit the result."
+              diff -u "$RUNNER_TEMP/flake.lock.before" flake.lock || true
+              exit 1
+            fi
+            echo "created=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      # No flake.lock is committed yet on a fresh, untagged devkit push — this is how the
+      # controller gets one to commit, rather than this job committing on its own.
+      - name: upload flake.lock
+        if: steps.lock.outputs.created == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: flake-lock
+          path: flake.lock
+
+      - name: nix flake check
+        run: nix flake check -L
+
+      # Not hand-rolled: a bespoke shellcheck glob here previously missed .githooks/pre-commit,
+      # .githooks/pre-push and .claude/statusline.sh (no .sh extension) and used a different
+      # severity than the repo's real gate. `just quality` is that gate, so this can't re-diverge.
+      - name: just quality (ruff, shellcheck, actionlint, and this repo's other lint gates)
+        run: nix develop --command just quality
+
+      # tests/self-tests.sh is the one list of which scripts have a --self-test (also exercised
+      # inside `nix flake check`'s own self-tests derivation); running it directly here too gives
+      # a plain, readable pass/fail per script in this job's log instead of a build sandbox's.
+      - name: script self-tests (tests/self-tests.sh)
+        run: nix develop --command bash tests/self-tests.sh
+
+      - name: agents-check (this repo's own AGENTS.md against its own agents/invariants.md)
+        run: nix develop --command scripts/agents-check.sh
+
+      # Verified empirically while authoring this workflow: `claude plugin validate` needs no
+      # login and no API key with a fresh, isolated HOME — it only reads .claude-plugin/ locally.
+      # Pinned install, not @latest, so a CLI release can't change this job's outcome underneath it.
+      - name: claude plugin validate
+        run: |
+          npm install --no-save @anthropic-ai/claude-code@2.1.285
+          ./node_modules/.bin/claude plugin validate . --strict
