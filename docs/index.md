@@ -14,6 +14,7 @@ consumption snippets; this page is what the umbrella's docs site mounts.
 | `cost-split` / `cost-fill` | Attribute Claude Code usage to commits; add a missing `Cost:`/`Tested:` trailer |
 | `issues` | Labels sync, Definition of Ready, the `agent-ready` queue, claims, `tasks-to-issues`, the board |
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
+| `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
 | `mip-stack`, `docs-mip-stack`, `deps-stack`, `deps-merge`, `branches`, `pr-label` | Stack and merge helpers |
 | `gha-runner`, `setup-runners`, `runner-preflight`, `temps` | The self-hosted Actions runner |

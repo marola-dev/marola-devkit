@@ -48,6 +48,7 @@
           docs-mip-stack = "scripts/docs-mip-stack.sh";
           deps-stack = "scripts/deps-stack.sh";
           deps-merge = "scripts/deps-merge.sh";
+          ruleset-sync = "scripts/ruleset-sync.sh";
           gha-runner = "scripts/gha-runner.sh";
           setup-runners = "scripts/setup-runners.sh";
           runner-preflight = "scripts/runner-preflight.sh";
@@ -59,7 +60,7 @@
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.2.2";
+          version = "0.2.3";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];
