@@ -31,6 +31,9 @@ The shared dev-flow harness every marola repo consumes at a pinned version:
 - `.github/`: `labels.yml`, `ISSUE_TEMPLATE/` and the PR template, synced into every repo.
 - `devkit.just`: the just module consumers import; `flake.nix`: packages, apps, the base dev shell
   and `lib.<system>` for consumers.
+- `.specify/`, `.claude/skills/speckit-*` and `specs/NNN-*/`: GitHub spec-kit (`specify` 1.0.13),
+  the design route for a devkit-only tool. `.specify/memory/constitution.md` restates the
+  invariants as plan gates. A cross-repo contract still needs a MIP in the umbrella.
 
 It holds no product code, no MIPs and no phase list: those are the umbrella's.
 
