@@ -35,6 +35,14 @@ pr-labels-backfill *args:
 labels-sync *args:
     issues labels sync {{ args }}
 
+# Check the repo's branch ruleset against the devkit's manifest.
+rulesets-check *args:
+    ruleset-sync check {{ args }}
+
+# Apply the devkit's ruleset manifest to the repo.
+rulesets-apply *args:
+    ruleset-sync apply {{ args }}
+
 # Add `agent-ready` when the Definition of Ready passes.
 issue-ready *args:
     issues ready {{ args }}
