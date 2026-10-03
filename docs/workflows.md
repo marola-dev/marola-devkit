@@ -36,7 +36,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.4
 ```
 
 | Input | Default | Notes |
@@ -55,7 +55,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.4
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -88,7 +88,7 @@ caller that still has a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.4
     with:
       hadolint-files: |
         Dockerfile
@@ -126,7 +126,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.4
     secrets:
       token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
 ```
@@ -157,9 +157,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.4
     with:
-      devkit-ref: v0.2.3
+      devkit-ref: v0.2.4
 ```
 
 | Input | Default | Notes |
@@ -193,9 +193,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.4
     with:
-      devkit-ref: v0.2.3
+      devkit-ref: v0.2.4
 ```
 
 | Input | Default | Notes |
@@ -228,11 +228,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
     permissions:
       contents: write
     with:
-      devkit-ref: v0.2.3
+      devkit-ref: v0.2.4
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -269,9 +269,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.4
     with:
-      devkit-ref: v0.2.3
+      devkit-ref: v0.2.4
 ```
 
 | Input | Default | Notes |
@@ -300,7 +300,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.3
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.4
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
