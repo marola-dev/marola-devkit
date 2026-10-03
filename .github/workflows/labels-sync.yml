@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # Public repo — the default GITHUB_TOKEN can read it, no token input needed here (MIP-0070
-      # makes the devkit public). See docs/workflows.md for the fuller note.
+      # makes the devkit public). See docs/4-reference_workflows.md for the fuller note.
       - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/issues.sh, .github/labels.yml)
         uses: actions/checkout@v7
         with:
