@@ -16,22 +16,35 @@ set -euo pipefail
 usage() { sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # push <dir> <remote> <sha> <branch> — build the orphan commit in a scratch worktree so the
-# caller's own checkout is never touched, then force-push it.
+# caller's own checkout is never touched, then force-push it. The whole git sequence runs in a
+# subshell with GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE/GIT_PREFIX/GIT_COMMON_DIR unset: `-C "$tmp"`
+# only chdir's, it does not override an inherited GIT_DIR, so without this a caller running under
+# one (a git hook, e.g. this repo's own prepush) would have redirected every git call below onto
+# its *own* repo instead of the scratch one — reproduced against a decoy repo before this fix.
 push() {
   local dir=$1 remote=$2 sha=$3 branch=$4 tmp
   [ -d "$dir" ] || { echo "api-docs-push: $dir: not a directory" >&2; return 1; }
+  [ -n "$(ls -A "$dir" 2>/dev/null)" ] || { echo "api-docs-push: $dir is empty" >&2; return 1; }
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
-  git -C "$tmp" init -q
-  git -C "$tmp" symbolic-ref HEAD "refs/heads/$branch"
-  cp -a "$dir"/. "$tmp"/
-  git -C "$tmp" -c user.name=api-docs-push -c user.email=api-docs-push@marola.dev add -A
-  git -C "$tmp" -c user.name=api-docs-push -c user.email=api-docs-push@marola.dev commit -q -m "api-docs: $sha"
-  git -C "$tmp" push -q --force "$remote" "$branch:$branch"
+  (
+    unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
+    git -C "$tmp" init -q
+    git -C "$tmp" symbolic-ref HEAD "refs/heads/$branch"
+    cp -a "$dir"/. "$tmp"/
+    git -C "$tmp" -c user.name=api-docs-push -c user.email=api-docs-push@marola.dev \
+      -c commit.gpgsign=false -c core.hooksPath=/dev/null add -A
+    git -C "$tmp" -c user.name=api-docs-push -c user.email=api-docs-push@marola.dev \
+      -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -q -m "api-docs: $sha"
+    git -C "$tmp" push -q --force "$remote" "$branch:$branch"
+  )
 }
 
 self_test() {
-  local tmp fails=0 out bare content clone
+  local tmp fails=0 out bare content clone decoy decoy_head decoy_log
+  # Unset for the self-test's own git calls too (not just push()'s), in case --self-test itself
+  # is invoked under an inherited GIT_DIR (tests/self-tests.sh under this repo's own prepush hook).
+  unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
   check() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else fails=$((fails + 1)); echo "  FAIL $1 — got [$2] want [$3]" >&2; fi; }
   has() { case "$2" in *"$3"*) echo "  ok   $1" ;; *) fails=$((fails + 1)); echo "  FAIL $1 — expected \"$3\" in: $2" >&2 ;; esac; }
   hasnot() { case "$2" in *"$3"*) fails=$((fails + 1)); echo "  FAIL $1 — did not expect \"$3\" in: $2" >&2 ;; *) echo "  ok   $1" ;; esac; }
@@ -62,6 +75,19 @@ self_test() {
   has "second push: message names the new sha" "$out" "sha2222"
   hasnot "second push: the old sha is gone" "$out" "sha1111"
   check "second push: content replaced" "$(cat "$clone/index.html")" "second"
+
+  echo "-- an inherited GIT_DIR (e.g. a caller's git hook) must not leak into push() --"
+  decoy="$tmp/decoy"
+  git init -q "$decoy"
+  git -C "$decoy" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m "decoy initial"
+  decoy_head="$(git -C "$decoy" symbolic-ref HEAD)"
+  decoy_log="$(git -C "$decoy" log --oneline)"
+  GIT_DIR="$decoy/.git" push "$content" "$bare" sha3333 api-docs
+  check "GIT_DIR leak: decoy HEAD unchanged" "$(git -C "$decoy" symbolic-ref HEAD)" "$decoy_head"
+  check "GIT_DIR leak: decoy log unchanged" "$(git -C "$decoy" log --oneline)" "$decoy_log"
+  git -C "$clone" fetch -q origin api-docs
+  git -C "$clone" checkout -q -B api-docs origin/api-docs
+  has "GIT_DIR leak: the push still reached the real remote" "$(git -C "$clone" log -1 --format=%s api-docs)" "sha3333"
 
   if [ "$fails" -eq 0 ]; then echo "api-docs-push self-test: ok"; return 0; fi
   echo "api-docs-push self-test: $fails failure(s)" >&2; return 1

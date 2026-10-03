@@ -1,25 +1,11 @@
-# api-docs — reusable workflow: runs the caller's `just api-docs <out>` generator (sbt doc,
-# pdoc, ...) as a PR check, and on a push to the default branch force-pushes its output as one
-# orphan commit to the `api-docs` branch via api-docs-push (MIP-0074 §5.2). Only the latest
-# output is kept, so the branch never grows; the commit message names the source sha, for
-# prepare-docs' fetch-api-docs to tell what it pulled.
+# api-docs — reusable workflow (MIP-0074 §5.2; full docs: docs/workflows.md#api-docs). Runs the
+# caller's `just api-docs <out>` generator as a PR check; on a push, force-pushes the output as one
+# orphan commit to `api-docs` via api-docs-push, so only the latest output is ever kept.
 #
-# The caller wires both triggers itself, so this workflow only checks `event_name == 'push'`, not
-# the branch — the same trust notify-umbrella.yml places in its caller's `on.push.branches`:
-#
-#   on:
-#     pull_request:
-#     push:
-#       branches: [main]
-#   jobs:
-#     api-docs:
-#       uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
-#       with:
-#         devkit-ref: v0.2.4
-#
-# api-docs-push lives in this repo, not the caller's, so the push step checks the devkit out a
-# second time with the default GITHUB_TOKEN — a public repo, see docs/workflows.md's note on the
-# other devkit-ref workflows.
+# Two separate jobs, not one job gated by `if:` — a PR run and a main publish must not share a
+# concurrency group, or the PR run would cancel an in-flight publish (and vice versa). The caller
+# wires both triggers itself; these jobs trust its `on.pull_request`/`on.push`, the same trap
+# notify-umbrella.yml avoids by never re-deriving "is this the default branch" itself.
 name: api-docs
 
 on:
@@ -38,25 +24,50 @@ on:
         type: string
         default: .tmp/api-docs
 
-permissions:
-  contents: write
-
 jobs:
-  api-docs:
+  check:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # persist-credentials: false — this job runs a PR's own `just api-docs` recipe, so no token
+      # (even a read-only one) is left in the checkout for it to find.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+
+      - name: just api-docs ${{ inputs.output-dir }}
+        env:
+          OUTPUT_DIR: ${{ inputs.output-dir }}
+        run: nix develop --command just api-docs "$OUTPUT_DIR"
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
     concurrency:
       group: api-docs
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
 
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+
       - name: just api-docs ${{ inputs.output-dir }}
-        run: just api-docs "${{ inputs.output-dir }}"
+        env:
+          OUTPUT_DIR: ${{ inputs.output-dir }}
+        run: nix develop --command just api-docs "$OUTPUT_DIR"
 
       # Public repo — the default GITHUB_TOKEN can read it, no token input needed here.
       - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/api-docs-push.sh)
-        if: github.event_name == 'push'
         uses: actions/checkout@v7
         with:
           repository: ${{ inputs.devkit-repo }}
@@ -64,7 +75,6 @@ jobs:
           path: .devkit-checkout
 
       - name: push the output as one orphan commit to api-docs
-        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           OUTPUT_DIR: ${{ inputs.output-dir }}

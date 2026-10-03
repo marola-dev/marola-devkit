@@ -11,7 +11,7 @@ version, and its own AGENTS.md says which pieces it opts out of.
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.2.4";
+  url = "github:marola-dev/marola-devkit/v0.2.3";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -24,7 +24,7 @@ shellHook = marola-devkit.lib.${system}.shellHook + ''
 
 `lib.<system>.tools` puts `stack`, `uprd`, `uprds`, `pr-flow` (the PR workflow; not `pr`, which
 is coreutils'), `issues`, `cost-split`, `cost-fill`, `agents-check` (and the rest in `flake.nix`)
-on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.4 either; it comes with MIP-0070 task 10. The shellHook links the pinned
+on `PATH`. Docs tooling (`mkdocs`) is not in v0.2.3 either; it comes with MIP-0070 task 10. The shellHook links the pinned
 tree at `.devkit` (gitignore it), so the justfile can take the shared recipes:
 
 ```just
@@ -54,7 +54,7 @@ deletion annotated `(delete)` — so a recipe that wants the real push range ins
 HEAD's, or wants to skip deletions, can read it. A recipe that reads none of the three keeps
 working exactly as before.
 
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.4#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.3#uprd`.
 
 **Claude Code plugin** — in the repo's `.claude/settings.json`:
 
@@ -62,7 +62,7 @@ Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.2.4#u
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.4" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.2.3" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -123,9 +123,9 @@ needing a second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.3
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.2.3
 ```
 
 This repo runs all eight against its own pull requests (`.github/workflows/pr.yml`), so a change

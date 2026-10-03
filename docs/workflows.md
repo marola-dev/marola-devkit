@@ -36,7 +36,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.3
 ```
 
 | Input | Default | Notes |
@@ -55,7 +55,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.3
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -88,7 +88,7 @@ caller that still has a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.3
     with:
       hadolint-files: |
         Dockerfile
@@ -126,7 +126,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.3
     secrets:
       token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
 ```
@@ -157,9 +157,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.3
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.2.3
 ```
 
 | Input | Default | Notes |
@@ -193,9 +193,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.3
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.2.3
 ```
 
 | Input | Default | Notes |
@@ -212,8 +212,13 @@ Runs the caller's own `just api-docs <output-dir>` generator (`sbt doc`, pdoc, .
 and on a push force-pushes its output as one orphan commit to the `api-docs` branch via
 `scripts/api-docs-push.sh` (MIP-0074 §5.2). Only the latest output is kept — the branch never
 grows — and the commit message names the push's sha, for the umbrella's `fetch-api-docs` to read.
-The caller wires both triggers; this workflow only checks `github.event_name == 'push'`, trusting
-the caller's own `on.push.branches` the way `notify-umbrella` does.
+The caller wires both triggers; two separate jobs trust them (`check` runs on `pull_request`,
+`publish` on `push`) rather than one job gated by `if:`, so a PR run and a main publish never share
+a concurrency group — a PR run must never be able to cancel an in-flight publish, or vice versa.
+Neither job assumes `just`, Nix or a generator toolchain (sbt, pdoc, ...) is already on the runner:
+both install Nix the way this repo's own `devkit-ci.yml` does
+(`DeterminateSystems/nix-installer-action` + `magic-nix-cache-action`) and run the generator inside
+`nix develop`, so the caller's own flake is what has to provide `just api-docs`.
 
 ```yaml
 name: api docs
@@ -223,10 +228,17 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.3
+    permissions:
+      contents: write
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.2.3
 ```
+
+The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
+it: a reusable-workflow call's jobs can never exceed what the calling job itself was granted, so
+leaving this off would make `publish`'s push fail regardless of what `api-docs.yml` declares
+internally.
 
 | Input | Default | Notes |
 |---|---|---|
@@ -234,11 +246,13 @@ jobs:
 | `devkit-repo` | `marola-dev/marola-devkit` | |
 | `output-dir` | `.tmp/api-docs` | where `just api-docs <output-dir>` writes |
 
-**Permission needed:** `contents: write`, declared in the workflow (only the push path uses it).
-Uses the default `GITHUB_TOKEN` for both checkouts and the push — same-repo operation, no PAT —
-see the public-repo note above. `scripts/api-docs-push.sh` itself never reads `GITHUB_TOKEN`: the
-push step builds an authenticated remote URL and passes it as a plain argument, which is also why
-its own `--self-test` needs no network, just a local bare repo.
+**Permissions:** `check` declares `contents: read` and checks out with `persist-credentials:
+false` — it runs a PR's own `just api-docs` recipe, so no token (even a read-only one) is left in
+the checkout for that recipe to find. `publish` declares `contents: write` and uses the default
+`GITHUB_TOKEN` for both its checkouts and the push — same-repo operation, no PAT — see the
+public-repo note above. `scripts/api-docs-push.sh` itself never reads `GITHUB_TOKEN`: the push
+step builds an authenticated remote URL and passes it as a plain argument, which is also why its
+own `--self-test` needs no network, just a local bare repo.
 
 ## pr-body
 
@@ -255,9 +269,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.3
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.2.3
 ```
 
 | Input | Default | Notes |
@@ -286,7 +300,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.3
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
