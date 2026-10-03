@@ -1,14 +1,14 @@
 # Reusable workflows
 
-Nine `workflow_call` workflows under `.github/workflows/`, replacing what the monorepo's `ci.yml`,
-`pr-body.yml` and `ci-short-circuit-pr-close.yml` did in one tree (MIP-0070 §5.6, task 8), plus
-`api-docs.yml` (MIP-0074 §5.2). A tenth, `devkit-ci.yml`, is this repo's own CI — not reusable,
-nothing to call.
+Nine `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
+`ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
+(MIP-0070 §5.6), and `api-docs.yml` is MIP-0074 §5.2's. A tenth, `devkit-ci.yml`, is this repo's
+own CI — not reusable, nothing to call.
 
-Every workflow here pins third-party actions/tool versions the way the monorepo does; where a tool
-wasn't pinned via an action before (ruff, actionlint, hadolint, shellcheck — the monorepo gets them
-from a nix flake), the version below is what that flake pinned at the time this doc was written.
-Bump the input, not the workflow file, when a newer version is wanted.
+Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
+actionlint, hadolint, shellcheck, which a repo's flake supplies locally), the default below is the
+version the umbrella's flake pinned when the workflow was written. Bump the input, not the
+workflow file, when a newer version is wanted.
 
 Four of the nine (`labels-sync`, `agents-check`, `pr-body`, `api-docs`) take a required
 `devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
@@ -28,7 +28,7 @@ private devkit would need a cross-repo PAT input on each of them, the same shape
 
 ## scala-ci
 
-Replaces `ci.yml`'s `build-test` job: JDK setup, sbt format/scalafix check, compile, test, with the
+Replaces the pre-split `ci.yml`'s `build-test` job: JDK setup, sbt format/scalafix check, compile, test, with the
 same sbt/coursier and zinc caches. Coverage and the site-data/badge publishing steps that job also
 had were marola-app-specific and are not part of this workflow — a caller adds its own job for
 those if it wants them.
@@ -36,7 +36,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.3.0
 ```
 
 | Input | Default | Notes |
@@ -55,7 +55,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.3.0
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -78,17 +78,17 @@ of extra commands (`node --check …`, `docker compose … config --quiet`, …)
 `quality-other` that wasn't Python. Tools are pinned, downloaded release binaries, not
 `nix develop .#lint`, so a caller repo doesn't need a compatible flake just to lint.
 
-`shellcheck-files` is **new, not parity**: today's monorepo `quality-other` job only prints
-`shellcheck --version`, it never runs shellcheck against a file. A caller opts into a real,
+`shellcheck-files` is **new, not parity**: the pre-split `quality-other` job only printed
+`shellcheck --version`, it never ran shellcheck against a file. A caller opts into a real,
 stricter shellcheck gate by passing files/globs here.
 
-`extra-commands` is also where today's `just --list >/dev/null` justfile-parse check goes, for a
-caller that still has a justfile:
+`extra-commands` is also where a `just --list >/dev/null` justfile-parse check goes, for a caller
+with a justfile:
 
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.3.0
     with:
       hadolint-files: |
         Dockerfile
@@ -96,7 +96,7 @@ jobs:
         scripts/*.sh
       extra-commands: |
         just --list >/dev/null
-        node --check site/static/app.js
+        node scripts/site_check.js
 ```
 
 | Input | Default | Notes |
@@ -115,8 +115,7 @@ No secrets.
 
 Tells the umbrella a repo's docs changed via `repository_dispatch`, so it rebuilds within minutes
 instead of at its next daily cron (MIP-0070 §5.5). Modelled on h0ffmann/nix-config's
-`profile-ping.yml` (see the monorepo's `profile-activity.yml` for that caller style) — no checkout
-on either side, ~3 lines to call.
+`profile-ping.yml` — no checkout on either side, ~3 lines to call.
 
 ```yaml
 name: notify umbrella
@@ -126,9 +125,9 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.3.0
     secrets:
-      token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
+      token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 ```
 
 | Input | Default | Notes |
@@ -137,8 +136,10 @@ jobs:
 | `event-type` | `submodule-docs-updated` | what the umbrella's docs workflow listens for |
 | `runner` | `ubuntu-latest` | resolved in the *caller's* repo |
 
-**Secret** `token` (optional): a fine-grained PAT with Contents: read & write on the umbrella.
-Unset is a notice, not a failure — the umbrella's daily cron still catches the change.
+**Secret** `token` (optional): every repo passes the org secret `MAROLA_CROSS_REPO_PAT`, a
+fine-grained PAT with Contents: read & write on the umbrella (`repository_dispatch` needs it;
+`GITHUB_TOKEN` cannot reach another repo). Unset is a notice, not a failure — the umbrella's daily
+cron still catches the change.
 
 ## labels-sync
 
@@ -157,9 +158,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.3.0
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.3.0
 ```
 
 | Input | Default | Notes |
@@ -193,9 +194,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.0
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.3.0
 ```
 
 | Input | Default | Notes |
@@ -208,17 +209,22 @@ No secrets. Default `GITHUB_TOKEN` for the checkout — see the public-repo note
 
 ## api-docs
 
-Runs the caller's own `api-docs <output-dir>` generator (`sbt doc`, pdoc, ...) as a PR check,
-and on a push force-pushes its output as one orphan commit to the `api-docs` branch via
-`scripts/api-docs-push.sh` (MIP-0074 §5.2). Only the latest output is kept — the branch never
-grows — and the commit message names the push's sha, for the umbrella's `fetch-api-docs` to read.
-The caller wires both triggers; two separate jobs trust them (`check` runs on `pull_request`,
-`publish` on `push`) rather than one job gated by `if:`, so a PR run and a main publish never share
-a concurrency group — a PR run must never be able to cancel an in-flight publish, or vice versa.
-Neither job assumes `just`, Nix or a generator toolchain (sbt, pdoc, ...) is already on the runner:
-both install Nix the way this repo's own `devkit-ci.yml` does
-(`DeterminateSystems/nix-installer-action` + `magic-nix-cache-action`) and run the generator inside
-`nix develop`, so the caller's own flake is what has to provide the `api-docs` recipe.
+Runs the caller's `api-docs <output-dir>` recipe (`sbt doc`, pdoc, ...) in two jobs (MIP-0074
+§5.2):
+
+- `check`, on `pull_request`: runs the generator and commits nothing; a broken generator fails
+  the PR.
+- `publish`, on `push`: runs it, then `scripts/api-docs-push.sh` force-pushes the output as one
+  orphan commit to the `api-docs` branch. Only the latest output is kept, and the commit message
+  names the source sha.
+
+Only `publish` has a concurrency group (`api-docs`, the latest push wins), so a PR run can never
+cancel a publish. The caller wires both triggers, and each job runs only on its own event. Both
+install Nix and run the recipe inside `nix develop`, so the caller's flake provides `just` and the
+generator's toolchain.
+
+A generator writes under `<output-dir>/<lang>/` (`scala/`, `python/`). The umbrella's docs build
+unpacks the branch as the repo's `api-docs/`, so a page links `api-docs/<lang>/…`.
 
 ```yaml
 name: api docs
@@ -228,11 +234,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.3.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.3.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -256,7 +262,7 @@ own `--self-test` needs no network, just a local bare repo.
 
 ## pr-body
 
-Fills a PR's description and title from its commits (today's `pr-body.yml`), reading
+Fills a PR's description and title from its commits (the pre-split `pr-body.yml`), reading
 `scripts/uprd.sh` and `scripts/lib/` from a pinned devkit checkout instead of the caller's own tree.
 `uprd.sh`'s `git`/`gh` calls are cwd-relative (no `cd` to its own script directory the way
 `issues.sh` does), so it runs correctly against the caller repo with no extra workaround — just a
@@ -269,9 +275,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.3.0
     with:
-      devkit-ref: v0.2.4
+      devkit-ref: v0.3.0
 ```
 
 | Input | Default | Notes |
@@ -289,7 +295,7 @@ and again (see the public-repo note above) for the devkit checkout. No secrets.
 
 ## ci-short-circuit
 
-Cancels a closed PR's in-flight runs across every workflow, by head SHA (today's
+Cancels a closed PR's in-flight runs across every workflow, by head SHA (the pre-split
 `ci-short-circuit-pr-close.yml`). No devkit checkout — only `gh api`/`gh run cancel` against the
 caller's own repo.
 
@@ -300,7 +306,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.2.4
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.3.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the

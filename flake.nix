@@ -28,8 +28,7 @@
           pkgs.git pkgs.gh pkgs.jq pkgs.curl python
         ];
 
-        # PATH name -> script. `pr-flow`, not `pr`: that would shadow coreutils. Docs tooling (mkdocs)
-        # arrives with MIP-0070 task 10.
+        # PATH name -> script. `pr-flow`, not `pr`: that would shadow coreutils.
         tools = {
           stack = "scripts/stack.sh";
           uprd = "scripts/uprd.sh";
@@ -62,7 +61,7 @@
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.2.4";
+          version = "0.3.0";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];

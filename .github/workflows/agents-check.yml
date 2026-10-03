@@ -3,7 +3,7 @@
 # has no `git`/`gh` dependency), so — unlike labels-sync — no repo-resolution subtlety here.
 #
 # The devkit checkout below uses the default GITHUB_TOKEN, no token input — works only because
-# marola-devkit is a public repo (MIP-0070 makes it public); see docs/workflows.md.
+# marola-devkit is a public repo (MIP-0070 makes it public); see docs/4-reference_workflows.md.
 name: agents-check
 
 on:

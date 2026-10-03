@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Instructions for any AI coding agent working in **marola-devkit**. This is the repo layer
-(MIP-0070 §5.1): the workspace rules live in the umbrella's
+(MIP-0070 §5.1): the org rules live in the umbrella's
 [AGENTS.md](https://github.com/marola-dev/marola/blob/main/AGENTS.md); this file says what this
 repo is and where it differs.
 
@@ -28,7 +28,8 @@ The shared dev-flow harness every marola repo consumes at a pinned version:
   format/stop/session hooks), listed by `.claude-plugin/marketplace.json`.
 - `agents/invariants.md`: the org invariants block; a consuming repo's `agents-check` compares its
   AGENTS.md against this file in its pinned devkit.
-- `.github/`: `labels.yml`, `ISSUE_TEMPLATE/` and the PR template, synced into every repo.
+- `.github/`: `labels.yml`, `ISSUE_TEMPLATE/` and the PR template, synced into every repo, and
+  the reusable workflows.
 - `devkit.just`: the just module consumers import; `flake.nix`: packages, apps, the base dev shell
   and `lib.<system>` for consumers.
 
@@ -38,14 +39,35 @@ It holds no product code, no MIPs and no phase list: those are the umbrella's.
 
 ```bash
 nix develop          # the devkit's own shell: every tool on PATH, plus the lint toolchain
-just quality         # ruff, shellcheck, actionlint, every --self-test, agents-check, plugin validate
+just quality         # ruff, shellcheck, actionlint, every --self-test, agents-check, docs-lint, plugin validate
 bash tests/self-tests.sh   # just the self-tests
 claude --plugin-dir plugins/marola-devkit   # try the plugin from this checkout
 ```
 
 A change to a script lands with its `--self-test` extended first (red, then green). A change that
 alters behaviour for consumers is a version bump: `plugin.json`'s `version`, the flake package
-version and a new tag move together.
+version, every documented `v…` pin in `README.md` and `docs/`, a `CHANGELOG.md` entry and a new
+tag move together.
+
+## Docs
+
+`README.md` is the landing: what the repo is and its status, how to try it, the repo map, its
+contracts, and links. There is no `docs/index.md`. `docs/` holds numbered pages, not directories
+(MIP-0074 §5.2): `1-design`, `2-libraries`, `3-development`, `4-reference`, and a page that
+outgrows itself splits into `_` siblings (`4-reference_workflows.md`). The H1 is the nav label.
+A decision that starts and ends here is an ADR at `docs/adr/NNNN-<slug>.md`; anything crossing a
+repo boundary is an umbrella MIP.
+
+- **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.
+  A file outside `docs/` (`AGENTS.md`, a script) is linked by its
+  `https://github.com/marola-dev/marola-devkit/blob/main/…` URL; another repo or the umbrella by
+  `https://docs.marola.dev/…`.
+- **Recipes**: a doc names only this repo's and `devkit.just`'s recipes. Any other carries the
+  checkout marker: "in a marola-<name> checkout" in the same sentence, or
+  `# in a marola-<name> checkout` as a fence's first line. Where a recipe belongs to whichever repo
+  calls a workflow, say "the caller's `api-docs` recipe" instead.
+- `just quality` runs `docs-lint` (MIP-0074 §7): it fails on a foreign recipe without the marker,
+  a relative link that leaves the repo, `docs/index.md`, and stale split-era wording.
 
 ## Cost & deployment safety (hard rule)
 

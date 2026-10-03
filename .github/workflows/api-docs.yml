@@ -1,11 +1,10 @@
-# api-docs — reusable workflow (MIP-0074 §5.2; full docs: docs/workflows.md#api-docs). Runs the
-# caller's `just api-docs <out>` generator as a PR check; on a push, force-pushes the output as one
-# orphan commit to `api-docs` via api-docs-push, so only the latest output is ever kept.
+# api-docs — reusable workflow (MIP-0074 §5.2; full docs: docs/4-reference_workflows.md#api-docs).
+# Runs the caller's `just api-docs <out>` generator as a PR check; on a push, force-pushes the
+# output as one orphan commit to `api-docs` via api-docs-push, so only the latest output is kept.
 #
-# Two separate jobs, not one job gated by `if:` — a PR run and a main publish must not share a
-# concurrency group, or the PR run would cancel an in-flight publish (and vice versa). The caller
-# wires both triggers itself; these jobs trust its `on.pull_request`/`on.push`, the same trap
-# notify-umbrella.yml avoids by never re-deriving "is this the default branch" itself.
+# Two jobs so that only `publish` sits in the `api-docs` concurrency group: a PR run can never
+# cancel an in-flight publish. Each job's `if:` trusts the caller's own `on:` triggers rather than
+# re-deriving "is this the default branch", as notify-umbrella.yml does.
 name: api-docs
 
 on:

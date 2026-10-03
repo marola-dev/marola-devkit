@@ -9,7 +9,7 @@ default:
 install-hooks:
     git config core.hooksPath .githooks
 
-# The devkit's own gates: lint, every script's --self-test, the invariants block, the plugin.
+# The devkit's own gates: lint, every script's --self-test, the invariants block, docs-lint, the plugin.
 quality:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -21,6 +21,7 @@ quality:
     actionlint
     bash tests/self-tests.sh
     scripts/agents-check.sh
+    python3 scripts/docs_lint.py
     if command -v claude >/dev/null; then claude plugin validate .; else echo "claude not on PATH — skipping plugin validate"; fi
 
 # The git hooks' contract (README): fast checks at commit, the full gate at push.

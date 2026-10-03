@@ -1,7 +1,7 @@
 # notify-umbrella — tell the umbrella a repo's docs changed, so it rebuilds within minutes
 # instead of waiting for its daily cron (MIP-0070 §5.5). Modelled on h0ffmann/nix-config's
-# profile-ping.yml reusable workflow (see profile-activity.yml in the monorepo for that caller
-# style) — a plain repository_dispatch, no checkout needed on either side.
+# profile-ping.yml reusable workflow — a plain repository_dispatch, no checkout needed on either
+# side.
 #
 # A consumer adds about three lines:
 #
@@ -11,11 +11,11 @@
 #       paths: [README.md, docs/**]
 #   jobs:
 #     notify:
-#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.4
+#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.3.0
 #       secrets:
-#         token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
+#         token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 #
-# UMBRELLA_DISPATCH_TOKEN: a fine-grained PAT with Contents: read & write on the umbrella —
+# MAROLA_CROSS_REPO_PAT: the org's fine-grained PAT with Contents: read & write on the umbrella —
 # repository_dispatch needs it; GITHUB_TOKEN cannot reach another repository. Unset is a notice,
 # never a failure: the umbrella's own daily cron still picks the change up.
 name: notify-umbrella
