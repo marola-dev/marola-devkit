@@ -208,7 +208,7 @@ No secrets. Default `GITHUB_TOKEN` for the checkout — see the public-repo note
 
 ## api-docs
 
-Runs the caller's own `just api-docs <output-dir>` generator (`sbt doc`, pdoc, ...) as a PR check,
+Runs the caller's own `api-docs <output-dir>` generator (`sbt doc`, pdoc, ...) as a PR check,
 and on a push force-pushes its output as one orphan commit to the `api-docs` branch via
 `scripts/api-docs-push.sh` (MIP-0074 §5.2). Only the latest output is kept — the branch never
 grows — and the commit message names the push's sha, for the umbrella's `fetch-api-docs` to read.
@@ -218,7 +218,7 @@ a concurrency group — a PR run must never be able to cancel an in-flight publi
 Neither job assumes `just`, Nix or a generator toolchain (sbt, pdoc, ...) is already on the runner:
 both install Nix the way this repo's own `devkit-ci.yml` does
 (`DeterminateSystems/nix-installer-action` + `magic-nix-cache-action`) and run the generator inside
-`nix develop`, so the caller's own flake is what has to provide `just api-docs`.
+`nix develop`, so the caller's own flake is what has to provide the `api-docs` recipe.
 
 ```yaml
 name: api docs
@@ -244,10 +244,10 @@ internally.
 |---|---|---|
 | `devkit-ref` | *(required)* | pin to the same tag as `uses:` |
 | `devkit-repo` | `marola-dev/marola-devkit` | |
-| `output-dir` | `.tmp/api-docs` | where `just api-docs <output-dir>` writes |
+| `output-dir` | `.tmp/api-docs` | where the caller's `api-docs <output-dir>` recipe writes |
 
 **Permissions:** `check` declares `contents: read` and checks out with `persist-credentials:
-false` — it runs a PR's own `just api-docs` recipe, so no token (even a read-only one) is left in
+false` — it runs a PR's own `api-docs` recipe, so no token (even a read-only one) is left in
 the checkout for that recipe to find. `publish` declares `contents: write` and uses the default
 `GITHUB_TOKEN` for both its checkouts and the push — same-repo operation, no PAT — see the
 public-repo note above. `scripts/api-docs-push.sh` itself never reads `GITHUB_TOKEN`: the push

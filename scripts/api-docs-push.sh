@@ -45,6 +45,10 @@ self_test() {
   # Unset for the self-test's own git calls too (not just push()'s), in case --self-test itself
   # is invoked under an inherited GIT_DIR (tests/self-tests.sh under this repo's own prepush hook).
   unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
+  # The decoy commit below has no -c for identity/gpgsign/hooksPath, unlike push()'s own commits;
+  # isolate every git call from the operator's global/system config instead (as
+  # scripts/pointer-sync.sh's self-test does), so a signing key or a global hook can't reach it.
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
   check() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else fails=$((fails + 1)); echo "  FAIL $1 — got [$2] want [$3]" >&2; fi; }
   has() { case "$2" in *"$3"*) echo "  ok   $1" ;; *) fails=$((fails + 1)); echo "  FAIL $1 — expected \"$3\" in: $2" >&2 ;; esac; }
   hasnot() { case "$2" in *"$3"*) fails=$((fails + 1)); echo "  FAIL $1 — did not expect \"$3\" in: $2" >&2 ;; *) echo "  ok   $1" ;; esac; }
