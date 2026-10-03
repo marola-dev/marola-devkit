@@ -4,6 +4,16 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.3.1 — 2026-10-03
+
+- Design, development and reference pages: `docs/1-design.md`, `docs/3-development.md`, and
+  `docs/4-reference_{tools,config,hooks,plugin,runners}.md`, which document every tool on `PATH`,
+  every `MAROLA_*` variable, both kinds of hooks, the plugin's skills and agents, and unattended
+  runs (#9).
+- The `mip` skill no longer cites the retired FABLE_REVIEW page and cites the system
+  ARCHITECTURE's local-first integration pattern by URL.
+- The README's release rule matches AGENTS.md and points at `docs/3-development.md`.
+
 ## v0.3.0 — 2026-10-03
 
 - `docs-lint`, MIP-0074 §7's stale-content check over `README.md` and `docs/**/*.md` (#11).

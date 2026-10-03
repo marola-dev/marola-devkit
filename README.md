@@ -5,13 +5,13 @@ and cost tools, the git hooks, the org invariants block, the issue forms and lab
 workflows, and a Claude Code plugin with the generic skills, agents and hooks. Every marola repo
 consumes it at a pinned version, and its own AGENTS.md says which pieces it opts out of.
 
-**Status:** v0.3.0 is the latest release; each repo pins its own. Changes per release are in
+**Status:** v0.3.1 is the latest release; each repo pins its own. Changes per release are in
 [CHANGELOG.md](https://github.com/marola-dev/marola-devkit/blob/main/CHANGELOG.md).
 
 ## Try it
 
 ```bash
-nix run github:marola-dev/marola-devkit/v0.3.0#docs-lint -- --self-test   # any tool, no checkout
+nix run github:marola-dev/marola-devkit/v0.3.1#docs-lint -- --self-test   # any tool, no checkout
 nix develop          # in a checkout: every tool on PATH, plus the lint toolchain
 just quality         # this repo's gates
 claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
@@ -77,7 +77,7 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.3.0";
+  url = "github:marola-dev/marola-devkit/v0.3.1";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -97,7 +97,7 @@ import? '.devkit/devkit.just'
 
 A repo that defines a recipe with the same name needs `set allow-duplicate-recipes`.
 
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.3.0#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.3.1#uprd`.
 
 **Git hooks** are opt-in: `git config core.hooksPath .devkit/.githooks`. The contract a consuming
 repo implements is two recipes in its own justfile:
@@ -126,7 +126,7 @@ working exactly as before.
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.3.0" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.3.1" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -193,9 +193,9 @@ One caller, needing a second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.1
     with:
-      devkit-ref: v0.3.0
+      devkit-ref: v0.3.1
 ```
 
 This repo calls five of them on its own pull requests (`.github/workflows/pr.yml`: `python-ci`,
