@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## v0.3.0
+## v0.3.0 — 2026-10-03
 
 - `docs-lint`, MIP-0074 §7's stale-content check over `README.md` and `docs/**/*.md` (#11).
 - The `api-docs` reusable workflow and its `api-docs-push` tool: a PR check that runs the
