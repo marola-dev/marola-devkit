@@ -2,8 +2,8 @@
 # ci-<main>'s concurrency group, the PR's run sits in ci-<pull/N/merge>'s, so cancel-in-progress
 # never sees them together. Cancel by head SHA — pull_request runs record the PR head commit, so
 # one query catches every workflow's run for this PR and nothing else. Callable version of the
-# pre-split umbrella's ci-short-circuit-pr-close.yml (MIP-0070 §5.6/task 8) — no devkit checkout needed,
-# it only calls the GitHub API for the caller's own repo.
+# pre-split umbrella's ci-short-circuit-pr-close.yml (MIP-0070 §5.6/task 8) — no devkit checkout
+# needed, it only calls the GitHub API for the caller's own repo.
 name: ci-short-circuit
 
 on:

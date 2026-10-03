@@ -5,7 +5,7 @@ and cost tools, the git hooks, the org invariants block, the issue forms and lab
 workflows, and a Claude Code plugin with the generic skills, agents and hooks. Every marola repo
 consumes it at a pinned version, and its own AGENTS.md says which pieces it opts out of.
 
-**Status:** v0.3.1 is the latest release; each repo pins its own. Changes per release are in
+**Status:** this is v0.3.1; each repo pins its own version. Changes per release are in
 [CHANGELOG.md](https://github.com/marola-dev/marola-devkit/blob/main/CHANGELOG.md).
 
 ## Try it
