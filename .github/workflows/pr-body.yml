@@ -1,6 +1,6 @@
 # pr-body — fill a pull request's description from its commits the moment it exists, so a PR
 # opened from the GitHub UI (or `gh pr create` without the devkit's `pr-flow`) never sits on the
-# raw template with its `<!-- fill -->` placeholders. Callable version of the monorepo's
+# raw template with its `<!-- fill -->` placeholders. Callable version of the pre-split umbrella's
 # pr-body.yml (MIP-0070 §5.6/task 8): the caller repo is checked out as usual, but scripts/uprd.sh
 # and its scripts/lib/ now come from a pinned devkit checkout, since a split code repo carries none
 # of its own — uprd.sh's own git/gh calls are cwd-relative, so this needs no repo-resolution
