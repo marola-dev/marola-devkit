@@ -11,7 +11,7 @@
 #       paths: [README.md, docs/**]
 #   jobs:
 #     notify:
-#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.3
+#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.2.4
 #       secrets:
 #         token: ${{ secrets.UMBRELLA_DISPATCH_TOKEN }}
 #
