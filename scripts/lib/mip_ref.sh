@@ -42,7 +42,7 @@ _mip_glob_first() {
 # its own. Tried in order, first hit wins:
 #   1. this repo — git ls-tree at <git-ref> when given (a branch that may not be checked out
 #      locally, as uprd.sh needs), otherwise the plain working tree (issues.sh's use, over $root).
-#      Unchanged monorepo behaviour.
+#      Unchanged pre-split behaviour.
 #   2. ../docs/MIPs/ — this checkout sits inside an umbrella clone.
 #   3. gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs — no umbrella sibling on disk.
 # Nothing on stdout, exit 1, when none of the three has it.

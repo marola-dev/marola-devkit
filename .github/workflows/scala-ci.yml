@@ -1,5 +1,6 @@
 # scala-ci — reusable workflow: JDK setup, sbt format/scalafix check, compile, test, with the
-# same sbt/coursier and zinc caches the monorepo's ci.yml build-test job used. MIP-0070 §5.6/task 8.
+# same sbt/coursier and zinc caches the pre-split umbrella's ci.yml build-test job used.
+# MIP-0070 §5.6/task 8.
 #
 # Out of scope on purpose: build-test's main-only coverage/site-data/gh-workflow-run steps were
 # marola-app-specific extras layered on top of the JVM build, not part of "the gate every Scala

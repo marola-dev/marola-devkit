@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# session-start — SessionStart hook: print branch, gh auth, uncommitted count, and the two ai-jail
-# caveats from FABLE_REVIEW.md §3, once, as session context. MIP-0011.
+# session-start — SessionStart hook: print branch, gh auth, uncommitted count, and two ai-jail
+# caveats, once, as session context. MIP-0011.
 set -euo pipefail
 
 REPO_ROOT="${SESSION_START_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"

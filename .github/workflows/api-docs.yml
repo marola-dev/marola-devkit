@@ -4,7 +4,7 @@
 #
 # Two jobs so that only `publish` sits in the `api-docs` concurrency group: a PR run can never
 # cancel an in-flight publish. Each job's `if:` trusts the caller's own `on:` triggers rather than
-# re-deriving "is this the default branch", as notify-umbrella.yml does.
+# re-deriving "is this the default branch", the same trap notify-umbrella.yml avoids.
 name: api-docs
 
 on:

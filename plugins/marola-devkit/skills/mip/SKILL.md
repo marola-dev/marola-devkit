@@ -18,15 +18,16 @@ so proposals are comparable and don't rot.
 - Anything touching autonomous/proactive behaviour.
 
 Not for: bug fixes, doc corrections, refactors with no behaviour change, or one-file tweaks: do
-those directly, and note them in `docs/4-Research-and-plans/FABLE_REVIEW.md` or `docs/4-Research-and-plans/FUTURE-WORK.md` if relevant.
+those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if relevant.
 
 ## Steps
 
 1. **Pick the number and slug.** Numbers are sequential, zero-padded to four digits. The next
    number is one more than the highest in `docs/MIPs/README.md`. File:
    `docs/MIPs/MIP-NNNN-<kebab-slug>.md`.
-2. **Read before writing.** Always: `AGENTS.md`, `docs/2-Building-marola/ARCHITECTURE.md` §5 (the integration
-   pattern), `docs/PHASES.md` (phases), `docs/4-Research-and-plans/FUTURE-WORK.md` (is this already sketched? link the section),
+2. **Read before writing.** Always: `AGENTS.md`, the system ARCHITECTURE's
+   [local-first integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern)
+   (until that page lands in the umbrella, marola-app's ARCHITECTURE §5), `docs/PHASES.md` (phases), `docs/4-Research-and-plans/FUTURE-WORK.md` (is this already sketched? link the section),
    and the source files the proposal would touch. Read existing MIPs in `docs/MIPs/` for tone.
 3. **Verify every external claim.** Before naming a data source, library, or API: fetch its page,
    confirm the format, the update frequency, the licence/terms, and whether a key is needed. Record
@@ -63,7 +64,7 @@ those directly, and note them in `docs/4-Research-and-plans/FABLE_REVIEW.md` or 
 
 ## Rules of the house (apply to every MIP)
 
-- **Local-first, cloud opt-in, per integration** (`ARCHITECTURE.md` §5). Every new data path needs a
+- **Local-first, cloud opt-in, per integration** ([the integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern)). Every new data path needs a
   free, keyless, local default. If a paid cloud service is the *only* option, say so explicitly and
   state the expected cost; it needs a human go-ahead (`AGENTS.md` cost rule).
 - **Safety-relevant logic stays deterministic and out of the LLM.** Anything that changes whether

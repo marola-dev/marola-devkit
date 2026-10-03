@@ -31,7 +31,7 @@ on:
       shellcheck-files:
         description: >-
           Newline-separated shell file globs to shellcheck. Empty skips shellcheck — this is a new,
-          stricter, opt-in gate, not parity with today's monorepo (its quality-other job only
+          stricter, opt-in gate, not parity with the pre-split umbrella (its quality-other job only
           prints `shellcheck --version`; it never runs shellcheck against a file).
         type: string
         default: ""
