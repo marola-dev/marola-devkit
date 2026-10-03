@@ -1,0 +1,70 @@
+# Development
+
+How to change the devkit itself. The org's general rules (how every repo tests, reviews and
+releases) are at <https://docs.marola.dev/>; this page covers what is specific to this repo.
+
+## Shell and gates
+
+`nix develop` puts every tool on `PATH` with the lint toolchain and points `core.hooksPath` at
+`.githooks` (`just install-hooks` does the same by hand). Then:
+
+| Command | Runs |
+|---|---|
+| `just quality` | `ruff check`, `ruff format --check`, `shellcheck --severity=error` over the scripts, hooks and statusline, `actionlint`, `tests/self-tests.sh`, `agents-check`, `docs-lint`, and `claude plugin validate .` when `claude` is on `PATH` |
+| `just precommit` | `ruff check`, the same shellcheck, `agents-check`: the pre-commit hook's recipe |
+| `just prepush` | `just quality`: the pre-push hook's recipe |
+| `bash tests/self-tests.sh` | Every `--self-test`, one line per script |
+| `claude --plugin-dir plugins/marola-devkit` | The plugin from this checkout, before any tag |
+
+`just quality` fails when ruff, shellcheck or actionlint is missing rather than skipping it.
+
+## Self-test first
+
+Every tool and hook has a `--self-test` that runs offline: no network, no `gh` login, git only
+in temporary repos, `gh` stubbed where a command needs it, and fixtures from `scripts/fixtures/`.
+A change to a script extends its self-test first and watches it fail, then makes it pass. A new
+script goes into `tests/self-tests.sh`'s `sh_tests` or `py_tests` list, which is the one list
+both `just quality` and the flake's `self-tests` check read.
+
+A self-test that creates git repos starts with
+`unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR` and
+`export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1`. Under a git hook those variables point
+at the real repo, and `git -C <tmp> config` once rewrote this repo's `.git/config` on every push.
+
+## CI
+
+- **`devkit-ci.yml`** (push to `main`, every pull request) is this repo's own CI: it checks
+  `flake.lock` is current for `flake.nix`, runs `nix flake check` (the package build and the
+  self-tests derivation), then `just quality`, `tests/self-tests.sh` and `agents-check` inside the
+  dev shell, and `claude plugin validate . --strict` with a pinned Claude Code release.
+- **`pr.yml`** calls five of the reusable workflows on this repo's own pull requests
+  (`python-ci`, `static-ci`, `agents-check`, `pr-body`, `ci-short-circuit`), at the PR's head, so
+  a change to one of them runs in a real caller before a tag. `labels.yml` calls `labels-sync` by
+  hand (`workflow_dispatch`). `scala-ci`, `notify-umbrella` and `api-docs` have no caller here.
+
+## Releases
+
+A change that alters behaviour for consumers is a release. These move together in the PR:
+
+- `plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`: Claude Code uses it to decide
+  when an installed copy is stale;
+- `flake.nix`'s package `version`;
+- every documented pin in `README.md` and `docs/` (`github:marola-dev/marola-devkit/v…`, each
+  workflow `@v…` and `devkit-ref`, the marketplace `ref`);
+- a `CHANGELOG.md` entry, newest first.
+
+A human tags `vX.Y.Z` on `main` after the merge. Consumers adopt it by bumping their flake input,
+workflow `@v…`/`devkit-ref` and marketplace `ref` in one PR each.
+
+## Secrets and cost
+
+The devkit deploys nothing and holds no secret. Its workflows take what the caller passes (the
+`notify-umbrella` token, `MAROLA_CROSS_REPO_PAT` in the callers) or the default `GITHUB_TOKEN`.
+`setup-runners` and `gha-runner` touch a self-hosted runner only when a human runs them
+([runners](4-reference_runners.md)).
+
+## Docs
+
+`README.md` is the landing and `docs/` holds numbered pages (MIP-0074 §5.2). `docs-lint` runs in
+`just quality`; the link and recipe rules are in
+[AGENTS.md](https://github.com/marola-dev/marola-devkit/blob/main/AGENTS.md).

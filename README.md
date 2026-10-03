@@ -29,7 +29,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `devkit.just` | The just module consumers import |
 | `flake.nix` | Packages, apps, the base dev shell, and `lib.<system>` for consumers |
 | `tests/self-tests.sh` | Every tool's `--self-test` in one run |
-| `docs/` | This repo's reference pages |
+| `docs/` | This repo's design, development and reference pages |
 
 ### Tools on PATH
 
@@ -51,7 +51,8 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `workflow-runners` | Fail when a workflow other than the GPU publish one can reach the self-hosted runner |
 | `gha-runner`, `setup-runners`, `runner-preflight`, `temps` | The self-hosted Actions runner |
 
-Every tool has a `--self-test` that runs offline.
+Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
+[docs/4-reference_tools.md](docs/4-reference_tools.md).
 
 ### Claude Code plugin
 
@@ -206,6 +207,13 @@ version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming
 
 ## Docs and rules
 
+- [docs/1-design.md](docs/1-design.md): the layout, how a tool runs, how tools find the umbrella.
+- [docs/3-development.md](docs/3-development.md): gates, self-tests, CI and the release rule.
+- [docs/4-reference_tools.md](docs/4-reference_tools.md): every tool on `PATH` and its recipe.
+- [docs/4-reference_config.md](docs/4-reference_config.md): every `MAROLA_*` variable.
+- [docs/4-reference_hooks.md](docs/4-reference_hooks.md): the git hooks and the plugin's hooks.
+- [docs/4-reference_plugin.md](docs/4-reference_plugin.md): the plugin's skills and agents.
+- [docs/4-reference_runners.md](docs/4-reference_runners.md): the self-hosted runner and unattended MIP runs.
 - [docs/4-reference_workflows.md](docs/4-reference_workflows.md): the reusable workflows.
 - [AGENTS.md](https://github.com/marola-dev/marola-devkit/blob/main/AGENTS.md): how to work on
   this repo, and the release rule.
@@ -216,7 +224,6 @@ version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming
 ## Work on it
 
 `nix develop`, then `just quality`. A change to a script lands with its `--self-test` extended
-first. A release that changes behaviour for consumers moves three things together:
-`plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`, `flake.nix`'s package `version`,
-and a new git tag — Claude Code uses the plugin version to decide when to refresh an installed
-copy — plus a `CHANGELOG.md` entry.
+first. A release that changes behaviour for consumers moves `plugin.json`'s `version`, the flake
+package version, every documented pin in `README.md` and `docs/` and a `CHANGELOG.md` entry
+together, then a human tags it: [docs/3-development.md](docs/3-development.md#releases).

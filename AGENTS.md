@@ -60,8 +60,9 @@ repo boundary is an umbrella MIP.
 
 - **Links**: relative within `docs/` and from the README into `docs/`, written to work on GitHub.
   A file outside `docs/` (`AGENTS.md`, a script) is linked by its
-  `https://github.com/marola-dev/marola-devkit/blob/main/…` URL; another repo or the umbrella by
-  `https://docs.marola.dev/…`.
+  `https://github.com/marola-dev/marola-devkit/blob/main/…` URL, because the docs site mounts only
+  `README.md` and `docs/` today and a relative link to anything else breaks there; another repo or
+  the umbrella by `https://docs.marola.dev/…`.
 - **Recipes**: a doc names only this repo's and `devkit.just`'s recipes. Any other carries the
   checkout marker: "in a marola-<name> checkout" in the same sentence, or
   `# in a marola-<name> checkout` as a fence's first line. Where a recipe belongs to whichever repo
