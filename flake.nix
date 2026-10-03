@@ -54,6 +54,7 @@
           runner-preflight = "scripts/runner-preflight.sh";
           temps = "scripts/temps.sh";
           workflow-runners = "scripts/workflow_runners.py";
+          docs-lint = "scripts/docs_lint.py";
         };
 
         # The whole tree is installed with its layout intact under share/marola-devkit: the scripts
