@@ -28,7 +28,6 @@ run() { if [ "$dry" -eq 1 ]; then echo "+ $*"; else "$@"; fi; }
 cur="${STACK_SELFTEST_BRANCH:-$(git branch --show-current)}"   # STACK_SELFTEST_BRANCH: self-test hook
 mip_of() { sed -n 's#^\(mip-[0-9]\{4\}\)/.*#\1#p' <<<"$1"; }
 task_of() { sed -n 's#^mip-[0-9]\{4\}/\([0-9]*\)-.*#\1#p' <<<"$1"; }
-branch_for() { git branch --list "$1/$2-*" --format='%(refname:short)' | head -1; }
 branches_of() {   # every task branch of a MIP, local or on origin, sorted by task number
   { git branch --list "$1/*" --format='%(refname:short)'
     git branch -r --list "origin/$1/*" --format='%(refname:short)' | sed 's#^origin/##'; } | sort -u | sort -t/ -k2 -n
@@ -38,13 +37,16 @@ mip_arg() {       # the MIP from $1 (MIP-0005 / mip-0005) or from the current br
   [ -n "$m" ] || { echo "not on a mip-NNNN/* branch — pass the MIP: MIP-0005" >&2; exit 1; }
   echo "$m"
 }
-base_for() {   # base branch of a task branch, or "" once that branch is gone
-  local mip k prev; mip="$(mip_of "$1")"; k="$(task_of "$1")"
-  [ -n "$mip" ] || { echo "not a task branch: $1" >&2; exit 1; }
-  if [ "$k" -le 1 ]; then echo main; return; fi
-  prev="$(branch_for "$mip" $((k - 1)))"
-  [ -n "$prev" ] || prev="$(git branch -r --list "origin/$mip/$((k-1))-*" --format='%(refname:short)' | head -1 | sed 's#^origin/##')"
-  printf '%s\n' "$prev"
+# Task numbers are global to a MIP and its rows land in different repos (MIP-0070), so a repo's
+# first row is often not task 1 and its rows skip numbers: the base is the nearest lower one here.
+base_for() {   # the nearest lower task branch, local or on origin, else main
+  local mip k b bk prev=""; mip="$(mip_of "$1")"; k="$(task_of "$1")"
+  [ -n "$k" ] || { echo "not a task branch: $1" >&2; exit 1; }
+  while read -r b; do
+    bk="$(task_of "$b")"
+    if [ -n "$bk" ] && [ "$bk" -lt "$k" ]; then prev="$b"; fi
+  done < <(branches_of "$mip")
+  printf '%s\n' "${prev:-main}"
 }
 
 # `sed 1d` drops uprd's dry-run banner, and nothing else: the body's `Closes #N` (#512) must survive.
@@ -54,30 +56,41 @@ new_pr_body() {   # <base>
 }
 
 pr_window=200
-merged_head_sha() {   # head commit of the merged PR for a branch prefix; it outlives the branch GitHub deletes
-  # gh orders by PR number, so .[0] is the newest-*opened* match; PREFIX goes via the env, unquotable otherwise.
-  PREFIX="$1" gh pr list --state merged --limit "$pr_window" --json headRefName,headRefOid \
-    --jq '[.[] | select(.headRefName | startswith(env.PREFIX))] | .[0].headRefOid // empty' 2>/dev/null || true
+merged_below() {   # head commit of the merged PR of the nearest lower task; it outlives the branch GitHub deletes
+  # gh orders by PR number, so .[0] is the newest-*opened* match; the values go via the env, unquotable otherwise.
+  MIP="$(mip_of "$1")" K="$(task_of "$1")" gh pr list --state merged --limit "$pr_window" --json headRefName,headRefOid \
+    --jq '[.[] | (.headRefName | capture("^(?<m>mip-[0-9]{4})/(?<n>[0-9]+)-")) as $c
+           | select($c.m == env.MIP and ($c.n | tonumber) < (env.K | tonumber))
+           | {n: ($c.n | tonumber), sha: .headRefOid}]
+          | (map(.n) | max) as $top | map(select(.n == $top)) | .[0].sha // empty' 2>/dev/null
 }
 
 # Where `rebase --onto` must cut. The trap: a squash-merge rewrites the base's commits (so patch-id
-# skipping cannot tell they are already upstream) and GitHub deletes the base branch, leaving
-# merge-base nothing to answer with. Local `main` is never fetched, so origin/main stands in for it.
+# skipping cannot tell they are already upstream) and GitHub deletes the base branch, so the live base
+# base_for finds may sit below the merged parent; with no gh to ask, refuse unless the base is in cur's
+# history. Local `main` is never fetched, so origin/main stands in for it.
 fork_point_for() {
-  local cur="$1" base="$2" mip k
+  local cur="$1" base="$2" k mb="" merged
+  k="$(task_of "$cur")"
   if [ "$base" = main ]; then base=origin/main; fi
   if [ -n "$base" ] && git rev-parse --verify -q "$base^{commit}" >/dev/null; then
-    git merge-base "$cur" "$base"; return
+    mb="$(git merge-base "$cur" "$base")" || mb=""
   fi
-  mip="$(mip_of "$cur")"; k="$(task_of "$cur")"
-  [ -n "$k" ] && [ "$k" -gt 1 ] || { git merge-base "$cur" origin/main; return; }
-  merged_head_sha "$mip/$((k - 1))-"
+  if [ -n "$k" ] && [ "$k" -gt 1 ]; then
+    if ! merged="$(merged_below "$cur")"; then
+      [ "$base" != origin/main ] && git merge-base --is-ancestor "$base" "$cur" 2>/dev/null || return 0
+    elif [ -n "$merged" ] && git merge-base --is-ancestor "$merged" "$cur" 2>/dev/null \
+         && { [ -z "$mb" ] || git merge-base --is-ancestor "$mb" "$merged"; }; then
+      echo "$merged"; return
+    fi
+  fi
+  [ -z "$mb" ] || echo "$mb"
 }
 
 self_test() {
   local failed=0 tmp self repo fork unrelated upstream got out rc
   local pr_origin pr_work cost_fill_stub local_head remote_head
-  local fp_origin fp_work upstream_ref rs_origin rs_work main_tip variant t1_head
+  local fp_origin fp_work upstream_ref rs_origin rs_work main_tip variant t1_head bf
   self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
   tmp="$(mktemp -d)"; trap "rm -rf $(printf %q "$tmp")" EXIT
   check() { if [ "$2" = "$3" ]; then echo "ok: $1"; else echo "FAILED: $1"; echo "  got:  $2"; echo "  want: $3"; failed=1; fi; }
@@ -121,14 +134,16 @@ self_test() {
   mkdir -p "$tmp/bin"
   cat > "$tmp/bin/gh" <<GH
 #!$BASH
-# a stand-in for \`gh pr list\`: newest PR first, and one entry collides on a hyphen-less 5 prefix.
+# a stand-in for \`gh pr list --jq\`: newest PR first; 50- collides on a hyphen-less 5 prefix, 9998 is another MIP.
 case "\$*" in
   *"pr list"*)
-    while read -r b sha; do case "\$b" in "\$PREFIX"*) echo "\$sha"; exit 0 ;; esac; done <<'EOF'
-mip-9999/50-collision $unrelated
-mip-9999/5-prev $fork
+    while [ \$# -gt 0 ]; do [ "\$1" = --jq ] && { jq -r "\$2" <<'EOF'; exit; }
+[{"headRefName":"mip-9999/50-collision","headRefOid":"$unrelated"},
+ {"headRefName":"mip-9998/5-other-mip","headRefOid":"$unrelated"},
+ {"headRefName":"mip-9999/5-prev","headRefOid":"$fork"}]
 EOF
-    exit 0 ;;
+      shift; done
+    exit 1 ;;
   *) exit 1 ;;
 esac
 GH
@@ -137,11 +152,31 @@ GH
   drive() { drive_as mip-9999/6-board "$@"; }
 
   echo
+  echo "-- base_for: the nearest lower task branch in this repo, else main (#13) --"
+  # Task numbers are global to a MIP, so a repo's rows start above 1 and skip other repos' numbers.
+  bf="$tmp/bf"
+  { git init -q -b main "$bf"
+    git -C "$bf" config user.email bf@example.invalid
+    git -C "$bf" config user.name bf-self-test
+    git -C "$bf" commit -q --allow-empty -m main
+    git -C "$bf" branch mip-9999/3-x; } >/dev/null 2>&1
+  check "base_for_first_row_in_repo_is_main" "$(cd "$bf" && base_for mip-9999/3-x)" "main"
+  { git -C "$bf" branch mip-9999/5-a
+    git -C "$bf" branch mip-9999/7-b
+    git -C "$bf" branch mip-9999/50-c
+    git -C "$bf" branch mip-9998/6-other-mip; } >/dev/null 2>&1
+  check "base_for_skips_missing_numbers" "$(cd "$bf" && base_for mip-9999/7-b)" "mip-9999/5-a"
+  git -C "$bf" update-ref refs/remotes/origin/mip-9999/6-remote-only "$(git -C "$bf" rev-parse main)"
+  check "a branch only on origin counts too" "$(cd "$bf" && base_for mip-9999/7-b)" "mip-9999/6-remote-only"
+
+  echo
   echo "-- fork_point_for falls back to the merged PR head --"
-  got="$(PATH="$tmp/bin:$PATH" merged_head_sha "mip-9999/5-")"
-  check "merged_head_sha reads the PR that outlived its branch" "$got" "$fork"
-  got="$(PATH="$tmp/bin:$PATH" fork_point_for mip-9999/6-board "")"
+  got="$(cd "$repo" && PATH="$tmp/bin:$PATH" merged_below mip-9999/6-board)"
+  check "merged_below reads the nearest lower PR that outlived its branch" "$got" "$fork"
+  got="$(cd "$repo" && PATH="$tmp/bin:$PATH" fork_point_for mip-9999/6-board "")"
   check "fork_point_for uses it when the base branch is gone" "$got" "$fork"
+  got="$(cd "$repo" && PATH="$tmp/bin:$PATH" fork_point_for mip-9999/6-board mip-9999/1-solo)"
+  check "and over a lower live branch's merge-base, which sits below it" "$got" "$fork"
   got="$(cd "$repo" && fork_point_for mip-9999/1-solo main)"
   check "task 1 cuts at origin/main, never at a stale local main" "$got" "$upstream"
 
@@ -232,6 +267,17 @@ GH
   remote_head="$(git --git-dir="$pr_origin" rev-parse mip-9999/1-solo)"
   check "origin ends up with the rewritten commit (force-with-lease, not a rejected push)" \
     "$remote_head" "$local_head"
+
+  echo
+  echo "-- pr on a repo's first row of a MIP bases on main, not on nothing (#13) --"
+  { git -C "$pr_work" checkout -q -b mip-9998/3-first main
+    git -C "$pr_work" commit -q --allow-empty -m "task 3"; } >/dev/null 2>&1
+  rc=0
+  out="$(cd "$pr_work" && PATH="$tmp/bin:$PATH" STACK_SELFTEST_BRANCH=mip-9998/3-first \
+    STACK_SELFTEST_COST_FILL="$cost_fill_stub" STACK_SELFTEST_UPRD="$tmp/uprd" bash "$self" --dry-run pr 2>&1)" || rc=$?
+  check "it exits 0" "$rc" "0"
+  has "and opens the PR against main" "$out" "+ gh pr create --base main --head mip-9998/3-first"
+  git -C "$pr_work" checkout -q mip-9999/1-solo >/dev/null 2>&1
 
   echo
   echo "-- pr still sets upstream on a brand-new branch's first push (#524) --"
@@ -328,13 +374,18 @@ case "${1:-}" in
   start)
     mip="$(tr 'A-Z' 'a-z' <<<"${2:?MIP-NNNN}")"; k="${3:?task number}"; slug="${4:?slug}"
     new="$mip/$k-$slug"
-    if [ "$k" -le 1 ]; then base=main; else base="$(base_for "$new")"; fi
+    base="$(base_for "$new")"
     run git fetch -q origin
-    if [ "$base" = main ]; then run git checkout -q -b "$new" origin/main; else run git checkout -q -b "$new" "$base"; fi
+    # base_for also finds a branch that exists only on origin.
+    if [ "$base" = main ]; then from=origin/main
+    elif git rev-parse --verify -q "refs/heads/$base" >/dev/null; then from="$base"
+    else from="origin/$base"; fi
+    run git checkout -q -b "$new" "$from"
     echo "started $new (base: $base)"
     ;;
   pr)
     base="$(base_for "$cur")"
+    [ -n "$base" ] || { echo "stack pr: found no base for $cur; nothing pushed" >&2; exit 1; }
     # cost-fill.sh runs here, not in scripts/pr.sh (#524): this is the documented primary path
     # for a mip task branch (.claude/skills/mip-tasks/SKILL.md), and it decides on its own
     # whether anything needs a trailer upgrade or a Closes #N line. A rewritten HEAD needs
@@ -342,7 +393,7 @@ case "${1:-}" in
     cost_fill="${STACK_SELFTEST_COST_FILL:-$script_dir/cost-fill.sh}"
     # The parent's pushed tip, since that is what the PR diffs against; without it cost-fill's
     # origin/main range would re-amend the parent's commits and see the parent's Closes line.
-    cf_ref="$base"; [ -z "$base" ] || [ "$base" = main ] || cf_ref="origin/$base"
+    cf_ref="$base"; [ "$base" = main ] || ! git rev-parse --verify -q "origin/$base^{commit}" >/dev/null || cf_ref="origin/$base"
     cf_base="$(fork_point_for "$cur" "$cf_ref")" || cf_base=""
     # fork_point_for may answer with gh's merged head sha, which a squash-merge leaves off HEAD's history.
     [ -z "$cf_base" ] || cf_base="$(git merge-base HEAD "$cf_base" 2>/dev/null)" || cf_base=""
@@ -374,7 +425,7 @@ case "${1:-}" in
       run gh pr edit "$cur" --base "$base"
       run "$script_dir/uprd.sh"
     else
-      title="$(git log --reverse --format=%s "origin/$base..HEAD" 2>/dev/null | head -1)"
+      title="$(git log --reverse --format=%s "origin/$base..HEAD" 2>/dev/null | head -1)" || title=""
       [ -n "$title" ] || title="$(git log -1 --format=%s)"
       body="$(mktemp)"; new_pr_body "$base" > "$body"
       run gh pr create --base "$base" --head "$cur" --title "$title" --body-file "$body"
@@ -387,7 +438,7 @@ case "${1:-}" in
     if [ -z "$fork" ] || ! git rev-parse --verify -q "$fork^{commit}" >/dev/null; then
       { echo "restack: cannot tell where $cur's own commits begin."
         echo "  Its base (${old_base:-the previous task branch}) yields no merge-base — GitHub deletes a branch when its PR merges —"
-        echo "  and gh named no merged PR for $(mip_of "$cur")/$(( $(task_of "$cur") - 1 ))-* within the last $pr_window merged ones"
+        echo "  and gh named no merged PR for a lower $(mip_of "$cur") task within the last $pr_window merged ones"
         echo "  (it may equally be unavailable or logged out here — a jail has no gh login)."
         echo "  Rebasing onto main without that point would replay the already-merged commits and conflict on each."
         echo "  Pass the previous task branch's last commit yourself:"
