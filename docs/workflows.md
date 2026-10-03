@@ -1,26 +1,27 @@
 # Reusable workflows
 
-Eight `workflow_call` workflows under `.github/workflows/`, replacing what the monorepo's `ci.yml`,
-`pr-body.yml` and `ci-short-circuit-pr-close.yml` did in one tree (MIP-0070 §5.6, task 8). A ninth,
-`devkit-ci.yml`, is this repo's own CI — not reusable, nothing to call.
+Nine `workflow_call` workflows under `.github/workflows/`, replacing what the monorepo's `ci.yml`,
+`pr-body.yml` and `ci-short-circuit-pr-close.yml` did in one tree (MIP-0070 §5.6, task 8), plus
+`api-docs.yml` (MIP-0074 §5.2). A tenth, `devkit-ci.yml`, is this repo's own CI — not reusable,
+nothing to call.
 
 Every workflow here pins third-party actions/tool versions the way the monorepo does; where a tool
 wasn't pinned via an action before (ruff, actionlint, hadolint, shellcheck — the monorepo gets them
 from a nix flake), the version below is what that flake pinned at the time this doc was written.
 Bump the input, not the workflow file, when a newer version is wanted.
 
-Three of the eight (`labels-sync`, `agents-check`, `pr-body`) take a required `devkit-ref` input:
-they run scripts that live in *this* repo, not the caller's, so they check this repo out a second
-time at that ref. Pin it to the same tag as the `uses:` line below — nothing keeps the two in sync
-automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`, `python-ci` and `static-ci` need
-no such checkout.
+Four of the nine (`labels-sync`, `agents-check`, `pr-body`, `api-docs`) take a required
+`devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
+repo out a second time at that ref. Pin it to the same tag as the `uses:` line below — nothing
+keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`,
+`python-ci` and `static-ci` need no such checkout.
 
 `devkit-ref` stays required because a called workflow cannot find out its own ref: inside one,
 `github.workflow_ref` and `github.workflow_sha` name the *caller's* workflow and commit, not the
 called file's (checked on marola-devkit#2's first run:
 `workflow_ref=marola-dev/marola-devkit/.github/workflows/pr.yml@refs/pull/2/merge`).
 
-These three also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
+These four also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
 private devkit would need a cross-repo PAT input on each of them, the same shape as
 `notify-umbrella`'s `token` secret.
@@ -204,6 +205,40 @@ jobs:
 | `agents-file` | `AGENTS.md` | path to this repo's copy |
 
 No secrets. Default `GITHUB_TOKEN` for the checkout — see the public-repo note above.
+
+## api-docs
+
+Runs the caller's own `just api-docs <output-dir>` generator (`sbt doc`, pdoc, ...) as a PR check,
+and on a push force-pushes its output as one orphan commit to the `api-docs` branch via
+`scripts/api-docs-push.sh` (MIP-0074 §5.2). Only the latest output is kept — the branch never
+grows — and the commit message names the push's sha, for the umbrella's `fetch-api-docs` to read.
+The caller wires both triggers; this workflow only checks `github.event_name == 'push'`, trusting
+the caller's own `on.push.branches` the way `notify-umbrella` does.
+
+```yaml
+name: api docs
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  api-docs:
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
+    with:
+      devkit-ref: v0.2.4
+```
+
+| Input | Default | Notes |
+|---|---|---|
+| `devkit-ref` | *(required)* | pin to the same tag as `uses:` |
+| `devkit-repo` | `marola-dev/marola-devkit` | |
+| `output-dir` | `.tmp/api-docs` | where `just api-docs <output-dir>` writes |
+
+**Permission needed:** `contents: write`, declared in the workflow (only the push path uses it).
+Uses the default `GITHUB_TOKEN` for both checkouts and the push — same-repo operation, no PAT —
+see the public-repo note above. `scripts/api-docs-push.sh` itself never reads `GITHUB_TOKEN`: the
+push step builds an authenticated remote URL and passes it as a plain argument, which is also why
+its own `--self-test` needs no network, just a local bare repo.
 
 ## pr-body
 

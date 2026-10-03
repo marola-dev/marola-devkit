@@ -1,0 +1,76 @@
+# api-docs — reusable workflow: runs the caller's `just api-docs <out>` generator (sbt doc,
+# pdoc, ...) as a PR check, and on a push to the default branch force-pushes its output as one
+# orphan commit to the `api-docs` branch via api-docs-push (MIP-0074 §5.2). Only the latest
+# output is kept, so the branch never grows; the commit message names the source sha, for
+# prepare-docs' fetch-api-docs to tell what it pulled.
+#
+# The caller wires both triggers itself, so this workflow only checks `event_name == 'push'`, not
+# the branch — the same trust notify-umbrella.yml places in its caller's `on.push.branches`:
+#
+#   on:
+#     pull_request:
+#     push:
+#       branches: [main]
+#   jobs:
+#     api-docs:
+#       uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.2.4
+#       with:
+#         devkit-ref: v0.2.4
+#
+# api-docs-push lives in this repo, not the caller's, so the push step checks the devkit out a
+# second time with the default GITHUB_TOKEN — a public repo, see docs/workflows.md's note on the
+# other devkit-ref workflows.
+name: api-docs
+
+on:
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit, whose scripts/api-docs-push.sh does the push."
+        type: string
+        required: true
+      devkit-repo:
+        description: "owner/repo of marola-devkit."
+        type: string
+        default: marola-dev/marola-devkit
+      output-dir:
+        description: "Where `just api-docs <output-dir>` writes the generated docs."
+        type: string
+        default: .tmp/api-docs
+
+permissions:
+  contents: write
+
+jobs:
+  api-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: api-docs
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: just api-docs ${{ inputs.output-dir }}
+        run: just api-docs "${{ inputs.output-dir }}"
+
+      # Public repo — the default GITHUB_TOKEN can read it, no token input needed here.
+      - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/api-docs-push.sh)
+        if: github.event_name == 'push'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      - name: push the output as one orphan commit to api-docs
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          OUTPUT_DIR: ${{ inputs.output-dir }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bash .devkit-checkout/scripts/api-docs-push.sh \
+            "$OUTPUT_DIR" "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git" "$SHA"

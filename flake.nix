@@ -49,6 +49,7 @@
           deps-stack = "scripts/deps-stack.sh";
           deps-merge = "scripts/deps-merge.sh";
           ruleset-sync = "scripts/ruleset-sync.sh";
+          api-docs-push = "scripts/api-docs-push.sh";
           gha-runner = "scripts/gha-runner.sh";
           setup-runners = "scripts/setup-runners.sh";
           runner-preflight = "scripts/runner-preflight.sh";
