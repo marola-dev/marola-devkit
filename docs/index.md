@@ -15,6 +15,7 @@ consumption snippets; this page is what the umbrella's docs site mounts.
 | `issues` | Labels sync, Definition of Ready, the `agent-ready` queue, claims, `tasks-to-issues`, the board |
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
 | `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
+| `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` reusable workflow's own push step |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
 | `mip-stack`, `docs-mip-stack`, `deps-stack`, `deps-merge`, `branches`, `pr-label` | Stack and merge helpers |
 | `gha-runner`, `setup-runners`, `runner-preflight`, `temps` | The self-hosted Actions runner |

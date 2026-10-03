@@ -115,10 +115,10 @@ non-fork repo of an org (`--include-forks` adds forks). `just rulesets-check`/`j
 checkout), then `gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs`. `MAROLA_UMBRELLA` defaults to
 `marola-dev/marola`.
 
-**Reusable workflows** — eight `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
-`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`); every input,
-secret and example caller is in [docs/workflows.md](docs/workflows.md). One caller, needing a
-second checkout of this repo for its own scripts:
+**Reusable workflows** — nine `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
+`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`, `api-docs`);
+every input, secret and example caller is in [docs/workflows.md](docs/workflows.md). One caller,
+needing a second checkout of this repo for its own scripts:
 
 ```yaml
 jobs:
