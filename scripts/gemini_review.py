@@ -145,6 +145,33 @@ def validate(result: dict, hunks: dict[str, list[set[int]]]) -> tuple[list[dict]
     return kept, dropped
 
 
+def anchor_fixes(kept: list[dict], hunks: dict[str, list[set[int]]], root: Path) -> None:
+    """Move each fix onto the lines that really hold its `original`, or drop the fix.
+
+    The model's line numbers can be a few lines off; a suggestion anchored there replaces the
+    wrong lines when someone commits it (marola-dev/marola-devkit#19's first review did that).
+    """
+    for c in kept:
+        fix = c.get("fix")
+        if not fix:
+            continue
+        target = (root / c["path"]).resolve()
+        if root.resolve() not in target.parents or not target.is_file():
+            c.pop("fix")
+            continue
+        lines = target.read_text().split("\n")
+        want = fix["original"].rstrip("\n").split("\n")
+        n = len(want)
+        at = [i + 1 for i in range(len(lines) - n + 1) if lines[i : i + n] == want]
+        if c["start_line"] in at and c["line"] == c["start_line"] + n - 1:
+            continue
+        hits = [s for s in at if any(s in h and s + n - 1 in h for h in hunks.get(c["path"], []))]
+        if len(hits) == 1:
+            c["start_line"], c["line"] = hits[0], hits[0] + n - 1
+        else:
+            c.pop("fix")
+
+
 def comment_body(c: dict) -> str:
     text = f"**[{c['severity']}]** {c['body'].strip()}"
     fix = c.get("fix")
@@ -251,9 +278,9 @@ def guide_text() -> str:
 
 def cmd_review(a: argparse.Namespace) -> None:
     key = os.environ.get("GEMINI_API_KEY") or sys.exit("GEMINI_API_KEY is not set")
-    meta = json.loads(gh("pr", "view", str(a.pr), "--repo", a.repo, "--json", "title,body,files"))
-    diff = gh("pr", "diff", str(a.pr), "--repo", a.repo)
     meta = json.loads(gh("pr", "view", str(a.pr), "--repo", a.repo, "--json", "title,body"))
+    diff = gh("pr", "diff", str(a.pr), "--repo", a.repo)
+    if len(diff) > MAX_DIFF_CHARS:
         sys.exit(f"diff is {len(diff)} chars, over {MAX_DIFF_CHARS}: too big for one review call")
     annotated, hunks = annotate(diff)
     prompt = PROMPT.format(
@@ -267,6 +294,7 @@ def cmd_review(a: argparse.Namespace) -> None:
     )
     result = call_gemini(a.model, prompt, key)
     kept, dropped = validate(result, hunks)
+    anchor_fixes(kept, hunks, Path.cwd())
     payload = review_payload(result.get("summary", ""), kept, dropped)
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(payload, f)
@@ -344,6 +372,35 @@ def self_test() -> None:
         (root / "x.sh").write_text("a\nB\nC\nd\n")
         (root / ".github").mkdir()
         (root / ".github/w.yml").write_text("y\n")
+        off = [
+            {
+                "path": "x.sh",
+                "start_line": 3,
+                "line": 4,
+                "severity": "low",
+                "body": "off by one",
+                "fix": {"original": "B\nC", "replacement": "q"},
+            },
+            {
+                "path": "x.sh",
+                "start_line": 1,
+                "line": 1,
+                "severity": "low",
+                "body": "absent",
+                "fix": {"original": "nowhere", "replacement": "q"},
+            },
+            {
+                "path": "x.sh",
+                "start_line": 2,
+                "line": 3,
+                "severity": "low",
+                "body": "exact",
+                "fix": {"original": "B\nC", "replacement": "q"},
+            },
+        ]
+        anchor_fixes(off, hunks, root)
+        assert [(c["start_line"], c["line"]) for c in off] == [(2, 3), (1, 1), (2, 3)], off
+        assert "fix" in off[0] and "fix" not in off[1] and "fix" in off[2], off
         stale = {
             "path": "x.sh",
             "line": 1,
