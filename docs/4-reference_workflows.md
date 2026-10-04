@@ -350,7 +350,7 @@ jobs:
 | `check-command` | `""` | runs on bare `ubuntu-latest`, without the App token; a failure drops the fix |
 | `cost-trailer` | `$0 (Gemini API free tier)` | the fix commit's `Cost:` |
 | `extra-trailers` | `""` | e.g. marola-site's `MIP: none — Gemini review fix` |
-| `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then the CLI's default |
+| `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then `gemini-3.5-flash` |
 
 Secrets: `GEMINI_API_KEY` and `GEMINI_APP_PRIVATE_KEY`; variable `GEMINI_APP_ID`. All three are
 set at the org, scoped to the repos the `marola-gemini-bot` App is installed on. The App needs
