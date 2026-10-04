@@ -11,7 +11,7 @@ actionlint, hadolint, shellcheck, which a repo's flake supplies locally), the de
 version the umbrella's flake pinned when the workflow was written. Bump the input, not the
 workflow file, when a newer version is wanted.
 
-Four of the nine (`labels-sync`, `agents-check`, `pr-body`, `api-docs`) take a required
+Five of the ten (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`) take a required
 `devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
 repo out a second time at that ref. Pin it to the same tag as the `uses:` line below — nothing
 keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`,
@@ -22,7 +22,7 @@ keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `sca
 called file's (checked on marola-devkit#2's first run:
 `workflow_ref=marola-dev/marola-devkit/.github/workflows/pr.yml@refs/pull/2/merge`).
 
-These four also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
+These five also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
 private devkit would need a cross-repo PAT input on each of them, the same shape as
 `notify-umbrella`'s `token` secret.
@@ -316,18 +316,20 @@ workflow).
 ## gemini-review
 
 A Gemini review when someone requests the org team `gemini` on a PR, then one commit with the
-findings Gemini is sure how to fix (marola-dev/marola#641). Two jobs:
+findings Gemini gave an exact fix for (marola-dev/marola#641). One job, one API call:
 
-- **review**: removes the team request (so it can be re-requested), then runs
-  [`run-gemini-cli`](https://github.com/google-github-actions/run-gemini-cli) with only the GitHub
-  tools to read the PR and post one `COMMENT` review, inline comments tagged `[high]`/`[medium]`/
-  `[low]`. The prompt carries the repo's `.gemini/styleguide.md` and `AGENTS.md`.
-- **fix** (`fix: true`): runs Gemini again with file tools but no shell, on the PR branch, to fix
-  its own comments that are real, local and unambiguous. A plain step then refuses any change
-  under `.github/` or to `.git/config`/hooks, runs `check-command` without the token, and pushes
-  one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` trailers and the summary.
+- removes the team request, so it can be re-requested;
+- `scripts/gemini_review.py review` sends the diff, numbered by new-file line, plus the repo's
+  `.gemini/styleguide.md` and `AGENTS.md`, to the Gemini API once and asks for JSON. It keeps the
+  comments GitHub accepts (at most 10, tagged `[high]`/`[medium]`/`[low]`) and posts one `COMMENT`
+  review with suggestion blocks;
+- `gemini_review.py fix` applies a comment's fix only where its `original` text still matches the
+  file, only to files the PR changed, never under `.github/`. Then `check-command` runs without the
+  token, and one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` is pushed.
 
-Same-repo PRs only: a fork PR gets no secrets under `pull_request`, so the job is skipped there.
+One call per review because the free tier allows 20 requests a day per model; an agent loop
+(`run-gemini-cli`) spent them on a single PR. Same-repo PRs only: a fork PR gets no secrets under
+`pull_request`, so the job is skipped there.
 
 ```yaml
 name: gemini
@@ -340,11 +342,13 @@ jobs:
     uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.0
     secrets: inherit
     with:
+      devkit-ref: v0.4.0
       check-command: ""          # e.g. node scripts/site_check.js
 ```
 
 | Input | Default | Notes |
 |---|---|---|
+| `devkit-ref` | required | same tag as the `uses:` line |
 | `team` | `gemini` | slug of the requested team, removed again |
 | `fix` | `true` | `false` reviews only |
 | `check-command` | `""` | runs on bare `ubuntu-latest`, without the App token; a failure drops the fix |
@@ -354,9 +358,9 @@ jobs:
 
 Secrets: `GEMINI_API_KEY` and `GEMINI_APP_PRIVATE_KEY`; variable `GEMINI_APP_ID`. All three are
 set at the org, scoped to the repos the `marola-gemini-bot` App is installed on. The App needs
-Contents, Issues and Pull requests read/write and no Workflows permission, so GitHub itself
-refuses a push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s,
-starts the PR's CI.
+Contents and Pull requests read/write and no Workflows permission, so GitHub itself refuses a
+push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s, starts the
+PR's CI.
 
 ## devkit-ci (not reusable)
 

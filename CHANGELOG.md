@@ -8,7 +8,8 @@ marketplace `ref` at once.
 
 - The `gemini-review` reusable workflow: requesting the org team `gemini` on a PR gets a Gemini
   review, then one commit with the findings it can fix safely, pushed as the `marola-gemini-bot`
-  App (marola-dev/marola#641). This repo calls it from `gemini.yml`.
+  App (marola-dev/marola#641). One Gemini API call per review (`scripts/gemini_review.py`),
+  since the free tier allows 20 requests a day per model. This repo calls it from `gemini.yml`.
 
 ## v0.3.1 — 2026-10-03
 

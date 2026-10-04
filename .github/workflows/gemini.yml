@@ -13,4 +13,5 @@ jobs:
     uses: ./.github/workflows/gemini-review.yml
     secrets: inherit
     with:
+      devkit-ref: ${{ github.sha }}
       check-command: bash tests/self-tests.sh
