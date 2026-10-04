@@ -10,6 +10,8 @@ marketplace `ref` at once.
   head is read as text from `.pr-head` (`gemini_review.py review --root`), and no fix commit is
   pushed. Callers move from `pull_request` to `pull_request_target` so a fork run gets the
   secrets (#23).
+- `devkit-ci` and `api-docs` drop `magic-nix-cache-action`: its post step spent 2m40s of a 6m23s
+  devkit CI run uploading store paths that cache.nixos.org already serves (marola-dev/marola#657).
 
 ## v0.4.1 — 2026-10-04
 

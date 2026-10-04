@@ -37,8 +37,8 @@ jobs:
         with:
           persist-credentials: false
 
+      # No magic-nix-cache: its post-step upload took minutes and saved nothing (marola-dev/marola#657).
       - uses: DeterminateSystems/nix-installer-action@v23
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
 
       - name: just api-docs ${{ inputs.output-dir }}
         env:
@@ -57,8 +57,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No magic-nix-cache: its post-step upload took minutes and saved nothing (marola-dev/marola#657).
       - uses: DeterminateSystems/nix-installer-action@v23
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
 
       - name: just api-docs ${{ inputs.output-dir }}
         env:
