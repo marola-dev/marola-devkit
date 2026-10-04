@@ -5,13 +5,13 @@ and cost tools, the git hooks, the org invariants block, the issue forms and lab
 workflows, and a Claude Code plugin with the generic skills, agents and hooks. Every marola repo
 consumes it at a pinned version, and its own AGENTS.md says which pieces it opts out of.
 
-**Status:** this is v0.4.1; each repo pins its own version. Changes per release are in
+**Status:** this is v0.5.0; each repo pins its own version. Changes per release are in
 [CHANGELOG.md](https://github.com/marola-dev/marola-devkit/blob/main/CHANGELOG.md).
 
 ## Try it
 
 ```bash
-nix run github:marola-dev/marola-devkit/v0.4.1#docs-lint -- --self-test   # any tool, no checkout
+nix run github:marola-dev/marola-devkit/v0.5.0#docs-lint -- --self-test   # any tool, no checkout
 nix develop          # in a checkout: every tool on PATH, plus the lint toolchain
 just quality         # this repo's gates
 claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
@@ -77,7 +77,7 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.4.1";
+  url = "github:marola-dev/marola-devkit/v0.5.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -97,7 +97,7 @@ import? '.devkit/devkit.just'
 
 A repo that defines a recipe with the same name needs `set allow-duplicate-recipes`.
 
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.4.1#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.5.0#uprd`.
 
 **Git hooks** are opt-in: `git config core.hooksPath .devkit/.githooks`. The contract a consuming
 repo implements is two recipes in its own justfile:
@@ -126,7 +126,7 @@ working exactly as before.
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.4.1" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.5.0" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -195,9 +195,9 @@ One caller, needing a second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.5.0
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
 ```
 
 This repo calls five of them on its own pull requests (`.github/workflows/pr.yml`: `python-ci`,
@@ -213,22 +213,23 @@ Reviewers, or `gh pr edit <N> --add-reviewer marola-dev/gemini`). A few minutes 
 `[high]`/`[medium]`/`[low]`, with a suggestion block where the fix is exact. It then pushes one
 `fix: apply Gemini review findings` commit with the fixes whose original text still matches,
 after the repo's `check-command` passes, and comments what it fixed and what it left. Request the
-team again after new commits for a fresh review. Nothing runs unless someone asks; fork PRs are
-skipped; the bot never edits `.github/`. A repo opts in with one file:
+team again after new commits for a fresh review. Nothing runs unless someone asks. A fork PR
+gets the review but no fix commit, and nothing from the fork is run. The bot never edits
+`.github/`. A repo opts in with one file:
 
 ```yaml
 # .github/workflows/gemini.yml
 name: gemini
 on:
-  pull_request:
+  pull_request_target:   # secrets for fork PRs too; only a maintainer can request the team
     types: [review_requested]
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.0
     secrets: inherit
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
       check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
 ```
 

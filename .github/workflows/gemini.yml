@@ -1,7 +1,7 @@
 name: gemini
 
 on:
-  pull_request:
+  pull_request_target:
     types: [review_requested]
 
 permissions:
@@ -13,5 +13,6 @@ jobs:
     uses: ./.github/workflows/gemini-review.yml
     secrets: inherit
     with:
+      # The base commit under pull_request_target: a fork's head is never what runs.
       devkit-ref: ${{ github.sha }}
       check-command: bash tests/self-tests.sh
