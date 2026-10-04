@@ -146,7 +146,7 @@ jobs:
           uid="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
           git config user.name "${SLUG}[bot]"
           git config user.email "${uid}+${SLUG}[bot]@users.noreply.github.com"
-          msg="$(printf 'fix: apply Gemini review findings (#%s)\n\n%s\n\nTested: %s\nCost: %s\n' "$PR" "$summary" "$tested" "$COST")"
+          msg="$(printf 'fix: apply Gemini review findings (#%s)\n\n%s\n\nTested: %s\nCost: %s\nCo-Authored-By: Gemini <noreply@google.com>\n' "$PR" "$summary" "$tested" "$COST")"
           [ -z "$EXTRA" ] || msg+=$'\n'"$EXTRA"
           git -c core.hooksPath=/dev/null commit -qam "$msg"
           git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"

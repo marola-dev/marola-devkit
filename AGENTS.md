@@ -83,6 +83,8 @@ An agent starts work only on an issue carrying `agent-ready`, in this repo (MIP-
 
 Commits carry `Tested:`, `Cost:` and `Co-Authored-By: Claude <noreply@anthropic.com>`, nothing
 else. `.claude/settings.json` sets the attribution; `pr-flow` (`just pr`) fills missing trailers.
+The one exception is `gemini-review`'s fix commit, written by Gemini as `marola-gemini-bot`: its
+third trailer is `Co-Authored-By: Gemini <noreply@google.com>`.
 
 ## Phase discipline (hard rule)
 
