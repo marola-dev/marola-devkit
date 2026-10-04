@@ -185,8 +185,9 @@ non-fork repo of an org (`--include-forks` adds forks). `just rulesets-check`/`j
 checkout), then `gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs`. `MAROLA_UMBRELLA` defaults to
 `marola-dev/marola`.
 
-**Reusable workflows** — nine `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
-`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`, `api-docs`);
+**Reusable workflows** — ten `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
+`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`, `api-docs`,
+`gemini-review`);
 every input, secret and example caller is in [docs/4-reference_workflows.md](docs/4-reference_workflows.md).
 One caller, needing a second checkout of this repo for its own scripts:
 
@@ -204,6 +205,37 @@ This repo calls five of them on its own pull requests (`.github/workflows/pr.yml
 `scala-ci`, `notify-umbrella` and `api-docs` have no caller here: no Scala, no API docs
 generator, and nothing to announce, since the umbrella's docs take the devkit at its pinned
 version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming repo.
+
+**Gemini review on request** — on a PR, request the reviewer `marola-dev/gemini` (sidebar →
+Reviewers, or `gh pr edit <N> --add-reviewer marola-dev/gemini`). A few minutes later
+`marola-gemini-bot` posts one review: a short summary and at most 10 inline comments tagged
+`[high]`/`[medium]`/`[low]`, with a suggestion block where the fix is exact. It then pushes one
+`fix: apply Gemini review findings` commit with the fixes whose original text still matches,
+after the repo's `check-command` passes, and comments what it fixed and what it left. Request the
+team again after new commits for a fresh review. Nothing runs unless someone asks; fork PRs are
+skipped; the bot never edits `.github/`. A repo opts in with one file:
+
+```yaml
+# .github/workflows/gemini.yml
+name: gemini
+on:
+  pull_request:
+    types: [review_requested]
+jobs:
+  gemini:
+    if: github.event.requested_team.slug == 'gemini'
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.0
+    secrets: inherit
+    with:
+      devkit-ref: v0.4.0
+      check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
+```
+
+It needs the org's `marola-gemini-bot` App installed on the repo, the `gemini` team with Read on
+it, and the org's `GEMINI_API_KEY`, `GEMINI_APP_PRIVATE_KEY` and `GEMINI_APP_ID`. One Gemini API
+call per review keeps it on the free tier, about 20 reviews a day per model; `vars.GEMINI_MODEL`
+picks another model. This repo calls it from `gemini.yml`, with `bash tests/self-tests.sh` as
+the check. Details: [docs/4-reference_workflows.md](docs/4-reference_workflows.md#gemini-review).
 
 ## Docs and rules
 
