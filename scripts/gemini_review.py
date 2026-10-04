@@ -271,7 +271,7 @@ def cmd_review(a: argparse.Namespace) -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(payload, f)
     gh("api", "-X", "POST", f"repos/{a.repo}/pulls/{a.pr}/reviews", "--input", f.name)
-    files = [f["path"] for f in meta.get("files", [])]
+    files = list(hunks.keys())
     Path(a.out).write_text(json.dumps({"comments": kept, "files": files}, indent=2))
     print(f"posted a review with {len(kept)} comments ({len(dropped)} outside the diff)")
 
