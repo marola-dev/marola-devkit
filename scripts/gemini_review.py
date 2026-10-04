@@ -253,7 +253,7 @@ def cmd_review(a: argparse.Namespace) -> None:
     key = os.environ.get("GEMINI_API_KEY") or sys.exit("GEMINI_API_KEY is not set")
     meta = json.loads(gh("pr", "view", str(a.pr), "--repo", a.repo, "--json", "title,body,files"))
     diff = gh("pr", "diff", str(a.pr), "--repo", a.repo)
-    if len(diff) > MAX_DIFF_CHARS:
+    meta = json.loads(gh("pr", "view", str(a.pr), "--repo", a.repo, "--json", "title,body"))
         sys.exit(f"diff is {len(diff)} chars, over {MAX_DIFF_CHARS}: too big for one review call")
     annotated, hunks = annotate(diff)
     prompt = PROMPT.format(
