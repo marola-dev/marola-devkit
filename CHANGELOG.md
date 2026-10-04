@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.4.1 — 2026-10-04
+
+- `docs-lint` skips `docs/benchmarks/**`, as it skips `docs/MIPs/**` and `SPLIT.md`: a dated benchmark
+  run is a kept record, and marola-ml's would otherwise fail rule (b) once its gate is on
+  (MIP-0074 task 25).
+
 ## v0.4.0 — 2026-10-04
 
 - The `gemini-review` reusable workflow: requesting the org team `gemini` on a PR gets a Gemini

@@ -134,6 +134,9 @@ def lint_file(text: str, rel: Path, known: set[str], owned: set[str], umbrella: 
     return out
 
 
+KEPT_RECORDS = {("docs", "MIPs"), ("docs", "benchmarks")}
+
+
 def lint(root: Path) -> list[tuple[str, int, str, str]]:
     findings = []
     if (root / "docs" / "index.md").is_file():
@@ -143,7 +146,8 @@ def lint(root: Path) -> list[tuple[str, int, str, str]]:
     owned = {d for d in OWNED_DIRS if (root / d).is_dir()}
     for f in files:
         rel = f.relative_to(root)
-        if not f.is_file() or f.name == "SPLIT.md" or rel.parts[:2] == ("docs", "MIPs"):
+        # Dated records stay as written: MIPs and SPLIT.md, and benchmark runs kept off-site.
+        if not f.is_file() or f.name == "SPLIT.md" or rel.parts[:2] in KEPT_RECORDS:
             continue
         text = f.read_text(encoding="utf-8")
         for n, rule, msg in lint_file(text, rel, known, owned, umbrella):
@@ -193,6 +197,11 @@ CASES = [
             "docs/MIPs/MIP-0001-x.md": "The monorepo ran `just e2e` on core/x.scala.\n",
             "docs/2-Building/SPLIT.md": "The monorepo's core/ moved.\n",
         },
+        set(),
+    ),
+    (
+        "benchmark_record_allowlisted",
+        {"docs/benchmarks/2026-09-05.md": "Ran `just e2e` over core/ and knowledge/.\n"},
         set(),
     ),
     ("docs_index_fails", {"docs/index.md": "# Home\n"}, {"d"}),
