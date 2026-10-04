@@ -1,0 +1,16 @@
+name: gemini
+
+on:
+  pull_request:
+    types: [review_requested]
+
+permissions:
+  contents: read
+
+jobs:
+  gemini:
+    if: github.event.requested_team.slug == 'gemini'
+    uses: ./.github/workflows/gemini-review.yml
+    secrets: inherit
+    with:
+      check-command: bash tests/self-tests.sh

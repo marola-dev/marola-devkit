@@ -1,8 +1,9 @@
 # Reusable workflows
 
-Nine `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
+Ten `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
 `ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
-(MIP-0070 §5.6), and `api-docs.yml` is MIP-0074 §5.2's. A tenth, `devkit-ci.yml`, is this repo's
+(MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's and `gemini-review.yml` is
+marola-dev/marola#641's. An eleventh, `devkit-ci.yml`, is this repo's
 own CI — not reusable, nothing to call.
 
 Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
@@ -36,7 +37,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -55,7 +56,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.4.0
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -88,7 +89,7 @@ with a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.4.0
     with:
       hadolint-files: |
         Dockerfile
@@ -125,7 +126,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.4.0
     secrets:
       token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 ```
@@ -158,9 +159,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -194,9 +195,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -234,11 +235,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.4.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -275,9 +276,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -306,11 +307,56 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.4.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
 workflow).
+
+## gemini-review
+
+A Gemini review when someone requests the org team `gemini` on a PR, then one commit with the
+findings Gemini is sure how to fix (marola-dev/marola#641). Two jobs:
+
+- **review**: removes the team request (so it can be re-requested), then runs
+  [`run-gemini-cli`](https://github.com/google-github-actions/run-gemini-cli) with only the GitHub
+  tools to read the PR and post one `COMMENT` review, inline comments tagged `[high]`/`[medium]`/
+  `[low]`. The prompt carries the repo's `.gemini/styleguide.md` and `AGENTS.md`.
+- **fix** (`fix: true`): runs Gemini again with file tools but no shell, on the PR branch, to fix
+  its own comments that are real, local and unambiguous. A plain step then refuses any change
+  under `.github/` or to `.git/config`/hooks, runs `check-command` without the token, and pushes
+  one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` trailers and the summary.
+
+Same-repo PRs only: a fork PR gets no secrets under `pull_request`, so the job is skipped there.
+
+```yaml
+name: gemini
+on:
+  pull_request:
+    types: [review_requested]
+jobs:
+  gemini:
+    if: github.event.requested_team.slug == 'gemini'
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.0
+    secrets: inherit
+    with:
+      check-command: ""          # e.g. node scripts/site_check.js
+```
+
+| Input | Default | Notes |
+|---|---|---|
+| `team` | `gemini` | slug of the requested team, removed again |
+| `fix` | `true` | `false` reviews only |
+| `check-command` | `""` | runs on bare `ubuntu-latest`, without the App token; a failure drops the fix |
+| `cost-trailer` | `$0 (Gemini API free tier)` | the fix commit's `Cost:` |
+| `extra-trailers` | `""` | e.g. marola-site's `MIP: none — Gemini review fix` |
+| `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then the CLI's default |
+
+Secrets: `GEMINI_API_KEY` and `GEMINI_APP_PRIVATE_KEY`; variable `GEMINI_APP_ID`. All three are
+set at the org, scoped to the repos the `marola-gemini-bot` App is installed on. The App needs
+Contents, Issues and Pull requests read/write and no Workflows permission, so GitHub itself
+refuses a push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s,
+starts the PR's CI.
 
 ## devkit-ci (not reusable)
 
