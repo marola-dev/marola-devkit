@@ -1,8 +1,9 @@
 # Reusable workflows
 
-Nine `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
+Ten `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
 `ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
-(MIP-0070 §5.6), and `api-docs.yml` is MIP-0074 §5.2's. A tenth, `devkit-ci.yml`, is this repo's
+(MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's and `gemini-review.yml` is
+marola-dev/marola#641's. An eleventh, `devkit-ci.yml`, is this repo's
 own CI — not reusable, nothing to call.
 
 Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
@@ -10,7 +11,7 @@ actionlint, hadolint, shellcheck, which a repo's flake supplies locally), the de
 version the umbrella's flake pinned when the workflow was written. Bump the input, not the
 workflow file, when a newer version is wanted.
 
-Four of the nine (`labels-sync`, `agents-check`, `pr-body`, `api-docs`) take a required
+Five of the ten (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`) take a required
 `devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
 repo out a second time at that ref. Pin it to the same tag as the `uses:` line below — nothing
 keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`,
@@ -21,7 +22,7 @@ keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `sca
 called file's (checked on marola-devkit#2's first run:
 `workflow_ref=marola-dev/marola-devkit/.github/workflows/pr.yml@refs/pull/2/merge`).
 
-These four also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
+These five also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
 private devkit would need a cross-repo PAT input on each of them, the same shape as
 `notify-umbrella`'s `token` secret.
@@ -36,7 +37,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -55,7 +56,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.4.0
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -88,7 +89,7 @@ with a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.4.0
     with:
       hadolint-files: |
         Dockerfile
@@ -125,7 +126,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.4.0
     secrets:
       token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 ```
@@ -158,9 +159,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -194,9 +195,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -234,11 +235,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.4.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -275,9 +276,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.4.0
     with:
-      devkit-ref: v0.3.1
+      devkit-ref: v0.4.0
 ```
 
 | Input | Default | Notes |
@@ -306,11 +307,60 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.3.1
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.4.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
 workflow).
+
+## gemini-review
+
+A Gemini review when someone requests the org team `gemini` on a PR, then one commit with the
+findings Gemini gave an exact fix for (marola-dev/marola#641). One job, one API call:
+
+- removes the team request, so it can be re-requested;
+- `scripts/gemini_review.py review` sends the diff, numbered by new-file line, plus the repo's
+  `.gemini/styleguide.md` and `AGENTS.md`, to the Gemini API once and asks for JSON. It keeps the
+  comments GitHub accepts (at most 10, tagged `[high]`/`[medium]`/`[low]`) and posts one `COMMENT`
+  review with suggestion blocks;
+- `gemini_review.py fix` applies a comment's fix only where its `original` text still matches the
+  file, only to files the PR changed, never under `.github/`. Then `check-command` runs without the
+  token, and one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` is pushed.
+
+One call per review because the free tier allows 20 requests a day per model; an agent loop
+(`run-gemini-cli`) spent them on a single PR. Same-repo PRs only: a fork PR gets no secrets under
+`pull_request`, so the job is skipped there.
+
+```yaml
+name: gemini
+on:
+  pull_request:
+    types: [review_requested]
+jobs:
+  gemini:
+    if: github.event.requested_team.slug == 'gemini'
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.0
+    secrets: inherit
+    with:
+      devkit-ref: v0.4.0
+      check-command: ""          # e.g. node scripts/site_check.js
+```
+
+| Input | Default | Notes |
+|---|---|---|
+| `devkit-ref` | required | same tag as the `uses:` line |
+| `team` | `gemini` | slug of the requested team, removed again |
+| `fix` | `true` | `false` reviews only |
+| `check-command` | `""` | runs on bare `ubuntu-latest`, without the App token; a failure drops the fix |
+| `cost-trailer` | `$0 (Gemini API free tier)` | the fix commit's `Cost:` |
+| `extra-trailers` | `""` | e.g. marola-site's `MIP: none — Gemini review fix` |
+| `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then `gemini-3.5-flash` |
+
+Secrets: `GEMINI_API_KEY` and `GEMINI_APP_PRIVATE_KEY`; variable `GEMINI_APP_ID`. All three are
+set at the org, scoped to the repos the `marola-gemini-bot` App is installed on. The App needs
+Contents and Pull requests read/write and no Workflows permission, so GitHub itself refuses a
+push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s, starts the
+PR's CI.
 
 ## devkit-ci (not reusable)
 

@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.4.0 — 2026-10-04
+
+- The `gemini-review` reusable workflow: requesting the org team `gemini` on a PR gets a Gemini
+  review, then one commit with the findings it can fix safely, pushed as the `marola-gemini-bot`
+  App (marola-dev/marola#641). One Gemini API call per review (`scripts/gemini_review.py`),
+  since the free tier allows 20 requests a day per model. This repo calls it from `gemini.yml`.
+
 ## v0.3.1 — 2026-10-03
 
 - Design, development and reference pages: `docs/1-design.md`, `docs/3-development.md`, and

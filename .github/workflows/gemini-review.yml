@@ -1,0 +1,153 @@
+# gemini-review — a Gemini review on request, then a fix commit for the findings it can fix safely
+# (marola-dev/marola#641). The caller runs it on `pull_request: review_requested` for the empty org
+# team `gemini`; nothing reviews a PR on its own (the umbrella's DEV-FLOW.md §5).
+#
+# One API call per review (scripts/gemini_review.py): the free tier allows 20 requests a day per
+# model, which an agent loop spent on a single PR. The fix is applied from that same answer, only
+# where its `original` text still matches, and never under .github/.
+#
+# Identity is the org App behind vars.GEMINI_APP_ID / secrets.GEMINI_APP_PRIVATE_KEY, not
+# GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no CI on the PR.
+name: gemini-review
+
+on:
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit for scripts/gemini_review.py."
+        type: string
+        required: true
+      devkit-repo:
+        description: "owner/repo of marola-devkit."
+        type: string
+        default: marola-dev/marola-devkit
+      team:
+        description: "Org team slug whose review request this answers; removed again so it can be re-requested."
+        type: string
+        default: gemini
+      fix:
+        description: "Push one commit with the findings Gemini gave an exact fix for."
+        type: boolean
+        default: true
+      check-command:
+        description: >-
+          Shell command run on ubuntu-latest after the fix and before the push (the repo's fast
+          gate that needs no Nix). A failure drops the fix and says so on the PR. Empty: no check.
+        type: string
+        default: ""
+      cost-trailer:
+        description: "The fix commit's Cost: trailer."
+        type: string
+        default: "$0 (Gemini API free tier)"
+      extra-trailers:
+        description: "More trailer lines for the fix commit, one per line (marola-site: `MIP: none — Gemini review fix`)."
+        type: string
+        default: ""
+      gemini-model:
+        description: "Model id; empty uses vars.GEMINI_MODEL, then gemini-3.5-flash."
+        type: string
+        default: ""
+    secrets:
+      GEMINI_API_KEY:
+        required: true
+      GEMINI_APP_PRIVATE_KEY:
+        required: true
+
+concurrency:
+  group: gemini-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    # Fork PRs get no secrets under pull_request; the bot never runs there.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: mint the App token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.GEMINI_APP_ID }}
+          private-key: ${{ secrets.GEMINI_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: drop the team request, so the next request runs again
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TEAM: ${{ inputs.team }}
+        run: |
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/pulls/$PR/requested_reviewers" \
+            -f "team_reviewers[]=$TEAM" --silent || echo "::warning::could not remove the $TEAM request"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+
+      - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/gemini_review.py)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      - name: review
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PR: ${{ github.event.pull_request.number }}
+          MODEL: ${{ inputs.gemini-model || vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+        run: |
+          set -euo pipefail
+          if ! python3 .devkit-checkout/scripts/gemini_review.py review --repo "$GITHUB_REPOSITORY" \
+              --pr "$PR" --model "$MODEL" --out "$RUNNER_TEMP/review.json" 2>"$RUNNER_TEMP/err"; then
+            cat "$RUNNER_TEMP/err" >&2
+            gh pr comment "$PR" --body "Gemini could not review this PR: $(tail -c 600 "$RUNNER_TEMP/err")"
+            exit 1
+          fi
+
+      - name: fix, check, commit and push
+        if: inputs.fix && github.event.pull_request.head.ref != github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+          CHECK: ${{ inputs.check-command }}
+          COST: ${{ inputs.cost-trailer }}
+          EXTRA: ${{ inputs.extra-trailers }}
+        run: |
+          set -euo pipefail
+          summary="$(python3 .devkit-checkout/scripts/gemini_review.py fix --review "$RUNNER_TEMP/review.json")"
+          echo "$summary"
+          if git diff --quiet; then
+            echo "no fix applied"
+            exit 0
+          fi
+
+          tested="none (no check-command for this repo)"
+          if [ -n "$CHECK" ]; then
+            if env -u GH_TOKEN bash -euo pipefail -c "$CHECK"; then
+              tested="$CHECK ok"
+            else
+              gh pr comment "$PR" --body "Gemini had fixes, but \`$CHECK\` failed with them, so nothing was pushed."$'\n\n'"$summary"
+              exit 0
+            fi
+          fi
+
+          uid="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${SLUG}[bot]"
+          git config user.email "${uid}+${SLUG}[bot]@users.noreply.github.com"
+          msg="$(printf 'fix: apply Gemini review findings (#%s)\n\n%s\n\nTested: %s\nCost: %s\nCo-Authored-By: Gemini <noreply@google.com>\n' "$PR" "$summary" "$tested" "$COST")"
+          [ -z "$EXTRA" ] || msg+=$'\n'"$EXTRA"
+          git -c core.hooksPath=/dev/null commit -qam "$msg"
+          git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+          gh pr comment "$PR" --body "Gemini pushed $(git rev-parse --short HEAD) with the fixes it was sure of; re-request \`gemini\` for a fresh review."$'\n\n'"$summary"
