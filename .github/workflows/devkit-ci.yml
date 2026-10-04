@@ -25,8 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # No magic-nix-cache: its post-step upload took minutes and saved nothing (marola-dev/marola#657).
       - uses: DeterminateSystems/nix-installer-action@v23
-      - uses: DeterminateSystems/magic-nix-cache-action@v15
 
       - name: flake.lock — create if absent, verify current if present
         id: lock

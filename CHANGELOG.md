@@ -4,6 +4,15 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.5.0 — 2026-10-04
+
+- `gemini-review` reviews fork PRs too, review only: the base branch is the workspace, the fork's
+  head is read as text from `.pr-head` (`gemini_review.py review --root`), and no fix commit is
+  pushed. Callers move from `pull_request` to `pull_request_target` so a fork run gets the
+  secrets (#23).
+- `devkit-ci` and `api-docs` drop `magic-nix-cache-action`: its post step spent 2m40s of a 6m23s
+  devkit CI run uploading store paths that cache.nixos.org already serves (marola-dev/marola#657).
+
 ## v0.4.1 — 2026-10-04
 
 - `docs-lint` skips `docs/benchmarks/**`, as it skips `docs/MIPs/**` and `SPLIT.md`: a dated benchmark

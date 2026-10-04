@@ -294,7 +294,7 @@ def cmd_review(a: argparse.Namespace) -> None:
     )
     result = call_gemini(a.model, prompt, key)
     kept, dropped = validate(result, hunks)
-    anchor_fixes(kept, hunks, Path.cwd())
+    anchor_fixes(kept, hunks, Path(a.root))
     payload = review_payload(result.get("summary", ""), kept, dropped)
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
         json.dump(payload, f)
@@ -423,13 +423,13 @@ def self_test() -> None:
         assert (root / ".github/w.yml").read_text() == "y\n"
         assert sum(o.startswith("- fixed") for o in out) == 1, out
         assert sum(o.startswith("- left") for o in out) == 3, out
+    base = ["review", "--repo", "o/r", "--pr", "1", "--model", "m", "--out", "o.json"]
+    assert parser().parse_args(base).root == "."
+    assert parser().parse_args([*base, "--root", ".pr-head"]).root == ".pr-head"
     print("gemini_review self-test: ok")
 
 
-def main() -> None:
-    if sys.argv[1:] == ["--self-test"]:
-        self_test()
-        return
+def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("review")
@@ -437,9 +437,18 @@ def main() -> None:
     r.add_argument("--pr", type=int, required=True)
     r.add_argument("--model", required=True)
     r.add_argument("--out", required=True)
+    # A fork PR's head is checked out here as text only; the guide still comes from cwd (base).
+    r.add_argument("--root", default=".", help="tree holding the PR's head files")
     f = sub.add_parser("fix")
     f.add_argument("--review", required=True)
-    a = p.parse_args()
+    return p
+
+
+def main() -> None:
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        return
+    a = parser().parse_args()
     {"review": cmd_review, "fix": cmd_fix}[a.cmd](a)
 
 

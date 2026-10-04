@@ -37,7 +37,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.5.0
 ```
 
 | Input | Default | Notes |
@@ -56,7 +56,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.5.0
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -89,7 +89,7 @@ with a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.5.0
     with:
       hadolint-files: |
         Dockerfile
@@ -126,7 +126,7 @@ on:
     paths: [README.md, docs/**]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.5.0
     secrets:
       token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 ```
@@ -159,9 +159,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.5.0
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
 ```
 
 | Input | Default | Notes |
@@ -195,9 +195,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.5.0
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
 ```
 
 | Input | Default | Notes |
@@ -235,11 +235,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.5.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -276,9 +276,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.5.0
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
 ```
 
 | Input | Default | Notes |
@@ -307,7 +307,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.5.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
@@ -328,21 +328,27 @@ findings Gemini gave an exact fix for (marola-dev/marola#641). One job, one API 
   token, and one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` is pushed.
 
 One call per review because the free tier allows 20 requests a day per model; an agent loop
-(`run-gemini-cli`) spent them on a single PR. Same-repo PRs only: a fork PR gets no secrets under
-`pull_request`, so the job is skipped there.
+(`run-gemini-cli`) spent them on a single PR.
+
+**Fork PRs** get the review and no fix commit, since the App can't push to a fork. The caller
+triggers on `pull_request_target`, so the run takes the workflow and secrets from the base
+branch. That trigger is safe here because only someone with triage access can request a
+reviewer. The workspace is the base branch, so the guide is the repo's own. The fork's head is
+checked out into `.pr-head` as text, which `review --root .pr-head` reads to anchor suggestions,
+and nothing in it is run. A same-repo PR checks out its head, as before (marola-dev/marola-devkit#23).
 
 ```yaml
 name: gemini
 on:
-  pull_request:
+  pull_request_target:
     types: [review_requested]
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.4.1
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.0
     secrets: inherit
     with:
-      devkit-ref: v0.4.1
+      devkit-ref: v0.5.0
       check-command: ""          # e.g. node scripts/site_check.js
 ```
 

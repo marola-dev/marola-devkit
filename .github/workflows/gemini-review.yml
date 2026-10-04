@@ -8,6 +8,10 @@
 #
 # Identity is the org App behind vars.GEMINI_APP_ID / secrets.GEMINI_APP_PRIVATE_KEY, not
 # GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no CI on the PR.
+#
+# Callers trigger on pull_request_target, so a fork PR gets the secrets too (only a maintainer can
+# request the team). A fork's head is checked out as text into .pr-head and never run; it gets a
+# review and no fix commit (marola-dev/marola-devkit#23).
 name: gemini-review
 
 on:
@@ -62,12 +66,11 @@ permissions:
 
 jobs:
   review:
-    # Fork PRs get no secrets under pull_request; the bot never runs there.
-    if: >-
-      github.event.pull_request.head.repo.full_name == github.repository
-      && github.event.pull_request.state == 'open'
+    if: github.event.pull_request.state == 'open'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
     steps:
       - name: mint the App token
         id: app
@@ -87,9 +90,19 @@ jobs:
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/pulls/$PR/requested_reviewers" \
             -f "team_reviewers[]=$TEAM" --silent || echo "::warning::could not remove the $TEAM request"
 
-      - uses: actions/checkout@v7
+      - name: checkout the PR head (same repo) or the base branch (fork)
+        uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ env.FORK == 'true' && github.event.pull_request.base.sha || github.event.pull_request.head.ref }}
+          persist-credentials: false
+
+      - name: checkout the fork's head as text, for anchoring suggestions
+        if: env.FORK == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .pr-head
           persist-credentials: false
 
       - name: checkout marola-devkit@${{ inputs.devkit-ref }} (scripts/gemini_review.py)
@@ -107,15 +120,19 @@ jobs:
           MODEL: ${{ inputs.gemini-model || vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
         run: |
           set -euo pipefail
+          root=.
+          [ "$FORK" != true ] || root=.pr-head
           if ! python3 .devkit-checkout/scripts/gemini_review.py review --repo "$GITHUB_REPOSITORY" \
-              --pr "$PR" --model "$MODEL" --out "$RUNNER_TEMP/review.json" 2>"$RUNNER_TEMP/err"; then
+              --pr "$PR" --model "$MODEL" --root "$root" --out "$RUNNER_TEMP/review.json" 2>"$RUNNER_TEMP/err"; then
             cat "$RUNNER_TEMP/err" >&2
             gh pr comment "$PR" --body "Gemini could not review this PR: $(tail -c 600 "$RUNNER_TEMP/err")"
             exit 1
           fi
 
       - name: fix, check, commit and push
-        if: inputs.fix && github.event.pull_request.head.ref != github.event.repository.default_branch
+        if: >-
+          inputs.fix && env.FORK != 'true'
+          && github.event.pull_request.head.ref != github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           PR: ${{ github.event.pull_request.number }}
