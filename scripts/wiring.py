@@ -3,13 +3,17 @@
 
 Run in an umbrella checkout with its submodules; the devkit's tree is `.devkit`, else this script's.
 
-wiring [--root DIR] [FILE]   print the block, or rewrite it between FILE's wiring markers
+wiring [--root DIR] [--devkit DIR] [--name NAME] [FILE]
+    print the block, or rewrite it between FILE's wiring markers; a devkit git checkout with tags
+    lets each reusable-workflow call be read at its own @ref
 wiring --self-test
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import subprocess
@@ -20,7 +24,6 @@ from pathlib import Path
 import yaml
 
 ORG = "marola-dev"
-SELF = Path(__file__)  # its fixture names every idiom, so it is never a reader
 PINS = ("marola-image", "corpus.version", "resources.version")
 START, END = "<!-- wiring:start -->", "<!-- wiring:end -->"
 READERS = ("scripts/**/*", "justfile", "Dockerfile*", "docker-compose*.yml", "build.sbt")
@@ -75,21 +78,41 @@ def read(p: Path) -> str:
         return ""
 
 
-def repos(root: Path) -> list[tuple[str, Path]]:
-    url = subprocess.run(
-        ["git", "-C", str(root), "config", "--get", "remote.origin.url"],
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout.strip()
-    out = [(re.sub(r"\.git$", "", url.rsplit("/", 1)[-1]) or "marola", root)]
+def warn(msg: str) -> None:
+    print(f"wiring: warning: {msg}", file=sys.stderr)
+
+
+def git(d: Path, *args: str) -> str | None:
+    if not (d / ".git").exists():  # never the enclosing repo's answer
+        return None
+    r = subprocess.run(["git", "-C", str(d), *args], capture_output=True, text=True, check=False)
+    return r.stdout if r.returncode == 0 else None
+
+
+def load(text: str, where: object) -> dict:
+    try:
+        return yaml.safe_load(text) or {}
+    except yaml.YAMLError as e:
+        raise SystemExit(f"wiring: {where}: {e}") from None
+
+
+def version(d: Path) -> str:
+    if v := git(d, "describe", "--tags", "--always"):
+        return v.strip()
+    m = re.search(r"marola-devkit-([\d.]+)", str(d.resolve()))
+    return f"v{m[1]}" if m else "its working tree"
+
+
+def repos(root: Path, name: str, devkit: Path | None) -> list[tuple[str, Path]]:
+    out = [(name, root)]
     for path in re.findall(r"^\s*path\s*=\s*(\S+)", read(root / ".gitmodules"), re.M):
+        if not (root / path / ".git").exists():
+            raise SystemExit(f"wiring: {path} is not checked out (git submodule update --init)")
         out.append((Path(path).name, root / path))
-    devkit = root / ".devkit"
-    out.append(
-        ("marola-devkit", devkit if devkit.is_dir() else Path(__file__).resolve().parents[1])
-    )
-    return [(n, p) for n, p in out if p.is_dir()]
+    if devkit is None:
+        devkit = root / ".devkit"
+        devkit = devkit if devkit.is_dir() else Path(__file__).resolve().parents[1]
+    return [(n, p) for n, p in out if p.is_dir()] + [("marola-devkit", devkit)]
 
 
 def triggers(doc: dict) -> dict:
@@ -105,7 +128,8 @@ def when(on: dict) -> str:
         return f"on a `{push['tags'][0]}` tag"
     if "push" in on:
         paths = push.get("paths") or []
-        touching = " touching " + ", ".join(f"`{p}`" for p in paths) if 0 < len(paths) <= 3 else ""
+        touching = " touching " + ", ".join(f"`{p}`" for p in paths) if paths else ""
+        touching = f" touching {len(paths)} paths" if len(paths) > 3 else touching
         return f"on a push to `{(push.get('branches') or ['main'])[0]}`{touching}"
     if "schedule" in on:
         return "on a schedule"
@@ -121,20 +145,20 @@ def site_of(repo_dir: Path, text: str) -> str:
     return "?"
 
 
-def effects(doc: dict, repo: str, inputs: dict, workflows: dict) -> list[tuple]:
+def effects(doc: dict, repo: str, inputs: dict, callee) -> list[tuple]:
     """(kind, value, via) for what a workflow sends, publishes, deploys or writes elsewhere."""
     out: list[tuple] = []
     text = yaml.safe_dump(doc)
     for job in (doc.get("jobs") or {}).values():
         env = {**(doc.get("env") or {}), **(job.get("env") or {})}
         if m := USES.match(str(job.get("uses", ""))):
-            target = workflows.get((m[1], m[2]))
+            target, note = callee(m[1], m[2], m[3])
             if target:
                 defaults = triggers(target).get("workflow_call", {}).get("inputs") or {}
                 given = {k: v.get("default", "") for k, v in defaults.items()}
                 given |= {k: sub(v, env, inputs) for k, v in (job.get("with") or {}).items()}
-                via = f"`{m[2]}@{m[3]}`"
-                out += [(k, v, via) for k, v, _ in effects(target, repo, given, workflows)]
+                via = f"`{m[2]}@{m[3]}`{note}"
+                out += [(k, v, via) for k, v, _ in effects(target, repo, given, callee)]
             out.append(("ref", (m[2], m[3]), ""))
             continue
         checkouts: dict[str, tuple[str, str]] = {}
@@ -154,20 +178,26 @@ def effects(doc: dict, repo: str, inputs: dict, workflows: dict) -> list[tuple]:
             if not run:
                 continue
             assigned = dict(ASSIGN.findall(run))
-            out += [("send", t, "") for t in re.findall(r"event_type=([\w-]+)", run)]
+            sent = re.findall(r"event_type=([^\s\"']*)", sub(run, senv, inputs))
+            out += [("send", t, "") for t in sent if t and "$" not in t]
             if "/dispatches" in run:
                 out += [("send", sub(v, {}, inputs), "") for k, v in senv.items() if "EVENT" in k]
             for asset in RELEASE.findall(run):
                 name = sub(asset.strip("\"'"), assigned, {}).rsplit("/", 1)[-1]
                 out.append(("asset", SHVAR.sub("<tag>", name), ""))
-            if branches := re.findall(r"([\w-]+)-push\.sh\b", run):
+            pushing = [ln for ln in run.splitlines() if "--self-test" not in ln]
+            if branches := re.findall(r"([\w-]+)-push\.sh\b", "\n".join(pushing)):
                 for b in branches:
                     owner = next((r for r, ref in checkouts.values() if ref == b), repo)
                     out.append(("branch", (b, owner), ""))
                 continue
             if m := re.search(r"gh pr create\b.*?--repo\s+(\S+)", run, re.S):
                 files = sorted(
-                    {Path(f).name for f in " ".join(re.findall(r"git add\s+(.+)", run)).split()}
+                    {
+                        Path(f).name
+                        for f in " ".join(re.findall(r"git add\s+(.+)", run)).split()
+                        if not f.startswith("-") and f != "."
+                    }
                 )
                 out.append(
                     ("pr", (sub(m[1].strip("\"'"), senv, inputs).rsplit("/", 1)[-1], files), "")
@@ -179,12 +209,31 @@ def effects(doc: dict, repo: str, inputs: dict, workflows: dict) -> list[tuple]:
     return [(k, v, via) for k, v, via in out if k not in ("pr", "push") or v[0] != repo]
 
 
-def scan(root: Path) -> Wiring:
-    w, rs = Wiring(), repos(root)
+def scan(root: Path, name: str = "marola", devkit: Path | None = None) -> Wiring:
+    w, rs = Wiring(), repos(root, name, devkit)
+    dirs = dict(rs)
     docs: dict[tuple[str, str], dict] = {}
-    for name, d in rs:
+    for repo, d in rs:
         for f in sorted((d / ".github" / "workflows").glob("*.y*ml")):
-            docs[(name, f.name)] = yaml.safe_load(read(f)) or {}
+            docs[(repo, f.name)] = load(read(f), f)
+    cache: dict[tuple[str, str, str], tuple[dict | None, str]] = {}
+
+    def callee(repo: str, file: str, ref: str) -> tuple[dict | None, str]:
+        key, d = (repo, file, ref), dirs.get(repo)
+        if key in cache or d is None:
+            return cache.get(key, (None, ""))
+        if git(d, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}"):
+            text = git(d, "show", f"{ref}:.github/workflows/{file}")
+            cache[key] = (load(text, f"{repo} {ref}:{file}"), "") if text else (None, "")
+        elif (repo, file) in docs:
+            warn(f"{repo} has no ref {ref} here; reading {file} at {version(d)}")
+            cache[key] = (docs[(repo, file)], f" (resolved at {version(d)})")
+        else:
+            cache[key] = (None, "")
+        if cache[key][0] is None:
+            warn(f"{repo}/{file}@{ref} not found; its effects are not shown")
+        return cache[key]
+
     for (repo, file), doc in docs.items():
         on = triggers(doc)
         if set(on) == {"workflow_call"}:
@@ -195,7 +244,7 @@ def scan(root: Path) -> Wiring:
         for pin in set(PINS + ("flake.lock",)) & set(on.get("push", {}).get("paths") or []):
             add(w.bumps.setdefault(f"{repo} `{pin}`", []), label)
         repo_dir = dict(rs)[repo]
-        for kind, v, via in effects(doc, repo, {}, docs):
+        for kind, v, via in effects(doc, repo, {}, callee):
             parts = [p for p in (via, when(on)) if p]
             pub = label + (f" ({', '.join(parts)})" if parts else "")
             if kind == "send":
@@ -210,19 +259,21 @@ def scan(root: Path) -> Wiring:
                 add(w.art(key, owner, b)["pub"], pub)
             elif kind == "pr":
                 a = w.art(f"PRs into {v[0]}: " + ", ".join(f"`{f}`" for f in v[1]), v[0])
-                add(a["pub"], pub), add(a["read"], v[0])
+                add(a["pub"], pub)
+                add(a["read"], v[0])
             elif kind == "push":
                 a = w.art(f"pushes to {v}", v)
-                add(a["pub"], pub), add(a["read"], v)
+                add(a["pub"], pub)
+                add(a["read"], v)
             elif kind == "deploy":
                 w.deploys.append((label, site_of(repo_dir, v)))
             elif kind == "ref":
                 add(w.calls.setdefault(v[0], {}).setdefault(v[1], []), repo)
     for repo, d in rs:
-        files = sorted(
-            {f for g in READERS for f in d.glob(g) if f.is_file() and f.name != SELF.name}
-        )
+        files = sorted({f for g in READERS for f in d.glob(g) if f.is_file()})
         texts = {f.relative_to(d).as_posix(): lines(read(f)) for f in files}
+        if repo == "marola-devkit":
+            texts.pop("scripts/wiring.py", None)  # its fixture names every idiom
         for f in sorted((d / ".github" / "workflows").glob("*.y*ml")):
             texts[f".github/workflows/{f.name}"] = lines(read(f))
         for rel, text in texts.items():
@@ -235,7 +286,7 @@ def scan(root: Path) -> Wiring:
                     continue
                 names = {b} | {v for v, x in ASSIGN.findall(text) if x == b}
                 if any(
-                    "fetch" in ln
+                    re.search(r"\bgit\b[^\n]*\bfetch\b", ln)
                     and any(re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", ln) for n in names)
                     for ln in text.splitlines()
                 ):
@@ -328,6 +379,8 @@ FIXTURE = {
     "marola-site/.github/workflows/site.yml": 'on:\n  push: {paths: [marola-image]}\n  repository_dispatch: {types: [site-data-updated]}\njobs:\n  b:\n    steps:\n      - run: git fetch --depth=1 origin site-data\n      - run: echo "marola.dev" > site/dist/CNAME\n      - uses: actions/deploy-pages@v5\n',
     "marola-site/marola-image": "ghcr.io/marola-dev/marola-app:jvm-8a29976@sha256:00\n",
     "marola-site/scripts/board-schema.sh": '# marola-image is read here\nref="$(cat "$root/marola-image")"\n',
+    "marola-corpus/.github/workflows/api-docs.yml": "on: {push: {branches: [main]}}\njobs:\n  a:\n    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v9.9.9\n",
+    "marola-site/.github/workflows/gemini.yml": "on: {pull_request: {}}\njobs:\n  g:\n    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.0\n",
     "marola-corpus/.github/workflows/release.yml": 'on: {push: {tags: [\'v*\']}}\njobs:\n  t:\n    steps:\n      - run: |\n          file=".tmp/marola-corpus-$TAG.tar.gz"\n          gh release upload "$TAG" "$file"\n',
     "marola-app/.github/workflows/docker.yml": "on: {push: {branches: [main], paths: [corpus.version]}}\nenv: {IMAGE: 'ghcr.io/${{ github.repository_owner }}/marola-app'}\njobs:\n  jvm:\n    steps:\n      - uses: docker/build-push-action@v7\n",
     "marola-app/.github/workflows/api-docs.yml": "on: {push: {branches: [main]}}\njobs:\n  a:\n    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.4.1\n    with: {devkit-ref: v0.4.1}\n",
@@ -350,22 +403,43 @@ FIXTURE = {
     "marola-ml/scripts/corpus-fetch.sh": 'pin="$(<"$root/corpus.version")"\nbase="https://github.com/marola-dev/marola-corpus/releases/download"\n',
 }
 
+API_ROW = "| `api-docs` branch | marola-app `api-docs.yml` (`api-docs.yml@v0.4.1`, on a push to `main`), marola-corpus `api-docs.yml` (`api-docs.yml@v9.9.9` (resolved at v0.6.0), on a push to `main`) | — | marola `scripts/fetch-api-docs.sh` |"
 
 # Each case is rows the fixture's block must hold; a "!" line is text it must not hold.
 CASES = {
     "dispatch_types_listened": "| `site-data-updated` | marola-app `ci.yml` (on a push to `main`) | marola-site `site.yml` |\n| `submodule-docs-updated` | marola-site `notify-umbrella.yml` (`notify-umbrella.yml@v0.3.1`, on a push to `main` touching `README.md`, `docs/**`) | marola `pointer-sync.yml` |",
     "dispatch_send_step": "| `site-data-updated` | marola-app `ci.yml` (on a push to `main`) | marola-site `site.yml` |",
-    "reusable_workflow_ref_and_event_type": "| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n| a marola-devkit tag | marola-devkit | marola-app `flake.lock` v0.4.1 | `api-docs.yml` v0.4.1 (marola-app); `notify-umbrella.yml` v0.3.1 (marola-site), v0.6.0 (marola-app) |",
+    "reusable_workflow_ref_and_event_type": "| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n| a marola-devkit tag | marola-devkit | marola-app `flake.lock` v0.4.1 | `api-docs.yml` v0.4.1 (marola-app), v9.9.9 (marola-corpus); `gemini-review.yml` v0.5.0 (marola-site); `notify-umbrella.yml` v0.3.1 (marola-site), v0.6.0 (marola-app) |",
+    "reusable_workflow_resolved_at_caller_ref": "| `submodule-docs-updated` | marola-site `notify-umbrella.yml` (`notify-umbrella.yml@v0.3.1`, on a push to `main` touching `README.md`, `docs/**`) | marola `pointer-sync.yml` |\n| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n"
+    + API_ROW,
     "release_upload_assets": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | marola-ml `corpus.version` | marola-ml `scripts/corpus-fetch.sh` |",
     "image_publish": "| `ghcr.io/marola-dev/marola-app` image | marola-app `docker.yml` (on a push to `main` touching `corpus.version`) | marola-site `marola-image` | marola-site `scripts/board-schema.sh` |",
     "deploy_pages_site": "| marola `docs.yml` | docs.marola.dev |\n| marola-site `site.yml` | marola.dev |",
     "pin_file_and_reader": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | marola-ml `corpus.version` | marola-ml `scripts/corpus-fetch.sh` |\n| marola-app `corpus.version` | marola-app `docker.yml` |\n| marola-site `marola-image` | marola-site `site.yml` |",
-    "branch_artifact_api_docs": "| `api-docs` branch | marola-app `api-docs.yml` (`api-docs.yml@v0.4.1`, on a push to `main`) | — | marola `scripts/fetch-api-docs.sh` |",
+    "branch_artifact_api_docs": API_ROW,
     "branch_artifact_site_data": "| `site-data` branch of marola-site | marola-app `ci.yml` (on a push to `main`) | — | marola-site `site.yml` |\n!pushes to marola-site",
     "compose_image_reader": "| `ghcr.io/marola-dev/marola-ml` image | marola-ml `docker-local.yml` (on a push to `main`) | — | marola-app `docker-compose.yml` |",
     "cross_repo_pr": "| PRs into marola-app: `recommendation_prompt.json`, `review_prompt.json` | marola-ml `compile-prompt.yml` (by hand) | — | marola-app |\n!pushes to marola-app",
     "cross_repo_push": "| pushes to marola-oods | marola-app `ingest.yml` (on a schedule) | — | marola-oods |",
 }
+
+
+def _devkit_tags(dk: Path) -> None:
+    def g(*args: str) -> None:
+        cfg = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+        subprocess.run(["git", "-C", str(dk), *cfg, *args], check=True, capture_output=True)
+
+    g("init", "-q")
+    g("add", "-A")
+    g("commit", "-qm", "v0.3.1", "--no-verify")
+    g("tag", "v0.3.1")
+    g("tag", "v0.4.1")
+    nu = dk / ".github/workflows/notify-umbrella.yml"
+    nu.write_text(
+        nu.read_text().replace("default: submodule-docs-updated", "default: submodule-updated")
+    )
+    g("commit", "-qam", "v0.6.0", "--no-verify")
+    g("tag", "v0.6.0")
 
 
 def self_test() -> int:
@@ -374,8 +448,20 @@ def self_test() -> int:
         for rel, text in FIXTURE.items():
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_text(text, encoding="utf-8")
-        w = scan(root)
+        for path in re.findall(r"path = (\S+)", FIXTURE[".gitmodules"]):
+            (root / path / ".git").write_text("gitdir: unused\n", encoding="utf-8")
+        _devkit_tags(root / ".devkit")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            w = scan(root)
         block = render(w)
+        (root / "marola-x").mkdir()
+        (root / ".gitmodules").write_text("[submodule]\n\tpath = marola-x\n", encoding="utf-8")
+        try:
+            scan(root)
+            uninit = ""
+        except SystemExit as e:
+            uninit = str(e)
         (root / "REPOS.md").write_text(
             f"# Repos\n\n{START}\nstale\n{END}\n\nAfter.\n", encoding="utf-8"
         )
@@ -386,6 +472,8 @@ def self_test() -> int:
         (name, all(x[1:] not in block if x[0] == "!" else x in rows for x in want.split("\n")))
         for name, want in CASES.items()
     ]
+    cases.append(("missing_callee_warns", "gemini-review.yml@v0.5.0 not found" in err.getvalue()))
+    cases.append(("uninitialised_submodule_fails", "marola-x is not checked out" in uninit))
     cases.append(("block_between_markers", f"{START}\n\n{block}\n{END}\n\nAfter." in repos_md))
     fails = [n for n, ok in cases if not ok]
     for name, ok in cases:
@@ -406,11 +494,13 @@ def main(argv: list[str] | None = None) -> int:
         "file", nargs="?", type=Path, help="rewrite the block between this file's markers"
     )
     ap.add_argument("--root", type=Path, default=Path.cwd())
+    ap.add_argument("--devkit", type=Path, help="default: <root>/.devkit, else this script's repo")
+    ap.add_argument("--name", default="marola", help="the umbrella's repo name")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
         return self_test()
-    block = render(scan(args.root))
+    block = render(scan(args.root, args.name, args.devkit))
     if args.file:
         write_block(args.file, block)
     else:
