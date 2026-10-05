@@ -114,16 +114,19 @@ No secrets.
 
 ## notify-umbrella
 
-Tells the umbrella a repo's docs changed via `repository_dispatch`, so it rebuilds within minutes
-instead of at its next daily cron (MIP-0070 §5.5). Modelled on h0ffmann/nix-config's
-`profile-ping.yml` — no checkout on either side, ~3 lines to call.
+Tells the umbrella every push to `main` via `repository_dispatch` (`submodule-updated`), so
+pointer-sync.yml can move pointers on the event instead of waiting for its daily cron, and that a
+repo's docs changed too (`submodule-docs-updated`) when the push touched `README.md` or `docs/**`,
+so docs.yml rebuilds within minutes (MIP-0070 §5.5, MIP-0076 §5.5 step 1). Modelled on
+h0ffmann/nix-config's `profile-ping.yml`. The caller needs no `paths:` filter: this workflow
+checks out the caller's own repo and diffs `github.event.before..github.sha` itself to decide
+which event types a given push earns.
 
 ```yaml
 name: notify umbrella
 on:
   push:
     branches: [main]
-    paths: [README.md, docs/**]
 jobs:
   notify:
     uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.5.0
@@ -134,13 +137,16 @@ jobs:
 | Input | Default | Notes |
 |---|---|---|
 | `umbrella` | `marola-dev/marola` | MAROLA_UMBRELLA, MIP-0070 §5.6 |
-| `event-type` | `submodule-docs-updated` | what the umbrella's docs workflow listens for |
+| `event-type` | `""` | deprecated, ignored (MIP-0076) — kept so a caller still passing it doesn't fail GitHub's input check |
 | `runner` | `ubuntu-latest` | resolved in the *caller's* repo |
 
 **Secret** `token` (optional): every repo passes the org secret `MAROLA_CROSS_REPO_PAT`, a
 fine-grained PAT with Contents: read & write on the umbrella (`repository_dispatch` needs it;
 `GITHUB_TOKEN` cannot reach another repo). Unset is a notice, not a failure — the umbrella's daily
 cron still catches the change.
+
+A zero or unreachable `github.event.before` (a branch's first push, or history rewritten out from
+under it) counts as a docs change, so both events go rather than silently dropping one.
 
 ## labels-sync
 
