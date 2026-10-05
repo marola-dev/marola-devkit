@@ -118,9 +118,10 @@ Tells the umbrella every push to `main` via `repository_dispatch` (`submodule-up
 pointer-sync.yml can move pointers on the event instead of waiting for its daily cron, and that a
 repo's docs changed too (`submodule-docs-updated`) when the push touched `README.md` or `docs/**`,
 so docs.yml rebuilds within minutes (MIP-0070 §5.5, MIP-0076 §5.5 step 1). Modelled on
-h0ffmann/nix-config's `profile-ping.yml`. The caller needs no `paths:` filter: this workflow
-checks out the caller's own repo and diffs `github.event.before..github.sha` itself to decide
-which event types a given push earns.
+h0ffmann/nix-config's `profile-ping.yml` — no checkout on either side. The caller needs no
+`paths:` filter: this workflow reads the compare API itself to decide which event types a given
+push earns (every caller sets `permissions: {}`, which a reusable workflow can only keep or
+lower, so it can't check its own repo out).
 
 ```yaml
 name: notify umbrella
@@ -145,8 +146,9 @@ fine-grained PAT with Contents: read & write on the umbrella (`repository_dispat
 `GITHUB_TOKEN` cannot reach another repo). Unset is a notice, not a failure — the umbrella's daily
 cron still catches the change.
 
-A zero or unreachable `github.event.before` (a branch's first push, or history rewritten out from
-under it) counts as a docs change, so both events go rather than silently dropping one.
+A zero `github.event.before` (a branch's first push), a compare API call that doesn't answer 200
+(e.g. `before` unknown to it after a force-push), or a truncated compare (the API caps its file
+list at 300) all count as a docs change too, so both events go rather than silently dropping one.
 
 ## labels-sync
 
