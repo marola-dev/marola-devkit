@@ -4,6 +4,11 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.5.1 — 2026-10-07
+
+- `gemini-review` retries a dropped connection to the Gemini API (`RemoteDisconnected`, a reset,
+  a timeout) after 20 s and 60 s, as it already did a 503; a 429 still fails at once (#34).
+
 ## v0.5.0 — 2026-10-04
 
 - `gemini-review` reviews fork PRs too, review only: the base branch is the workspace, the fork's
