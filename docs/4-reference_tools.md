@@ -62,51 +62,32 @@ extension rather than a devkit tool.
 
 ## skills-vendor
 
-A skill copied from another repo (`humanizer`, `ponytail`) is pinned the way a dependency is:
-`skills.lock` beside the skill directories names its upstream, the commit it was taken at and
-the git blob sha of every vendored file (the umbrella MIP on skills.lock). The lock is
-`<repo>/.claude/skills/skills.lock` unless `--lock` says otherwise; this repo's is
-`plugins/marola-devkit/skills/skills.lock`. A skill's files live in `<lock dir>/<name>/`.
-
-```json
-{
-  "version": 1,
-  "skills": {
-    "ponytail": {
-      "upstream": "DietrichGebert/ponytail",
-      "path": "skills/ponytail",
-      "commit": "b6c04480c03e8db2f035751d7c46289779ec3362",
-      "files": { "LICENSE": "<blob sha>", "SKILL.md": "<blob sha>" },
-      "license": "MIT",
-      "local_edits": null,
-      "hold": null,
-      "paths": { "LICENSE": "LICENSE" }
-    }
-  }
-}
-```
+A skill copied from another repo is pinned the way a dependency is (MIP-0080): `skills.lock`
+beside the skill directories names its upstream, the commit it was taken at and the git blob sha
+of every vendored file. The lock is `<repo>/.claude/skills/skills.lock` unless `--lock` says
+otherwise, and a skill's files live in `<lock dir>/<name>/`;
+[this repo's](https://github.com/marola-dev/marola-devkit/blob/main/plugins/marola-devkit/skills/skills.lock)
+shows the shape.
 
 | Field | Meaning |
 |---|---|
 | `upstream`, `path` | The GitHub repo and the skill's directory in it (`""` for the root) |
-| `commit` | The 40-char upstream commit the files were taken at, or `null` when it could not be found |
-| `files` | Each vendored file, relative to the skill directory, with the git blob sha (`sha1("blob <len>\0" + bytes)`) of the copy in the tree. Only these files are vendored: a file upstream adds later is not pulled until it is added here |
-| `paths` | Optional: a vendored file that lives outside `path` upstream (`"LICENSE": "LICENSE"` for a repo whose licence sits at its root) |
-| `license` | The SPDX id read from `SKILL.md`'s `license:` or the `LICENSE` file, or `null` |
-| `local_edits` | Optional: a patch, relative to the lock directory with paths relative to it (`git diff --relative` from there), re-applied after every update. Then `files` holds the shas of the edited copy and `upstream_files` the pristine upstream shas, which `outdated` compares |
+| `commit` | The upstream commit the files were taken at; `null` when `init` found none |
+| `files` | Each vendored file with its git blob sha. Only these files are vendored |
+| `paths` | Optional: a vendored file that sits elsewhere upstream (`"LICENSE": "LICENSE"`) |
+| `license` | The SPDX id from `SKILL.md`'s `license:` or the `LICENSE` file, or `null` |
+| `local_edits` | Optional: a patch relative to the lock directory, re-applied after every update; `files` then holds the edited shas and `upstream_files` the pristine ones |
 | `hold` | A reason to leave the skill where it is; `outdated` and `update` skip it |
 
 | Command | Does |
 |---|---|
-| `skills-vendor check` | Offline. Every file in each skill directory has the sha in `files`; a changed, missing or extra file fails. With no lock file: a message and exit 0, so `just quality` can call it in every repo |
-| `skills-vendor outdated [--min-age DAYS] [--json] [--strict]` | For each skill not on hold, the newest upstream commit touching `path` that is at least `--min-age` days old; `behind` or `current`, with a unified diff of each changed text file. Exit 0 unless `--strict` |
-| `skills-vendor update <name>... \| --all [--sha SHA] [--min-age DAYS] [--report FILE]` | Fetch the vendored files at that commit, rewrite them, re-apply `local_edits` (a patch that no longer applies fails and says so), rewrite the lock entry; never commits. `--report` writes the per-skill diffs as Markdown |
-| `skills-vendor init <name> --upstream o/r --path DIR [--sha SHA] [--paths FILE=UPSTREAM]` | A lock entry from the copy already in the tree. Without `--sha`, the newest of the last 200 commits touching `path` whose tree holds every vendored blob; none found, `commit` is `null` and it says so |
+| `check` | Offline: every file in each skill directory has the sha in `files`. No lock file: exit 0 |
+| `outdated [--min-age DAYS] [--json] [--strict]` | The newest upstream commit touching `path` at least `--min-age` days old, with a diff of what it changes |
+| `update <name>... \| --all [--sha SHA] [--min-age DAYS] [--report FILE]` | Fetch at that commit, re-apply `local_edits` (a patch that fails stops it), rewrite the lock; never commits |
+| `init <name> --upstream o/r --path DIR [--sha SHA] [--paths FILE=UPSTREAM]` | A lock entry from the copy already in the tree; without `--sha`, the newest of 200 upstream commits whose tree matches |
 
-The network commands read GitHub's REST API (`commits?path=`, `git/trees`) and
-raw.githubusercontent.com, with `GH_TOKEN` or `GITHUB_TOKEN` when set. `--git` reads a blobless
-clone of the upstream instead, for a host that blocks api.github.com but not github.com (the
-sandbox this was written in): `skills-vendor outdated --git`.
+Upstreams are read through a blobless `git clone` of `https://github.com/<upstream>`, so the tool
+works wherever that does, Actions included.
 | `mip-resolve` | `mip-resolve.sh` | (none) | Print a MIP's doc or `.tasks.md` (`MIP-NNNN [tasks]`), or with `--path` where it was found, by the lookup in [design](1-design.md#how-tools-find-the-umbrella) |
 | `api-docs-push` | `api-docs-push.sh` | (none) | `api-docs-push <dir> <remote> <sha> [--branch api-docs]`: force-push a directory as one orphan commit, the `api-docs` workflow's push step |
 

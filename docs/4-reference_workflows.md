@@ -3,7 +3,7 @@
 Eleven `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
 `ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
 (MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's, `gemini-review.yml` is
-marola-dev/marola#641's and `skills-update.yml` is the umbrella MIP on skills.lock's. A twelfth,
+marola-dev/marola#641's and `skills-update.yml` is MIP-0080's. A twelfth,
 `devkit-ci.yml`, is this repo's own CI — not reusable, nothing to call.
 
 Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
@@ -371,14 +371,12 @@ PR's CI.
 
 ## skills-update
 
-Re-vendor every skill in the caller's `skills.lock` at its upstream's newest commit at least
-`min-age` days old (`skills-vendor update --all`, [tools](4-reference_tools.md#skills-vendor)),
-then keep one PR open on `branch`, labelled `skills-update`, whose body is the per-skill diff
-(truncated past 60 kB). A lock with nothing behind pushes nothing. Nothing merges on its own: a
-person reads the diff. This repo calls it weekly from `skills.yml` for the plugin's own skills.
+`skills-vendor update --all` on the caller's `skills.lock`
+([tools](4-reference_tools.md#skills-vendor)), then one PR on `branch`, labelled `skills-update`,
+with the per-skill diff as its body. A lock with nothing behind pushes nothing, and nothing merges
+on its own. This repo calls it weekly from `skills.yml`.
 
 ```yaml
-name: skills
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -396,13 +394,12 @@ jobs:
 | Input | Default | Notes |
 |---|---|---|
 | `devkit-ref` | required | same tag as the `uses:` line |
-| `lock` | `.claude/skills/skills.lock` | the caller's lock; a missing one is a warning, not a failure |
-| `min-age` | `14` | days an upstream commit must have been public, so a bad upstream push can be reverted before it is vendored |
+| `lock` | `.claude/skills/skills.lock` | a missing lock is a warning, not a failure |
+| `min-age` | `14` | days an upstream commit must have been public before it is vendored |
 | `branch` | `chore/skills-update` | force-pushed on every run that finds a change |
 
-Secret `token`, optional: a PR opened with the default `GITHUB_TOKEN` starts no CI, so a caller
-that wants its checks on the update PR passes a PAT or App token with contents and pull-requests
-write.
+Secret `token`, optional: a PR opened with the default `GITHUB_TOKEN` starts no CI; one opened
+with a PAT or App token does.
 
 ## devkit-ci (not reusable)
 

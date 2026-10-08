@@ -42,7 +42,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `issues` | Labels sync, Definition of Ready, the `agent-ready` queue, claims, `tasks-to-issues`, the board |
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
 | `docs-lint` | MIP-0074's stale-content check over `README.md` and `docs/**/*.md` |
-| `skills-vendor` | Pin vendored skills to an upstream commit in `skills.lock`: `check` (offline), `outdated`, `update`, `init` |
+| `skills-vendor` | Pin vendored skills to an upstream commit in `skills.lock` (`check`, `outdated`, `update`, `init`) |
 | `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
@@ -61,8 +61,8 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 `humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `obsidian-vault`, `voice-note-ingest` and
 `voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor` agents; and three hooks
 (format on edit, a once-per-session nudge to run the repo's gate, a session-start summary).
-The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`, which the weekly
-`skills` workflow refreshes as a PR ([skills-vendor](docs/4-reference_tools.md#skills-vendor)).
+The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`
+([skills-vendor](docs/4-reference_tools.md#skills-vendor)).
 
 ## Contracts
 
