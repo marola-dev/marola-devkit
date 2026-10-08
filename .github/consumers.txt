@@ -1,0 +1,8 @@
+# Repos that pin the devkit; bump-consumers.yml opens one PR in each after a release.
+marola-dev/marola
+marola-dev/marola-app
+marola-dev/marola-site
+marola-dev/marola-ml
+marola-dev/marola-corpus
+marola-dev/marola-oods
+h0ffmann/ww3-gpu

@@ -22,3 +22,13 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "marola-devkit $GITHUB_REF_NAME"
+
+  consumers:
+    needs: release
+    permissions:
+      contents: read
+    uses: ./.github/workflows/bump-consumers.yml
+    with:
+      version: ${{ github.ref_name }}
+    secrets:
+      MAROLA_BUMP_TOKEN: ${{ secrets.MAROLA_BUMP_TOKEN }}

@@ -1,0 +1,35 @@
+# One pin-bump PR per consumer after a release (scripts/bump-consumers.sh). release.yml calls it
+# once the release is published; dispatch it by hand to retry or to bump to an older tag.
+# MAROLA_BUMP_TOKEN must reach every repo in .github/consumers.txt (h0ffmann/ww3-gpu included);
+# a PR opened with GITHUB_TOKEN would start no CI in the consumer, and could not reach it anyway.
+name: bump consumers
+
+on:
+  workflow_call:
+    inputs:
+      version: { type: string, required: true }
+    secrets:
+      MAROLA_BUMP_TOKEN: { required: true }
+  workflow_dispatch:
+    inputs:
+      version: { description: "X.Y.Z, an existing tag without the v", required: true }
+
+permissions: {}
+
+concurrency:
+  group: bump-consumers
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - env:
+          GH_TOKEN: ${{ secrets.MAROLA_BUMP_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: scripts/bump-consumers.sh "$VERSION"
