@@ -63,9 +63,13 @@ step 1 is skipped.
 Once the release is published, `release.yml` calls `bump-consumers.yml`, which opens one PR in
 each repo of `.github/consumers.txt` on `chore/devkit-vX.Y.Z`: the flake input and its
 `flake.lock` node, every devkit workflow `@v…`, `devkit-ref` and docs-lint clone, and the
-marketplace `ref`. A person merges each. It uses the org secret `MAROLA_CROSS_REPO_PAT`, so the
-PRs are authored by that token's owner; the token needs Contents, Pull requests and Workflows
-write on every listed repo. h0ffmann/ww3-gpu is outside the org token's reach and not listed: bump
+marketplace `ref`. A person merges each. The commits and PRs are marola-bot's, the org's GitHub
+App, through a short-lived token `actions/create-github-app-token` mints per run. Setting it up
+once: in marola-dev's Settings → Developer settings → GitHub Apps, create `marola-bot` (webhook
+off) with Repository permissions Contents, Pull requests and Workflows: Read and write; install
+it on the repos in `.github/consumers.txt`; put its App ID in the org variable
+`MAROLA_BOT_APP_ID` and a generated private key in the org secret `MAROLA_BOT_PRIVATE_KEY`, both
+visible to marola-devkit. h0ffmann/ww3-gpu is outside the org and not listed: bump
 the `@v…` and `devkit-ref` in its `skills.yml` by hand. Dispatch
 `bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
 Adding a consumer is one line in `.github/consumers.txt`.

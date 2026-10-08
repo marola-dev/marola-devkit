@@ -2,7 +2,7 @@
 # bump-consumers: after a devkit release, one PR per repo in .github/consumers.txt on
 # chore/devkit-vX.Y.Z, moving its pins (release.py --consumer) and, where it commits one, the
 # flake.lock's devkit node. A re-run force-updates the branch and edits the open PR. GH_TOKEN must
-# reach every repo; the PRs are authored by its owner. One repo failing doesn't stop the others.
+# reach every repo; BUMP_GIT_NAME/BUMP_GIT_EMAIL author the commits (bump-consumers.yml sets marola-bot's). One repo failing doesn't stop the others.
 #   scripts/bump-consumers.sh X.Y.Z
 #   scripts/bump-consumers.sh --self-test
 set -euo pipefail
@@ -53,7 +53,7 @@ bump() {
     echo "bump-consumers: $repo already pins $tag" >&2
     return 0
   fi
-  git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+  git -c user.name="${BUMP_GIT_NAME:-github-actions[bot]}" -c user.email="${BUMP_GIT_EMAIL:-41898282+github-actions[bot]@users.noreply.github.com}" \
     commit -qam "chore: marola-devkit $tag" \
     -m "Tested: release.py --consumer moved the pins${lock:+, nix flake update marola-devkit the lock}; this repo's CI gates the rest
 Cost: n/a (automation)
@@ -74,7 +74,7 @@ if [ -n "$one" ]; then
   exit
 fi
 
-[ -n "${GH_TOKEN:-}" ] || { echo "bump-consumers: GH_TOKEN is empty; give marola-devkit access to the org secret MAROLA_CROSS_REPO_PAT (docs/3-development.md, Releases)" >&2; exit 1; }
+[ -n "${GH_TOKEN:-}" ] || { echo "bump-consumers: GH_TOKEN is empty; set up the marola-bot GitHub App (docs/3-development.md, Releases)" >&2; exit 1; }
 # Each repo in its own process: set -e does not apply inside a function called from `||`.
 gh auth setup-git
 failed=()
