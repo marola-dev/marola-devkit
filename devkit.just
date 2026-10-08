@@ -119,6 +119,18 @@ branches-open *args:
 agents-check *args:
     agents-check {{ args }}
 
+# Every vendored skill matches .claude/skills/skills.lock (offline; a no-op without a lock).
+skills-check *args:
+    skills-vendor check {{ args }}
+
+# What each vendored skill's upstream changed since its pin (network, advisory).
+skills-outdated *args:
+    skills-vendor outdated {{ args }}
+
+# Re-vendor skills at upstream HEAD (or --sha) and rewrite the lock; never commits.
+skills-update *args:
+    skills-vendor update {{ args }}
+
 # Self-hosted Actions runner.
 runner-preflight:
     runner-preflight

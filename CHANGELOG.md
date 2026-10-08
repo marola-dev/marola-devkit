@@ -4,6 +4,17 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.6.0 — 2026-10-08
+
+- `skills-vendor` pins vendored skills to an upstream commit in `skills.lock` (the umbrella MIP
+  on skills.lock): `check` (offline, in `just quality` wherever a lock exists), `outdated`,
+  `update` and `init`, with `--git` for a host that blocks api.github.com. Recipes
+  `skills-check`, `skills-outdated`, `skills-update`.
+- The `skills-update` reusable workflow re-vendors a repo's skills weekly, 14 days behind upstream
+  HEAD, as one labelled PR with the diff in its body; `skills.yml` calls it here for the plugin's
+  `humanizer`, `ponytail`, `ponytail-review` and `ponytail-audit`, now pinned in
+  `plugins/marola-devkit/skills/skills.lock`. The label `skills-update` joins `labels.yml`.
+
 ## v0.5.1 — 2026-10-07
 
 - `gemini-review` retries a dropped connection to the Gemini API (`RemoteDisconnected`, a reset,

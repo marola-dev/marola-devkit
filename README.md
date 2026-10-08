@@ -5,13 +5,13 @@ and cost tools, the git hooks, the org invariants block, the issue forms and lab
 workflows, and a Claude Code plugin with the generic skills, agents and hooks. Every marola repo
 consumes it at a pinned version, and its own AGENTS.md says which pieces it opts out of.
 
-**Status:** this is v0.5.1; each repo pins its own version. Changes per release are in
+**Status:** this is v0.6.0; each repo pins its own version. Changes per release are in
 [CHANGELOG.md](https://github.com/marola-dev/marola-devkit/blob/main/CHANGELOG.md).
 
 ## Try it
 
 ```bash
-nix run github:marola-dev/marola-devkit/v0.5.1#docs-lint -- --self-test   # any tool, no checkout
+nix run github:marola-dev/marola-devkit/v0.6.0#docs-lint -- --self-test   # any tool, no checkout
 nix develop          # in a checkout: every tool on PATH, plus the lint toolchain
 just quality         # this repo's gates
 claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
@@ -42,6 +42,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `issues` | Labels sync, Definition of Ready, the `agent-ready` queue, claims, `tasks-to-issues`, the board |
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
 | `docs-lint` | MIP-0074's stale-content check over `README.md` and `docs/**/*.md` |
+| `skills-vendor` | Pin vendored skills to an upstream commit in `skills.lock`: `check` (offline), `outdated`, `update`, `init` |
 | `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
@@ -60,6 +61,8 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 `humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `obsidian-vault`, `voice-note-ingest` and
 `voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor` agents; and three hooks
 (format on edit, a once-per-session nudge to run the repo's gate, a session-start summary).
+The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`, which the weekly
+`skills` workflow refreshes as a PR ([skills-vendor](docs/4-reference_tools.md#skills-vendor)).
 
 ## Contracts
 
@@ -77,7 +80,7 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.5.1";
+  url = "github:marola-dev/marola-devkit/v0.6.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -97,7 +100,7 @@ import? '.devkit/devkit.just'
 
 A repo that defines a recipe with the same name needs `set allow-duplicate-recipes`.
 
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.5.1#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.6.0#uprd`.
 
 **Git hooks** are opt-in: `git config core.hooksPath .devkit/.githooks`. The contract a consuming
 repo implements is two recipes in its own justfile:
@@ -126,7 +129,7 @@ working exactly as before.
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.5.1" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.6.0" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -195,9 +198,9 @@ One caller, needing a second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.5.1
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.6.0
     with:
-      devkit-ref: v0.5.1
+      devkit-ref: v0.6.0
 ```
 
 This repo calls five of them on its own pull requests (`.github/workflows/pr.yml`: `python-ci`,
@@ -226,10 +229,10 @@ on:
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.1
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.6.0
     secrets: inherit
     with:
-      devkit-ref: v0.5.1
+      devkit-ref: v0.6.0
       check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
 ```
 
