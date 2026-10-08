@@ -23,7 +23,8 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
 ## Steps
 
 1. **Pick the number and slug.** Numbers are sequential, zero-padded to four digits. The next
-   number is one more than the highest in `docs/MIPs/README.md`. File:
+   number is one more than the highest in `docs/MIPs/README.md` and in every open PR that adds a
+   `docs/MIPs/MIP-NNNN-*.md`. File:
    `docs/MIPs/MIP-NNNN-<kebab-slug>.md`.
 2. **Read before writing.** Always: `AGENTS.md`, the system ARCHITECTURE's
    [local-first integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern)
@@ -33,7 +34,10 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
    confirm the format, the update frequency, the licence/terms, and whether a key is needed. Record
    what was checked, when, and what was *not* checked. A source you could not verify goes in
    "Open questions", not in "Design".
-4. **Write the MIP** using the template below. Every section is required; write "None" rather than
+4. **Write the MIP** using the umbrella's `docs/MIPs/TEMPLATE.md`, which wins over the copy
+   below where they differ; its Readiness rows (manually reviewed, written by, tasks, tests,
+   spec-kit, issues) are filled before the PR leaves draft, and every open question carries a
+   default. Otherwise, the template below. Every section is required; write "None" rather than
    deleting a heading. The numbering skips §10 on purpose, so §11 stays Open questions in every
    MIP. Keep it under ~250 lines; long research goes in an appendix at the end.
 5. **Add it to the index.** Append a row to `docs/MIPs/README.md`: number, title, status, date, and
@@ -96,6 +100,17 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
 | **Blocked by** | machine-readable, for the umbrella's `scripts/mip_graph.py`: a comma-separated list of MIP numbers that must land first, or the literal `none`. Numbers only — no prose, no phase gates, no "not really, but". If a relationship doesn't cleanly reduce to "MIP-NNNN must merge before this one can", it belongs in `Depends on` only, not here — a wrong edge in the generated graph is worse than a missing one |
 | **Risk** | the one thing most likely to make this not worth it |
 | **Cost so far** | the summed `Cost:` trailers of its merged PRs, or "—" if nothing has merged yet |
+
+### Readiness
+
+| | |
+|---|---|
+| **Manually reviewed** | `yes — <person>, YYYY-MM-DD` once a person has read it all; `no` until then |
+| **Written by** | `<person>, with <agent and model>`, or `<person>, by hand` |
+| **Tasks** | `MIP-NNNN.tasks.md`, or `none needed — <why>` |
+| **Tests** | the named tests §7 adds, or `none — <why>` |
+| **Spec-kit** | the spec-kit spec this MIP is tied to, or `none` |
+| **Issues** | one per tasks row, filed by the agent once Accepted; `not filed — Draft` before that |
 
 ## 1. Summary
 Two to four sentences: what changes for the user, and why now.
