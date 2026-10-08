@@ -1,8 +1,9 @@
-# Repos that pin the devkit; bump-consumers.yml opens one PR in each after a release.
+# Repos that pin the devkit; bump-consumers.yml opens one PR in each after a release. Only
+# marola-dev repos: the org's fine-grained PAT cannot reach h0ffmann/ww3-gpu, whose two pins in
+# .github/workflows/skills.yml are bumped by hand.
 marola-dev/marola
 marola-dev/marola-app
 marola-dev/marola-site
 marola-dev/marola-ml
 marola-dev/marola-corpus
 marola-dev/marola-oods
-h0ffmann/ww3-gpu
