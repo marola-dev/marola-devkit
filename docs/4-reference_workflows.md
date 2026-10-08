@@ -286,6 +286,7 @@ jobs:
 | `devkit-ref` | *(required)* | pin to the same tag as `uses:` |
 | `devkit-repo` | `marola-dev/marola-devkit` | |
 | `umbrella` | `""` | MAROLA_UMBRELLA — resolves a MIP-scoped branch's doc link when this repo carries no `docs/MIPs/` of its own |
+| `deny-branches` | `^claude/project-thread-` | ERE: the `branch` job fails a PR whose head branch matches, so a generic session name never reaches review. Empty turns it off |
 
 `umbrella` defaults to empty, not `marola-dev/marola`: an empty `MAROLA_UMBRELLA` env var and an
 unset one are the same thing to `scripts/lib/mip_ref.sh`'s own `${MAROLA_UMBRELLA:-marola-dev/marola}`,
