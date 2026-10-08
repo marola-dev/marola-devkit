@@ -22,6 +22,7 @@ quality:
     bash tests/self-tests.sh
     scripts/agents-check.sh
     python3 scripts/docs_lint.py
+    python3 scripts/skills_vendor.py check --lock plugins/marola-devkit/skills/skills.lock
     if command -v claude >/dev/null; then claude plugin validate .; else echo "claude not on PATH — skipping plugin validate"; fi
 
 # The git hooks' contract (README): fast checks at commit, the full gate at push.

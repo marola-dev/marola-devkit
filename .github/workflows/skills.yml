@@ -1,0 +1,20 @@
+name: skills
+
+# Weekly: re-vendor the plugin's skills from their upstreams, 14 days behind HEAD, as one PR
+# (the umbrella MIP on skills.lock). The devkit calls its own reusable workflow at the pushed
+# commit, as pr.yml does, so a change to it runs in a real caller before a tag.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    uses: ./.github/workflows/skills-update.yml
+    with:
+      devkit-ref: ${{ github.sha }}
+      lock: plugins/marola-devkit/skills/skills.lock

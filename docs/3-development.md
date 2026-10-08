@@ -10,7 +10,7 @@ releases) are at <https://docs.marola.dev/>; this page covers what is specific t
 
 | Command | Runs |
 |---|---|
-| `just quality` | `ruff check`, `ruff format --check`, `shellcheck --severity=error` over the scripts, hooks and statusline, `actionlint`, `tests/self-tests.sh`, `agents-check`, `docs-lint`, and `claude plugin validate .` when `claude` is on `PATH` |
+| `just quality` | `ruff check`, `ruff format --check`, `shellcheck --severity=error` over the scripts, hooks and statusline, `actionlint`, `tests/self-tests.sh`, `agents-check`, `docs-lint`, `skills-vendor check` over the plugin's `skills.lock`, and `claude plugin validate .` when `claude` is on `PATH` |
 | `just precommit` | `ruff check`, the same shellcheck, `agents-check`: the pre-commit hook's recipe |
 | `just prepush` | `just quality`: the pre-push hook's recipe |
 | `bash tests/self-tests.sh` | Every `--self-test`, one line per script |
