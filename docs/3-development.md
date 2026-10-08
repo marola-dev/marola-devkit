@@ -58,8 +58,15 @@ installed copy is stale), `flake.nix`'s package version and every documented pin
    the GitHub release.
 
 `--dry-run` prints what either step would do. When a feature PR already moved the versions,
-step 1 is skipped. Consumers adopt a release by bumping their flake input, workflow
-`@v…`/`devkit-ref` and marketplace `ref` in one PR each.
+step 1 is skipped.
+
+Once the release is published, `release.yml` calls `bump-consumers.yml`, which opens one PR in
+each repo of `.github/consumers.txt` on `chore/devkit-vX.Y.Z`: the flake input and its
+`flake.lock` node, every devkit workflow `@v…`, `devkit-ref` and docs-lint clone, and the
+marketplace `ref`. A person merges each. It needs the `MAROLA_BUMP_TOKEN` secret, a token that
+can push and open PRs in every listed repo; the PRs are authored by its owner. Dispatch
+`bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
+Adding a consumer is one line in `.github/consumers.txt`.
 
 ## Secrets and cost
 

@@ -9,6 +9,8 @@ Two runs of the same command, with a human merge between them:
   the GitHub release from it.
 
 `--check [X.Y.Z]` only verifies every location agrees (release.yml runs it against the tag).
+`--consumer DIR X.Y.Z` moves a consumer checkout's devkit pins (bump-consumers.yml); its
+flake.lock is nix's job.
 """
 
 import re
@@ -28,6 +30,13 @@ PIN = re.compile(
     rf'|marola-devkit", "ref": "v|\*\*Status:\*\* this is v)({SEMVER})()'
 )
 PIN_GLOBS = ["README.md", "docs/**/*.md", ".github/workflows/*.yml"]
+CLONE = re.compile(rf"(-b v)({SEMVER})( https://github\.com/marola-dev/marola-devkit)")
+CONSUMER_GLOBS = [
+    "flake.nix",
+    ".claude/settings.json",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+]
 
 
 def locations(root):
@@ -61,6 +70,20 @@ def bump(root, version):
         new = rx.sub(lambda m: m.group(1) + version + m.group(3), text)
         if new != text:
             p.write_text(new)
+
+
+def consumer(root, version):
+    """Move a consumer's devkit pins to version; the files changed."""
+    changed = []
+    for p in sorted({p for g in CONSUMER_GLOBS for p in root.glob(g)}):
+        text = p.read_text()
+        new = text
+        for rx in (PIN, CLONE):
+            new = rx.sub(lambda m: m.group(1) + version + m.group(3), new)
+        if new != text:
+            p.write_text(new)
+            changed.append(p.relative_to(root).as_posix())
+    return changed
 
 
 def changelog(root, version, date, subjects):
@@ -174,12 +197,41 @@ def self_test():
         assert "Intro.\n\n## v0.6.0 — 2026-10-08\n\n- feat: a\n\n## v0.5.1" in cl, cl
         (root / "flake.nix").write_text("nothing\n")
         assert "flake.nix: no version found" in mismatches(root, "0.6.0")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        files = {
+            "flake.nix": 'url = "github:marola-dev/marola-devkit/v0.4.1";\n',
+            ".claude/settings.json": '"marola-devkit": { "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.3.1" } }\n',
+            ".github/workflows/ci.yml": (
+                "    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.4.1\n"
+                "      - uses: actions/checkout@v7\n"
+                "        git clone -q --depth 1 -b v0.4.1 https://github.com/marola-dev/marola-devkit /tmp/devkit\n"
+                "        git clone -q -b v1.2.3 https://github.com/other/repo\n"
+            ),
+            ".github/workflows/x.yml": "uses: actions/setup-python@v6.0.0\n",
+        }
+        for rel, text in files.items():
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text(text)
+        changed = consumer(root, "0.6.0")
+        assert changed == [".claude/settings.json", ".github/workflows/ci.yml", "flake.nix"], (
+            changed
+        )
+        ci = (root / ".github/workflows/ci.yml").read_text()
+        assert ci.count("0.6.0") == 2 and "v1.2.3" in ci and "checkout@v7" in ci, ci
+        assert '"ref": "v0.6.0"' in (root / ".claude/settings.json").read_text()
+        assert consumer(root, "0.6.0") == [], "a second run changed something"
     print("release: self-test ok", file=sys.stderr)
 
 
 def main(argv):
     if argv[:1] == ["--self-test"]:
         return self_test()
+    if argv[:1] == ["--consumer"]:
+        if len(argv) != 3 or not re.fullmatch(rf"v?{SEMVER}", argv[2]):
+            die("usage: release.py --consumer <dir> <X.Y.Z>")
+        print("\n".join(consumer(Path(argv[1]), argv[2].removeprefix("v"))))
+        return
     if argv[:1] == ["--check"]:
         root = Path(git("rev-parse", "--show-toplevel"))
         version = (argv[1] if len(argv) > 1 else "").removeprefix("v")
