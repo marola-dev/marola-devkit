@@ -28,9 +28,7 @@ model cannot start it on its own.
 | `obsidian-vault` | Saving or resuming a session handoff, or refreshing the marola note in the maintainer's vault | Vault at `MAROLA_OBSIDIAN_VAULT`; usually invisible inside ai-jail. Has evals |
 
 Where a vendored skill disagrees with a repo's AGENTS.md, AGENTS.md wins. The four vendored
-skills are pinned in `skills.lock` beside them: `just quality` checks the copies against it, and
-the weekly `skills` workflow opens a PR when an upstream moved
-([skills-vendor](4-reference_tools.md#skills-vendor)).
+skills are pinned in `skills.lock` beside them ([skills-vendor](4-reference_tools.md#skills-vendor)).
 
 ## Agents
 

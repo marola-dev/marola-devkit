@@ -1,8 +1,7 @@
 name: skills
 
-# Weekly: re-vendor the plugin's skills from their upstreams, 14 days behind HEAD, as one PR
-# (the umbrella MIP on skills.lock). The devkit calls its own reusable workflow at the pushed
-# commit, as pr.yml does, so a change to it runs in a real caller before a tag.
+# Weekly: re-vendor the plugin's skills, 14 days behind upstream HEAD, as one PR (MIP-0080). The
+# devkit calls its own reusable workflow at the pushed commit, as pr.yml does.
 on:
   schedule:
     - cron: "0 6 * * 1"
