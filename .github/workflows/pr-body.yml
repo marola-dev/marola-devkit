@@ -52,7 +52,7 @@ jobs:
           DENY: ${{ inputs.deny-branches }}
         run: |
           if [ -n "$DENY" ] && grep -Eq -- "$DENY" <<<"$HEAD_REF"; then
-            echo "::error::branch '$HEAD_REF' matches '$DENY': push the work to a branch named for the change (fix/…, feat/…, chore/…) and open the PR from it"
+            echo "::error::branch '$HEAD_REF' matches '$DENY': push the work to claude/<issue-number>-<short-kebab-slug> (git push -u origin HEAD:claude/<issue>-<slug>) and open the PR from it"
             exit 1
           fi
 
