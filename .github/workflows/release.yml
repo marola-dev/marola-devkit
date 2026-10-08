@@ -31,4 +31,4 @@ jobs:
     with:
       version: ${{ github.ref_name }}
     secrets:
-      MAROLA_CROSS_REPO_PAT: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
+      MAROLA_BOT_PRIVATE_KEY: ${{ secrets.MAROLA_BOT_PRIVATE_KEY }}
