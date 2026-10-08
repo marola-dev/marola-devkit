@@ -26,6 +26,12 @@ on:
           the same as an unset one, so this default stays the one place that value lives.
         type: string
         default: ""
+      deny-branches:
+        description: >-
+          ERE; a PR whose head branch matches fails the `branch` job. A generic session name says
+          nothing about the change, in the PR list or in `git log`. Empty turns the check off.
+        type: string
+        default: "^claude/project-thread-"
 
 concurrency:
   group: pr-body-${{ github.event.pull_request.number }}
@@ -36,6 +42,20 @@ permissions:
   pull-requests: write
 
 jobs:
+  branch:
+    if: github.event.pull_request.state == 'open'
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          DENY: ${{ inputs.deny-branches }}
+        run: |
+          if [ -n "$DENY" ] && grep -Eq -- "$DENY" <<<"$HEAD_REF"; then
+            echo "::error::branch '$HEAD_REF' matches '$DENY': push the work to a branch named for the change (fix/…, feat/…, chore/…) and open the PR from it"
+            exit 1
+          fi
+
   fill:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository
