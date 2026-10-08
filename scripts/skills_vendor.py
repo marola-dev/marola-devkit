@@ -106,6 +106,12 @@ class Upstream:
         lines = git(["ls-tree", "-r", sha], self.dir).splitlines()
         return {ln.split("\t", 1)[1]: ln.split()[2] for ln in lines}
 
+    def is_ancestor(self, a: str, b: str) -> bool:
+        return (
+            subprocess.run(["git", "merge-base", "--is-ancestor", a, b], cwd=self.dir).returncode
+            == 0
+        )
+
     def blob(self, sha: str, path: str) -> bytes:
         return git(["cat-file", "blob", f"{sha}:{path}"], self.dir, binary=True)
 
@@ -141,6 +147,12 @@ def skill_report(lock_file: Path, name: str, entry: dict, min_age: int, sha: str
     found = [(sha, datetime.now(UTC))] if sha else up.commits(entry["path"], 1, min_age)
     if not found:
         return {"name": name, "status": "no upstream commit", "reason": "none old enough"}
+    # A pin a person moved past --min-age by hand is newer, not behind: never step it back.
+    if not sha and entry.get("commit") and up.is_ancestor(found[0][0], entry["commit"]):
+        pin = entry["commit"]
+        found = [
+            (pin, datetime.fromisoformat(git(["log", "-1", "--format=%cI", pin], up.dir).strip()))
+        ]
     (target, date), pinned = found[0], entry.get("upstream_files") or entry["files"]
     tree, changed, diff = up.tree(target), [], ""
     for rel in sorted(entry["files"]):
@@ -310,6 +322,9 @@ def self_test() -> int:
         assert f"### x: {sha_a[:7]} -> {sha_b[:7]}" in report.read_text()
         assert "+new" in report.read_text()
         assert check_problems(lock_file) == []
+        assert outdated(14)["status"] == "current", "a pin newer than --min-age was stepped back"
+        assert cmd_update(lock_file, [], None, 14, None) == 0
+        assert read_lock(lock_file)["skills"]["x"]["commit"] == sha_b
 
         # local_edits: `files` holds the edited shas, `upstream_files` the pristine ones.
         hdr = "--- a/x/SKILL.md\n+++ b/x/SKILL.md\n"
