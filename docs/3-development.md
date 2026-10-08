@@ -63,8 +63,10 @@ step 1 is skipped.
 Once the release is published, `release.yml` calls `bump-consumers.yml`, which opens one PR in
 each repo of `.github/consumers.txt` on `chore/devkit-vX.Y.Z`: the flake input and its
 `flake.lock` node, every devkit workflow `@v…`, `devkit-ref` and docs-lint clone, and the
-marketplace `ref`. A person merges each. It needs the `MAROLA_BUMP_TOKEN` secret, a token that
-can push and open PRs in every listed repo; the PRs are authored by its owner. Dispatch
+marketplace `ref`. A person merges each. It uses the org secret `MAROLA_CROSS_REPO_PAT`, so the
+PRs are authored by that token's owner; the token needs Contents, Pull requests and Workflows
+write on every listed repo. h0ffmann/ww3-gpu is outside the org token's reach and not listed: bump
+the `@v…` and `devkit-ref` in its `skills.yml` by hand. Dispatch
 `bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
 Adding a consumer is one line in `.github/consumers.txt`.
 
