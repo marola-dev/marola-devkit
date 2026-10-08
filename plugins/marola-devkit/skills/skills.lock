@@ -4,10 +4,10 @@
     "humanizer": {
       "upstream": "blader/humanizer",
       "path": "",
-      "commit": "fbdde4cd807509a4afecf062c670515ce5bd7736",
+      "commit": "8039b2fa620a072197c3c15058b361b7dcebd833",
       "files": {
         "LICENSE": "625297fb778f32eb39d3a5b97e3e3b611b7304d6",
-        "SKILL.md": "d375fbf3e3ee8fb047c379bced82df3713c6ed3b"
+        "SKILL.md": "19fc634208e8cc6ae55d4ff287152583216fd244"
       },
       "license": "MIT",
       "local_edits": null,
