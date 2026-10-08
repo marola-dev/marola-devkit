@@ -1,0 +1,24 @@
+# A pushed v* tag (`just release X.Y.Z`, run on main once the release PR merged) becomes a
+# published GitHub release. A tag whose versions disagree with it gets none.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/release.py --check "$GITHUB_REF_NAME"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "marola-devkit $GITHUB_REF_NAME"

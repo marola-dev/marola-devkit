@@ -44,17 +44,22 @@ at the real repo, and `git -C <tmp> config` once rewrote this repo's `.git/confi
 
 ## Releases
 
-A change that alters behaviour for consumers is a release. These move together in the PR:
+A change that alters behaviour for consumers is a release. Its version lives in
+`plugins/marola-devkit/.claude-plugin/plugin.json` (Claude Code uses it to decide when an
+installed copy is stale), `flake.nix`'s package version and every documented pin in `README.md`,
+`docs/` and the workflow comments; `just quality` fails when they disagree
+(`scripts/release.py --check`, at [scripts/release.py](https://github.com/marola-dev/marola-devkit/blob/main/scripts/release.py)).
 
-- `plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`: Claude Code uses it to decide
-  when an installed copy is stale;
-- `flake.nix`'s package `version`;
-- every documented pin in `README.md` and `docs/` (`github:marola-dev/marola-devkit/v…`, each
-  workflow `@v…` and `devkit-ref`, the marketplace `ref`);
-- a `CHANGELOG.md` entry, newest first.
+1. On an up-to-date `main`, `just release X.Y.Z` writes the version everywhere, adds a
+   `CHANGELOG.md` heading listing the commits since the last tag, and pushes
+   `chore/release-vX.Y.Z`. Turn the list into prose and open the PR with `just pr`.
+2. After it merges, `just release X.Y.Z` again on `main`: the versions now match, so it tags
+   `vX.Y.Z` and pushes the tag. `release.yml` checks the versions against the tag and publishes
+   the GitHub release.
 
-A human tags `vX.Y.Z` on `main` after the merge. Consumers adopt it by bumping their flake input,
-workflow `@v…`/`devkit-ref` and marketplace `ref` in one PR each.
+`--dry-run` prints what either step would do. When a feature PR already moved the versions,
+step 1 is skipped. Consumers adopt a release by bumping their flake input, workflow
+`@v…`/`devkit-ref` and marketplace `ref` in one PR each.
 
 ## Secrets and cost
 

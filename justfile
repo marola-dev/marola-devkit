@@ -23,7 +23,13 @@ quality:
     scripts/agents-check.sh
     python3 scripts/docs_lint.py
     python3 scripts/skills_vendor.py check --lock plugins/marola-devkit/skills/skills.lock
+    python3 scripts/release.py --check
     if command -v claude >/dev/null; then claude plugin validate .; else echo "claude not on PATH — skipping plugin validate"; fi
+
+# Release the devkit: a version-bump branch for the release PR, or, once main carries X.Y.Z, its tag.
+#   just release 0.7.0 [--dry-run]
+release *args:
+    python3 scripts/release.py {{ args }}
 
 # The git hooks' contract (README): fast checks at commit, the full gate at push.
 precommit:
