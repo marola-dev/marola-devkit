@@ -30,9 +30,10 @@ START, END = "<!-- wiring:start -->", "<!-- wiring:end -->"
 READERS = ("scripts/**/*", "justfile", "Dockerfile*", "docker-compose*.yml", "build.sbt")
 USES = re.compile(rf"^{ORG}/([\w.-]+)/\.github/workflows/([\w.-]+)@([\w.-]+)$")
 IMAGE = re.compile(rf"ghcr\.io/{ORG}/[\w.-]+")
-RELEASE = re.compile(r"gh release (?:upload|create)\s+\S+([^\n]*)")
-# gh release flags that take a value; everything else after the tag that is not a flag is a file.
+RELEASE = re.compile(r"gh release (?:upload|create)\b([^\n]*)")
+# gh release flags that take a value; the first other argument is the tag, the rest are files.
 VALUED = {"--repo", "-R", "--title", "-t", "--notes", "-n", "--notes-file", "-F", "--target"}
+VALUED |= {"--discussion-category", "--notes-start-tag"}
 ASSIGN = re.compile(r"""^\s*(\w+)=["']?([^"'\s]+)""", re.M)
 SHVAR = re.compile(r"\$\{?(\w+)\}?")
 EXPR = re.compile(r"\$\{\{\s*(env|inputs|github)\.([\w-]+)\s*\}\}")
@@ -83,18 +84,22 @@ def read(p: Path) -> str:
 
 def release_files(run: str) -> list[str]:
     out: list[str] = []
-    for rest in RELEASE.findall(run):
+    for rest in RELEASE.findall(run.replace("\\\n", " ")):
+        lex = shlex.shlex(rest, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
         try:
-            toks = shlex.split(rest.rstrip(" \\"), comments=True)
+            toks = list(lex)
         except ValueError:
             toks = rest.split()
+        args: list[str] = []
         skip = False
         for tok in toks:
-            if tok in ("&&", "||", "|", ";"):
+            if set(tok) <= set(lex.punctuation_chars):
                 break
             if not skip and not tok.startswith("-"):
-                out.append(tok)
+                args.append(tok)
             skip = not skip and tok in VALUED
+        out += args[1:]
     return out
 
 
@@ -179,7 +184,8 @@ def effects(doc: dict, repo: str, inputs: dict, callee) -> list[tuple]:
                 given |= {k: sub(v, env, inputs) for k, v in (job.get("with") or {}).items()}
                 via = f"`{m[2]}@{m[3]}`{note}"
                 out += [(k, v, via) for k, v, _ in effects(target, repo, given, callee)]
-            out.append(("ref", (m[2], m[3]), ""))
+            if m[1] == "marola-devkit":
+                out.append(("ref", (m[2], m[3]), ""))
             continue
         checkouts: dict[str, tuple[str, str]] = {}
         for step in job.get("steps") or []:
@@ -201,7 +207,8 @@ def effects(doc: dict, repo: str, inputs: dict, callee) -> list[tuple]:
             sent = re.findall(r"event_type=([^\s\"']*)", sub(run, senv, inputs))
             out += [("send", t, "") for t in sent if t and "$" not in t]
             if "/dispatches" in run:
-                out += [("send", sub(v, {}, inputs), "") for k, v in senv.items() if "EVENT" in k]
+                evs = [sub(v, {}, inputs) for k, v in senv.items() if "EVENT" in k]
+                out += [("send", t, "") for t in evs if "$" not in t]
             for asset in release_files(run):
                 name = sub(asset, assigned, {}).rsplit("/", 1)[-1]
                 out.append(("asset", SHVAR.sub("<tag>", name), ""))
@@ -401,6 +408,7 @@ FIXTURE = {
     "marola-site/marola-image": "ghcr.io/marola-dev/marola-app:jvm-8a29976@sha256:00\n",
     "marola-site/scripts/board-schema.sh": '# marola-image is read here\nref="$(cat "$root/marola-image")"\n',
     "marola-corpus/.github/workflows/api-docs.yml": "on: {push: {branches: [main]}}\njobs:\n  a:\n    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v9.9.9\n",
+    "marola-site/.github/workflows/odd.yml": "on: {workflow_dispatch: {}}\njobs:\n  r:\n    uses: marola-dev/marola-app/.github/workflows/reusable.yml@main\n  d:\n    env: {EVENT_TYPE: '${{ inputs.ev }}'}\n    steps:\n      - run: curl https://api.github.com/repos/x/dispatches -d y\n",
     "marola-site/.github/workflows/gemini.yml": "on: {pull_request: {}}\njobs:\n  g:\n    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.0\n",
     "marola-corpus/.github/workflows/release.yml": 'on: {push: {tags: [\'v*\']}}\njobs:\n  t:\n    steps:\n      - run: |\n          file=".tmp/marola-corpus-$TAG.tar.gz"\n          gh release upload "$TAG" "$file"\n',
     "marola-app/.github/workflows/docker.yml": "on: {push: {branches: [main], paths: [corpus.version]}}\nenv: {IMAGE: 'ghcr.io/${{ github.repository_owner }}/marola-app'}\njobs:\n  jvm:\n    steps:\n      - uses: docker/build-push-action@v7\n",
@@ -434,7 +442,9 @@ CASES = {
     "reusable_workflow_resolved_at_caller_ref": "| `submodule-docs-updated` | marola-site `notify-umbrella.yml` (`notify-umbrella.yml@v0.3.1`, on a push to `main` touching `README.md`, `docs/**`) | marola `pointer-sync.yml` |\n| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n"
     + API_ROW,
     "release_upload_assets": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | marola-ml `corpus.version` | marola-ml `scripts/corpus-fetch.sh` |",
-    "release_create_without_assets": "!`--repo` release asset\n!`<tag>` release asset",
+    "release_create_without_assets": "!marola `release.yml`",
+    "only_devkit_calls_in_tag_row": "!reusable.yml",
+    "unresolved_event_type_not_sent": "!inputs.ev",
     "image_publish": "| `ghcr.io/marola-dev/marola-app` image | marola-app `docker.yml` (on a push to `main` touching `corpus.version`) | marola-site `marola-image` | marola-site `scripts/board-schema.sh` |",
     "deploy_pages_site": "| marola `docs.yml` | docs.marola.dev |\n| marola-site `site.yml` | marola.dev |",
     "pin_file_and_reader": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | marola-ml `corpus.version` | marola-ml `scripts/corpus-fetch.sh` |\n| marola-app `corpus.version` | marola-app `docker.yml` |\n| marola-site `marola-image` | marola-site `site.yml` |",
@@ -494,6 +504,8 @@ def self_test() -> int:
         (name, all(x[1:] not in block if x[0] == "!" else x in rows for x in want.split("\n")))
         for name, want in CASES.items()
     ]
+    shell = 'gh release upload --clobber "$TAG" "$f"; echo done\ngh release create "$TAG" --discussion-category General --notes-start-tag v1 \\\n  dist/a.tgz>out.log\n'
+    cases.append(("release_files_shell_forms", release_files(shell) == ["$f", "dist/a.tgz"]))
     cases.append(("missing_callee_warns", "gemini-review.yml@v0.5.0 not found" in err.getvalue()))
     cases.append(("uninitialised_submodule_fails", "marola-x is not checked out" in uninit))
     cases.append(("block_between_markers", f"{START}\n\n{block}\n{END}\n\nAfter." in repos_md))
