@@ -10,7 +10,7 @@ releases) are at <https://docs.marola.dev/>; this page covers what is specific t
 
 | Command | Runs |
 |---|---|
-| `just quality` | `ruff check`, `ruff format --check`, `shellcheck --severity=error` over the scripts, hooks and statusline, `actionlint`, `tests/self-tests.sh`, `agents-check`, `docs-lint`, and `claude plugin validate .` when `claude` is on `PATH` |
+| `just quality` | `ruff check`, `ruff format --check`, `shellcheck --severity=error` over the scripts, hooks and statusline, `actionlint`, `tests/self-tests.sh`, `agents-check`, `docs-lint`, `skills-vendor check` over the plugin's `skills.lock`, and `claude plugin validate .` when `claude` is on `PATH` |
 | `just precommit` | `ruff check`, the same shellcheck, `agents-check`: the pre-commit hook's recipe |
 | `just prepush` | `just quality`: the pre-push hook's recipe |
 | `bash tests/self-tests.sh` | Every `--self-test`, one line per script |
@@ -44,17 +44,31 @@ at the real repo, and `git -C <tmp> config` once rewrote this repo's `.git/confi
 
 ## Releases
 
-A change that alters behaviour for consumers is a release. These move together in the PR:
+A change that alters behaviour for consumers is a release. Its version lives in
+`plugins/marola-devkit/.claude-plugin/plugin.json` (Claude Code uses it to decide when an
+installed copy is stale), `flake.nix`'s package version and every documented pin in `README.md`,
+`docs/` and the workflow comments; `just quality` fails when they disagree
+(`scripts/release.py --check`, at [scripts/release.py](https://github.com/marola-dev/marola-devkit/blob/main/scripts/release.py)).
 
-- `plugins/marola-devkit/.claude-plugin/plugin.json`'s `version`: Claude Code uses it to decide
-  when an installed copy is stale;
-- `flake.nix`'s package `version`;
-- every documented pin in `README.md` and `docs/` (`github:marola-dev/marola-devkit/v…`, each
-  workflow `@v…` and `devkit-ref`, the marketplace `ref`);
-- a `CHANGELOG.md` entry, newest first.
+1. On an up-to-date `main`, `just release X.Y.Z` writes the version everywhere, adds a
+   `CHANGELOG.md` heading listing the commits since the last tag, and pushes
+   `chore/release-vX.Y.Z`. Turn the list into prose and open the PR with `just pr`.
+2. After it merges, `just release X.Y.Z` again on `main`: the versions now match, so it tags
+   `vX.Y.Z` and pushes the tag. `release.yml` checks the versions against the tag and publishes
+   the GitHub release.
 
-A human tags `vX.Y.Z` on `main` after the merge. Consumers adopt it by bumping their flake input,
-workflow `@v…`/`devkit-ref` and marketplace `ref` in one PR each.
+`--dry-run` prints what either step would do. When a feature PR already moved the versions,
+step 1 is skipped.
+
+Once the release is published, `release.yml` calls `bump-consumers.yml`, which opens one PR in
+each repo of `.github/consumers.txt` on `chore/devkit-vX.Y.Z`: the flake input and its
+`flake.lock` node, every devkit workflow `@v…`, `devkit-ref` and docs-lint clone, and the
+marketplace `ref`. A person merges each. It uses the org secret `MAROLA_CROSS_REPO_PAT`, so the
+PRs are authored by that token's owner; the token needs Contents, Pull requests and Workflows
+write on every listed repo. h0ffmann/ww3-gpu is outside the org token's reach and not listed: bump
+the `@v…` and `devkit-ref` in its `skills.yml` by hand. Dispatch
+`bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
+Adding a consumer is one line in `.github/consumers.txt`.
 
 ## Secrets and cost
 

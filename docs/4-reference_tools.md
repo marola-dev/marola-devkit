@@ -59,6 +59,36 @@ extension rather than a devkit tool.
 | `docs-lint` | `docs_lint.py` | (none) | MIP-0074 §7's stale-content check over `README.md` and `docs/**/*.md`: undefined or unmarked foreign recipes, another repo's paths, split-era wording, `docs/index.md`, links leaving the repo |
 | `wiring` | `wiring.py` | `just wiring` | MIP-0076 §5.1's four tables (artifact, dispatch, pin bump, deploy), parsed from the umbrella's and every submodule's workflows, pin files, scripts, justfiles, Dockerfiles, compose files and `build.sbt`, with each devkit workflow call's ref. `wiring [FILE]` prints the block or rewrites it between FILE's `wiring:start`/`wiring:end` markers; run it in an umbrella checkout with submodules |
 | `workflow-runners` | `workflow_runners.py` | (none) | Fail when any workflow but the GPU publish one can reach a self-hosted runner ([runners](4-reference_runners.md)) |
+| `skills-vendor` | `skills_vendor.py` | `just skills-check`, `just skills-outdated`, `just skills-update` | Pin vendored skills to an upstream commit in `skills.lock` (below) |
+
+## skills-vendor
+
+A skill copied from another repo is pinned the way a dependency is (MIP-0080): `skills.lock`
+beside the skill directories names its upstream, the commit it was taken at and the git blob sha
+of every vendored file. The lock is `<repo>/.claude/skills/skills.lock` unless `--lock` says
+otherwise, and a skill's files live in `<lock dir>/<name>/`;
+[this repo's](https://github.com/marola-dev/marola-devkit/blob/main/plugins/marola-devkit/skills/skills.lock)
+shows the shape.
+
+| Field | Meaning |
+|---|---|
+| `upstream`, `path` | The GitHub repo and the skill's directory in it (`""` for the root) |
+| `commit` | The upstream commit the files were taken at; `null` when `init` found none |
+| `files` | Each vendored file with its git blob sha. Only these files are vendored |
+| `paths` | Optional: a vendored file that sits elsewhere upstream (`"LICENSE": "LICENSE"`) |
+| `license` | The SPDX id from `SKILL.md`'s `license:` or the `LICENSE` file, or `null` |
+| `local_edits` | Optional: a patch relative to the lock directory, re-applied after every update; `files` then holds the edited shas and `upstream_files` the pristine ones |
+| `hold` | A reason to leave the skill where it is; `outdated` and `update` skip it |
+
+| Command | Does |
+|---|---|
+| `check` | Offline: every file in each skill directory has the sha in `files`. No lock file: exit 0 |
+| `outdated [--min-age DAYS] [--json] [--strict]` | The newest upstream commit touching `path` at least `--min-age` days old, with a diff of what it changes |
+| `update <name>... \| --all [--sha SHA] [--min-age DAYS] [--report FILE]` | Fetch at that commit, re-apply `local_edits` (a patch that fails stops it), rewrite the lock; never commits |
+| `init <name> --upstream o/r --path DIR [--sha SHA] [--paths FILE=UPSTREAM]` | A lock entry from the copy already in the tree; without `--sha`, the newest of 200 upstream commits whose tree matches |
+
+Upstreams are read through a blobless `git clone` of `https://github.com/<upstream>`, so the tool
+works wherever that does, Actions included.
 | `mip-resolve` | `mip-resolve.sh` | (none) | Print a MIP's doc or `.tasks.md` (`MIP-NNNN [tasks]`), or with `--path` where it was found, by the lookup in [design](1-design.md#how-tools-find-the-umbrella) |
 | `api-docs-push` | `api-docs-push.sh` | (none) | `api-docs-push <dir> <remote> <sha> [--branch api-docs]`: force-push a directory as one orphan commit, the `api-docs` workflow's push step |
 

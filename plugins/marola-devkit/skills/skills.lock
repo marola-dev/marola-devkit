@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "skills": {
+    "humanizer": {
+      "upstream": "blader/humanizer",
+      "path": "",
+      "commit": "8039b2fa620a072197c3c15058b361b7dcebd833",
+      "files": {
+        "LICENSE": "625297fb778f32eb39d3a5b97e3e3b611b7304d6",
+        "SKILL.md": "19fc634208e8cc6ae55d4ff287152583216fd244"
+      },
+      "license": "MIT",
+      "local_edits": null,
+      "hold": null
+    },
+    "ponytail": {
+      "upstream": "DietrichGebert/ponytail",
+      "path": "skills/ponytail",
+      "commit": "b6c04480c03e8db2f035751d7c46289779ec3362",
+      "files": {
+        "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
+        "SKILL.md": "02c0712c86277d49d18a77da3a2b825657bf02d1"
+      },
+      "license": "MIT",
+      "local_edits": null,
+      "hold": null,
+      "paths": {
+        "LICENSE": "LICENSE"
+      }
+    },
+    "ponytail-audit": {
+      "upstream": "DietrichGebert/ponytail",
+      "path": "skills/ponytail-audit",
+      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "files": {
+        "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
+        "SKILL.md": "5582d10335daff5b5947f9b77927fbc97f2047f3"
+      },
+      "license": "MIT",
+      "local_edits": null,
+      "hold": null,
+      "paths": {
+        "LICENSE": "LICENSE"
+      }
+    },
+    "ponytail-review": {
+      "upstream": "DietrichGebert/ponytail",
+      "path": "skills/ponytail-review",
+      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "files": {
+        "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
+        "SKILL.md": "e137a855bd87119a4517895a1000a59b0999e1b8"
+      },
+      "license": "MIT",
+      "local_edits": null,
+      "hold": null,
+      "paths": {
+        "LICENSE": "LICENSE"
+      }
+    }
+  }
+}
