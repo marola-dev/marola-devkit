@@ -25,9 +25,10 @@ VERSION_FILES = {
     "flake.nix": re.compile(rf'(version = ")({SEMVER})(";)'),
 }
 # A pin is a v-tag in one of these contexts; actions/checkout@v7 and history in CHANGELOG are not.
+# \s* because some repos spread settings.json's marketplace entry over lines (#65).
 PIN = re.compile(
     rf"(marola-devkit/v|marola-devkit/\.github/workflows/[\w.-]+@v|devkit-ref: v"
-    rf'|marola-devkit", "ref": "v|\*\*Status:\*\* this is v)({SEMVER})()'
+    rf'|marola-devkit",\s*"ref": "v|\*\*Status:\*\* this is v)({SEMVER})()'
 )
 PIN_GLOBS = ["README.md", "docs/**/*.md", ".github/workflows/*.yml"]
 CLONE = re.compile(rf"(-b v)({SEMVER})( https://github\.com/marola-dev/marola-devkit)")
@@ -221,6 +222,15 @@ def self_test():
         assert ci.count("0.6.0") == 2 and "v1.2.3" in ci and "checkout@v7" in ci, ci
         assert '"ref": "v0.6.0"' in (root / ".claude/settings.json").read_text()
         assert consumer(root, "0.6.0") == [], "a second run changed something"
+    with tempfile.TemporaryDirectory() as d:
+        settings = Path(d) / ".claude/settings.json"
+        settings.parent.mkdir()
+        settings.write_text(
+            '"marola-devkit": {\n  "source": {\n    "source": "github",\n'
+            '    "repo": "marola-dev/marola-devkit",\n    "ref": "v0.4.1"\n  }\n}\n'
+        )
+        assert consumer(Path(d), "0.6.0") == [".claude/settings.json"], "multi-line ref not found"
+        assert '"ref": "v0.6.0"' in settings.read_text(), settings.read_text()
     print("release: self-test ok", file=sys.stderr)
 
 
