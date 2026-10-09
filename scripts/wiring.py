@@ -7,6 +7,9 @@ wiring [--root DIR] [--devkit DIR] [--name NAME] [FILE]
     print the block, or rewrite it between FILE's wiring markers; a devkit git checkout with tags
     lets each reusable-workflow call be read at its own @ref, else it is fetched from GitHub
     (a tag is cached under ~/.cache/marola-wiring)
+wiring --check [FILE]
+    fail on a stale block in FILE, an orphan dispatch, or an artifact nobody reads that
+    <root>/wiring.allow does not list as `<artifact>: <reason>`
 wiring --self-test
 """
 
@@ -458,6 +461,38 @@ def write_block(path: Path, block: str) -> None:
     path.write_text(f"{head}{START}\n\n{block}\n{END}{tail}", encoding="utf-8")
 
 
+def check(w: Wiring, block: str, path: Path | None, allow: str) -> list[str]:
+    out: list[str] = []
+    if path:
+        _, s, rest = read(path).partition(START)
+        inner, e, _ = rest.partition(END)
+        if not (s and e) or inner != f"\n\n{block}\n":
+            out.append(f"{path}'s wiring block is stale: run `just wiring {path}`")
+    for t, d in sorted(w.dispatch.items()):
+        if not (d["sent"] and d["listen"]):
+            side = "sent but never listened for" if d["sent"] else "listened for but never sent"
+            out.append(f"dispatch `{t}` is {side}")
+    names = {k.replace("`", ""): a for k, a in w.artifacts.items()}
+    allowed = set()
+    for ln in map(str.strip, allow.splitlines()):
+        if not ln or ln.startswith("#"):
+            continue
+        # an artifact name can hold ": " itself (PRs into …: files), so match the known ones first
+        name = next((n for n in names if ln.startswith(f"{n}:")), ln.partition(":")[0])
+        if not ln[len(name) + 1 :].strip():
+            out.append(f"wiring.allow: `{name}` needs a reason")
+        elif name not in names:
+            out.append(f"wiring.allow: `{name}` names no artifact")
+        else:
+            allowed.add(name)
+    for n, a in names.items():
+        if not a["read"] and n not in allowed:
+            out.append(
+                f"`{n}` has no reader; list it in wiring.allow with a reason if that is intended"
+            )
+    return out
+
+
 CO = "      - uses: actions/checkout@v7\n        with: {repository: %s, path: %s%s}\n"
 FIXTURE = {
     ".gitmodules": "".join(
@@ -604,6 +639,19 @@ def self_test() -> int:
         )
         write_block(root / "REPOS.md", block)
         repos_md = (root / "REPOS.md").read_text(encoding="utf-8")
+        (root / "STALE.md").write_text(f"{START}\n\n{block}| x |\n{END}\n", encoding="utf-8")
+        fresh = check(w, block, root / "REPOS.md", "")
+        stale = check(w, block, root / "STALE.md", "")
+        ml = "ghcr.io/marola-dev/marola-ml image"
+        w.artifacts["`ghcr.io/marola-dev/marola-ml` image"]["read"].clear()
+        unread = check(w, block, None, "")
+        allowed = check(w, block, None, f"# kept\n\n{ml}: kept for local runs\n")
+        no_reason = check(w, block, None, f"{ml}:  \n")
+        no_artifact = check(w, block, None, f"{ml}: kept\ngone image: retired\n")
+        w.dispatch["site-data-updated"]["sent"].clear()
+        w.dispatch["submodule-updated"]["listen"].clear()
+        orphans = check(w, block, None, f"{ml}: kept\n")
+        every = check(w, block, root / "STALE.md", "")
     rows = block.splitlines()
     cases = [
         (name, all(x[1:] not in block if x[0] == "!" else x in rows for x in want.split("\n")))
@@ -625,6 +673,32 @@ def self_test() -> int:
     cases.append(("tag_fetch_cached_branch_not", tagged and not branch))
     cases.append(("uninitialised_submodule_fails", "marola-x is not checked out" in uninit))
     cases.append(("block_between_markers", f"{START}\n\n{block}\n{END}\n\nAfter." in repos_md))
+    cases.append(("check_passes_fresh_block_and_reasoned_allow", fresh == allowed == []))
+    cases.append(("check_fails_on_stale_block", len(stale) == 1 and "just wiring" in stale[0]))
+    cases.append(
+        (
+            "check_fails_on_orphan_dispatch",
+            orphans
+            == [
+                "dispatch `site-data-updated` is listened for but never sent",
+                "dispatch `submodule-updated` is sent but never listened for",
+            ],
+        )
+    )
+    cases.append(
+        (
+            "check_fails_on_unread_artifact",
+            len(unread) == 1 and unread[0].startswith(f"`{ml}` has no reader"),
+        )
+    )
+    cases.append(("allow_entry_needs_reason", any("needs a reason" in p for p in no_reason)))
+    cases.append(
+        (
+            "allow_entry_names_an_artifact",
+            no_artifact == ["wiring.allow: `gone image` names no artifact"],
+        )
+    )
+    cases.append(("check_reports_every_problem", len(every) == 4))
     fails = [n for n, ok in cases if not ok]
     for name, ok in cases:
         print(f"  {'ok  ' if ok else 'FAIL'} {name}")
@@ -646,11 +720,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, default=Path.cwd())
     ap.add_argument("--devkit", type=Path, help="default: <root>/.devkit, else this script's repo")
     ap.add_argument("--name", default="marola", help="the umbrella's repo name")
+    ap.add_argument("--check", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
         return self_test()
-    block = render(scan(args.root, args.name, args.devkit))
+    w = scan(args.root, args.name, args.devkit)
+    block = render(w)
+    if args.check:
+        problems = check(w, block, args.file, read(args.root / "wiring.allow"))
+        for p in problems:
+            print(f"wiring: {p}", file=sys.stderr)
+        return 1 if problems else 0
     if args.file:
         write_block(args.file, block)
     else:
