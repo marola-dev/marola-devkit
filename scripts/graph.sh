@@ -29,7 +29,7 @@ self_test() {
   mkdir -p "$bin" && : >"$log"
   # env -i strips anything that could point the fake at its log, so the path is baked in.
   cat >"$bin/graphify" <<EOF
-#!/usr/bin/env bash
+#!$BASH
 { printf 'ARGV'; printf ' %s' "\$@"; echo; env | sed 's/^/ENV /'; } >>"$log"
 o=\${GRAPHIFY_OUT:-graphify-out}; mkdir -p "\$o"; echo '{}' >"\$o/graph.json"
 EOF
