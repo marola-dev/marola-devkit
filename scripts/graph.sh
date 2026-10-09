@@ -80,6 +80,9 @@ EOF
   echo "stale_notice_on_new_head"
   out=$(g query where || true)
   hasnot "fresh graph: no staleness line" "$out" "stale"
+  git init -q "$tmp/plain" && git -C "$tmp/plain" commit -q --allow-empty -m p
+  out=$(cd "$tmp/plain" && bash "$self" build >/dev/null 2>&1; bash "$self" query where 2>&1 || true)
+  hasnot "no submodules, fresh graph: no staleness line" "$out" "stale"
   git -C "$repo" commit -q --allow-empty -m next
   out=$(g query where || true)
   has "new HEAD: a staleness line" "$out" "stale"
@@ -123,7 +126,7 @@ run() {
 }
 
 # `+` (checked out off the recorded commit) counts; the trailing describe text does not.
-subs() { git -C "$TOP" submodule status | awk '{print $1, $2}'; }
+subs() { git -C "$TOP" submodule status | awk 'NF {print $1, $2}'; }
 
 stamp() {
   jq -n --arg head "$(git -C "$TOP" rev-parse HEAD)" --arg submodules "$(git -C "$TOP" submodule status)" \
@@ -144,7 +147,7 @@ stale_notice() {
   local f="$OUT/build.json"
   [ -f "$f" ] || die "no graph for $(basename "$TOP"); run: graph build"
   if [ "$(jq -r .head "$f")" != "$(git -C "$TOP" rev-parse HEAD)" ] ||
-     [ "$(jq -r .submodules "$f" | awk '{print $1, $2}')" != "$(subs)" ]; then
+     [ "$(jq -r .submodules "$f" | awk 'NF {print $1, $2}')" != "$(subs)" ]; then
     echo "graph: stale — HEAD or a submodule moved since the build; run: graph build (about 3 s)" >&2
   fi
 }
