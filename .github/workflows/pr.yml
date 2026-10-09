@@ -14,7 +14,9 @@ jobs:
     if: github.event.action != 'closed'
     uses: ./.github/workflows/python-ci.yml
     with:
+      # wiring.py imports yaml; the flake's python has it, a bare setup-python does not.
       self-test-commands: |
+        pip install "pyyaml==6.0.3"
         bash tests/self-tests.sh
 
   static:
