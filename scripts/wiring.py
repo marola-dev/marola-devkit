@@ -15,6 +15,7 @@ import contextlib
 import io
 import json
 import re
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -26,7 +27,9 @@ PINS = ("marola-image", "corpus.version", "resources.version")
 START, END = "<!-- wiring:start -->", "<!-- wiring:end -->"
 USES = re.compile(rf"^{ORG}/([\w.-]+)/\.github/workflows/([\w.-]+)@([\w.-]+)$")
 IMAGE = re.compile(rf"ghcr\.io/{ORG}/[\w.-]+")
-RELEASE = re.compile(r"gh release (?:upload|create)\s+\S+\s+(\S+)")
+RELEASE = re.compile(r"gh release (?:upload|create)\s+\S+([^\n]*)")
+# gh release flags that take a value; everything else after the tag that is not a flag is a file.
+VALUED = {"--repo", "-R", "--title", "-t", "--notes", "-n", "--notes-file", "-F", "--target"}
 ASSIGN = re.compile(r"""^\s*(\w+)=["']?([^"'\s]+)""", re.M)
 SHVAR = re.compile(r"\$\{?(\w+)\}?")
 EXPR = re.compile(r"\$\{\{\s*(env|inputs|github)\.([\w-]+)\s*\}\}")
@@ -66,6 +69,23 @@ def read(p: Path) -> str:
         return p.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return ""
+
+
+def release_files(run: str) -> list[str]:
+    out: list[str] = []
+    for rest in RELEASE.findall(run):
+        try:
+            toks = shlex.split(rest.rstrip(" \\"), comments=True)
+        except ValueError:
+            toks = rest.split()
+        skip = False
+        for tok in toks:
+            if tok in ("&&", "||", "|", ";"):
+                break
+            if not skip and not tok.startswith("-"):
+                out.append(tok)
+            skip = not skip and tok in VALUED
+    return out
 
 
 def warn(msg: str) -> None:
@@ -154,8 +174,8 @@ def effects(doc: dict, repo: str, inputs: dict, callee) -> list[tuple]:
             out += [("send", t, "") for t in sent if t and "$" not in t]
             if "/dispatches" in run:
                 out += [("send", sub(v, {}, inputs), "") for k, v in senv.items() if "EVENT" in k]
-            for asset in RELEASE.findall(run):
-                name = sub(asset.strip("\"'"), assigned, {}).rsplit("/", 1)[-1]
+            for asset in release_files(run):
+                name = sub(asset, assigned, {}).rsplit("/", 1)[-1]
                 out.append(("asset", SHVAR.sub("<tag>", name), ""))
     return out
 
@@ -257,6 +277,7 @@ FIXTURE = {
     ),
     "mkdocs/mkdocs.yml": "site_name: x\nsite_url: https://docs.marola.dev/\n",
     ".github/workflows/pointer-sync.yml": "on:\n  repository_dispatch:\n    types: [submodule-updated, submodule-docs-updated]\njobs: {}\n",
+    ".github/workflows/release.yml": 'on: {push: {tags: [v*]}}\njobs:\n  r:\n    steps:\n      - run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "x $TAG"\n',
     ".github/workflows/docs.yml": "on: {push: {paths: [flake.lock]}}\njobs:\n  d:\n    steps:\n      - uses: actions/deploy-pages@v5\n",
     ".devkit/.github/workflows/notify-umbrella.yml": "on:\n  workflow_call:\n    inputs:\n      event-type: {type: string, default: submodule-docs-updated}\njobs:\n  dispatch:\n    steps:\n      - env: {EVENT_TYPE: '${{ inputs.event-type }}'}\n        run: curl https://api.github.com/repos/$UMBRELLA/dispatches -d x\n",
     ".devkit/.github/workflows/api-docs.yml": "on: {workflow_call: {inputs: {devkit-ref: {type: string}}}}\njobs:\n  publish:\n    steps:\n      - run: bash .devkit-checkout/scripts/api-docs-push.sh out url sha\n",
@@ -283,6 +304,7 @@ CASES = {
     "dispatch_send_step": "| `site-data-updated` | marola-app `ci.yml` (on a push to `main`) | marola-site `site.yml` |",
     "reusable_workflow_ref_and_event_type": "| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n| a marola-devkit tag | marola-devkit | marola-app `flake.lock` v0.4.1 | `api-docs.yml` v0.4.1 (marola-app), v9.9.9 (marola-corpus); `gemini-review.yml` v0.5.0 (marola-site); `notify-umbrella.yml` v0.3.1 (marola-site), v0.6.0 (marola-app) |",
     "release_upload_assets": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | — | — |",
+    "release_create_without_assets": "!`--repo` release asset\n!`<tag>` release asset",
     "image_publish": "| `ghcr.io/marola-dev/marola-app` image | marola-app `docker.yml` (on a push to `main` touching `corpus.version`) | — | — |",
     "pin_bump_on_push_paths": "| marola-app `corpus.version` | marola-app `docker.yml` |\n| marola-site `marola-image` | marola-site `site.yml` |",
     "deploy_pages_site": "| marola `docs.yml` | docs.marola.dev |\n| marola-site `site.yml` | marola.dev |",
