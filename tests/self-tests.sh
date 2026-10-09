@@ -9,6 +9,7 @@ sh_tests=(
   scripts/agents-check.sh scripts/mip-stack.sh scripts/docs-mip-stack.sh
   scripts/deps-stack.sh scripts/deps-merge.sh scripts/gha-runner.sh scripts/setup-runners.sh
   scripts/runner-preflight.sh scripts/temps.sh scripts/bump-consumers.sh scripts/ruleset-sync.sh scripts/api-docs-push.sh
+  scripts/graph.sh
   plugins/marola-devkit/hooks/format.sh plugins/marola-devkit/hooks/stop-gate.sh
   plugins/marola-devkit/hooks/session-start.sh
 )

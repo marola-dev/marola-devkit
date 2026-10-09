@@ -152,3 +152,7 @@ runners *args:
 
 temps *args:
     temps {{ args }}
+
+# The code graph, offline and outside the checkout (MIP-0076 §5.2): build, query, path, explain.
+graph *args:
+    graph {{ args }}
