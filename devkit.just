@@ -115,6 +115,10 @@ branches-clean *args:
 branches-open *args:
     branches open {{ args }}
 
+# The cross-repo wiring tables (MIP-0076), printed or rewritten between a file's wiring markers.
+wiring *args:
+    wiring {{ args }}
+
 # The invariants block in AGENTS.md against the pinned devkit's copy.
 agents-check *args:
     agents-check {{ args }}
@@ -152,3 +156,7 @@ runners *args:
 
 temps *args:
     temps {{ args }}
+
+# The code graph, offline and outside the checkout (MIP-0076 §5.2): build, query, path, explain.
+graph *args:
+    graph {{ args }}

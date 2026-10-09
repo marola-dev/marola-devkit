@@ -57,6 +57,7 @@ extension rather than a devkit tool.
 | `ruleset-sync` | `ruleset-sync.sh` | `just rulesets-check`, `just rulesets-apply` | `check [owner/repo…]` diffs a repo's live branch ruleset against `.github/rulesets/main-rule.json`; `apply <owner/repo…>` creates or updates it; `--all-org ORG` covers an org |
 | `agents-check` | `agents-check.sh` | `just agents-check` | Compare AGENTS.md's invariants block byte for byte with the pinned devkit's `agents/invariants.md` (`--block` or `MAROLA_INVARIANTS_BLOCK` to use another) |
 | `docs-lint` | `docs_lint.py` | (none) | MIP-0074 §7's stale-content check over `README.md` and `docs/**/*.md`: undefined or unmarked foreign recipes, another repo's paths, split-era wording, `docs/index.md`, links leaving the repo |
+| `wiring` | `wiring.py` | `just wiring` | MIP-0076 §5.1's four tables (artifact, dispatch, pin bump, deploy), parsed from the umbrella's and every submodule's workflows, pin files, scripts, justfiles, Dockerfiles, compose files and `build.sbt`, with each devkit workflow call's ref (each call is read at that ref: from a local devkit clone's tags, else fetched from GitHub, a tag cached under `~/.cache/marola-wiring`). `wiring [FILE]` prints the block or rewrites it between FILE's `wiring:start`/`wiring:end` markers; `--check [FILE]` fails on a stale block, a dispatch sent or listened for on one side only, or an artifact nobody reads that the umbrella's `wiring.allow` (`<artifact>: <reason>` per line) does not list; run it in an umbrella checkout with submodules |
 | `workflow-runners` | `workflow_runners.py` | (none) | Fail when any workflow but the GPU publish one can reach a self-hosted runner ([runners](4-reference_runners.md)) |
 | `skills-vendor` | `skills_vendor.py` | `just skills-check`, `just skills-outdated`, `just skills-update` | Pin vendored skills to an upstream commit in `skills.lock` (below) |
 
@@ -90,6 +91,12 @@ Upstreams are read through a blobless `git clone` of `https://github.com/<upstre
 works wherever that does, Actions included.
 | `mip-resolve` | `mip-resolve.sh` | (none) | Print a MIP's doc or `.tasks.md` (`MIP-NNNN [tasks]`), or with `--path` where it was found, by the lookup in [design](1-design.md#how-tools-find-the-umbrella) |
 | `api-docs-push` | `api-docs-push.sh` | (none) | `api-docs-push <dir> <remote> <sha> [--branch api-docs]`: force-push a directory as one orphan commit, the `api-docs` workflow's push step |
+
+## Code graph
+
+| Tool | Script | Recipe | Does |
+|---|---|---|---|
+| `graph` | `graph.sh` | `just graph` | MIP-0076 §5.2's pinned graphify. `build` runs `extract . --code-only --no-label` then `update .` into `${XDG_CACHE_HOME:-~/.cache}/marola-graph/<repo>`, recording `HEAD` and `git submodule status` in `build.json`; an uninitialised submodule fails it. `query` (`--budget 400` by default), `path` and `explain` read that graph and warn when it is stale. Every call runs under `env -i` with five variables, and `unshare -rn` where allowed; `--backend` and `extract` without `--code-only` are refused |
 
 ## Self-hosted runner
 

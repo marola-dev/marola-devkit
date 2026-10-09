@@ -21,11 +21,11 @@
         pkgs = import nixpkgs { inherit system; };
         lib = pkgs.lib;
 
-        # scripts/pr_label_nlp.py imports sklearn, so it has to be inside this python3.
-        python = pkgs.python3.withPackages (ps: [ ps.scikit-learn ]);
+        # scripts/pr_label_nlp.py imports sklearn and scripts/wiring.py yaml, so both live in this python3.
+        python = pkgs.python3.withPackages (ps: [ ps.scikit-learn ps.pyyaml ]);
         runtimeDeps = [
           pkgs.bash pkgs.coreutils pkgs.findutils pkgs.gnugrep pkgs.gnused pkgs.gawk pkgs.perl
-          pkgs.git pkgs.gh pkgs.jq pkgs.curl python
+          pkgs.git pkgs.gh pkgs.jq pkgs.curl python pkgs.graphify
         ];
 
         # PATH name -> script. `pr-flow`, not `pr`: that would shadow coreutils.
@@ -53,9 +53,11 @@
           setup-runners = "scripts/setup-runners.sh";
           runner-preflight = "scripts/runner-preflight.sh";
           temps = "scripts/temps.sh";
+          graph = "scripts/graph.sh";
           workflow-runners = "scripts/workflow_runners.py";
           docs-lint = "scripts/docs_lint.py";
           skills-vendor = "scripts/skills_vendor.py";
+          wiring = "scripts/wiring.py";
         };
 
         # The whole tree is installed with its layout intact under share/marola-devkit: the scripts
