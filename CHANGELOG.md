@@ -15,7 +15,7 @@ marketplace `ref` at once.
   and an artifact nobody reads that the umbrella's `wiring.allow` does not list with a reason.
 - `notify-umbrella` sends `submodule-updated` on every push, and `submodule-docs-updated` too when
   the push touched `README.md` or `docs/**` (read from the compare API). Callers drop `paths:`;
-  the `event-type` input is deprecated and ignored (MIP-0076 §5.5).
+  the `event-type` input is gone, so a caller still passing it fails (MIP-0076 §5.5).
 
 ## v0.6.0 — 2026-10-08
 
