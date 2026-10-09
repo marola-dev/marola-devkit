@@ -60,9 +60,10 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 ### Claude Code plugin
 
 `marola-devkit@marola-devkit`: the `mip`, `mip-tasks`, `mip-solve-perpetual`, `triage`,
-`humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `obsidian-vault`, `voice-note-ingest` and
-`voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor` agents; and three hooks
-(format on edit, a once-per-session nudge to run the repo's gate, a session-start summary).
+`humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `routing`, `obsidian-vault`,
+`voice-note-ingest` and `voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor`
+agents; and three hooks (format on edit, a once-per-session nudge to run the repo's gate, a
+session-start summary).
 The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`
 ([skills-vendor](docs/4-reference_tools.md#skills-vendor)).
 
