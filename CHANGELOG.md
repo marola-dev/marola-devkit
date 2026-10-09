@@ -4,6 +4,19 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.7.0 — 2026-10-09
+
+- `wiring`, MIP-0076 §5.1's extractor: the four tables (artifact, dispatch, pin bump, deploy),
+  parsed from the umbrella's and every submodule's workflows, pin files, scripts, justfiles,
+  Dockerfiles, compose files and `build.sbt`, and written between a file's `wiring:start`/`wiring:end`
+  markers by `just wiring`. Each reusable-workflow call is read at its own ref, and release assets
+  are parsed from `gh release upload`/`create`.
+- `wiring --check` fails on a stale block, a dispatch type sent or listened for on one side only,
+  and an artifact nobody reads that the umbrella's `wiring.allow` does not list with a reason.
+- `notify-umbrella` sends `submodule-updated` on every push, and `submodule-docs-updated` too when
+  the push touched `README.md` or `docs/**` (read from the compare API). Callers drop `paths:`;
+  the `event-type` input is deprecated and ignored (MIP-0076 §5.5).
+
 ## v0.6.0 — 2026-10-08
 
 - `skills-vendor` pins vendored skills to an upstream commit in `skills.lock` (MIP-0080):

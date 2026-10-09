@@ -13,7 +13,7 @@
 #       branches: [main]
 #   jobs:
 #     notify:
-#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.6.0
+#       uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.7.0
 #       secrets:
 #         token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 #
