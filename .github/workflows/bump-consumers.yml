@@ -1,8 +1,10 @@
 # One pin-bump PR per consumer after a release (scripts/bump-consumers.sh). release.yml calls it
 # once the release is published; dispatch it by hand to retry or to bump to an older tag.
-# It reuses the org secret MAROLA_CROSS_REPO_PAT, which needs Contents, Pull requests and
-# Workflows write on every repo in .github/consumers.txt: a PR opened with GITHUB_TOKEN would start
-# no CI in the consumer, and could not reach it anyway.
+# It reads MAROLA_BUMP_PAT (Contents, Pull requests and Workflows write on every repo in
+# .github/consumers.txt), an org secret only marola-devkit may read: a PR opened with GITHUB_TOKEN
+# would start no CI in the consumer, and could not reach it anyway. Not MAROLA_CROSS_REPO_PAT: ten
+# workflows across the org receive that one, and with Workflows write any of them could push a
+# branch whose new workflow runs with that repo's secrets (marola-dev/marola-devkit#63).
 name: bump consumers
 
 on:
@@ -10,7 +12,7 @@ on:
     inputs:
       version: { type: string, required: true }
     secrets:
-      MAROLA_CROSS_REPO_PAT: { required: true }
+      MAROLA_BUMP_PAT: { required: true }
   workflow_dispatch:
     inputs:
       version: { description: "X.Y.Z, an existing tag without the v", required: true }
@@ -31,6 +33,6 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - env:
-          GH_TOKEN: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
+          GH_TOKEN: ${{ secrets.MAROLA_BUMP_PAT }}
           VERSION: ${{ inputs.version }}
         run: scripts/bump-consumers.sh "$VERSION"
