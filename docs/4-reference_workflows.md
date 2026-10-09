@@ -138,7 +138,6 @@ jobs:
 | Input | Default | Notes |
 |---|---|---|
 | `umbrella` | `marola-dev/marola` | MAROLA_UMBRELLA, MIP-0070 §5.6 |
-| `event-type` | `""` | deprecated, ignored (MIP-0076) — kept so a caller still passing it doesn't fail GitHub's input check |
 | `runner` | `ubuntu-latest` | resolved in the *caller's* repo |
 
 **Secret** `token` (optional): every repo passes the org secret `MAROLA_CROSS_REPO_PAT`, a

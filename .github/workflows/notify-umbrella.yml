@@ -29,10 +29,6 @@ on:
         description: "owner/repo to dispatch to (MAROLA_UMBRELLA, MIP-0070 §5.6)."
         type: string
         default: marola-dev/marola
-      event-type:
-        description: "Deprecated, ignored (MIP-0076): every call now sends submodule-updated, plus submodule-docs-updated on a docs change. Kept declared so a caller still passing it doesn't fail GitHub's reusable-workflow input check."
-        type: string
-        default: ""
       runner:
         description: "Runner label for the dispatch job — a reusable workflow's runs-on resolves in the caller's repository."
         type: string
