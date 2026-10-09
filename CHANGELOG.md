@@ -4,6 +4,17 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.8.0 — 2026-10-10
+
+- `graph`, MIP-0076 §5.2's code graph: graphify 0.9.66 pinned from the flake's nixpkgs, run offline
+  and keyless under `env -i`, and `unshare -rn` where allowed. `graph build` writes to
+  `~/.cache/marola-graph/<repo>`, never the checkout; `query` defaults to a 400-token budget, and
+  `query`, `path` and `explain` print a staleness line once HEAD or a submodule has moved.
+- The plugin's `routing` skill (MIP-0076 §5.3): the wiring block for what produces, consumes, pins
+  or triggers X, `just graph query` for an unfamiliar keyword or repo, `git grep` for a known one.
+- `bump-consumers` reads its own org secret, `MAROLA_BUMP_PAT`, which only marola-devkit may read,
+  instead of the shared `MAROLA_CROSS_REPO_PAT` (#63, #64).
+
 ## v0.7.0 — 2026-10-09
 
 - `wiring`, MIP-0076 §5.1's extractor: the four tables (artifact, dispatch, pin bump, deploy),
