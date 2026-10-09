@@ -14,6 +14,8 @@ marketplace `ref` at once.
   or triggers X, `just graph query` for an unfamiliar keyword or repo, `git grep` for a known one.
 - `bump-consumers` reads its own org secret, `MAROLA_BUMP_PAT`, which only marola-devkit may read,
   instead of the shared `MAROLA_CROSS_REPO_PAT` (#63, #64).
+- `release.py --consumer` finds a marketplace `ref` spread over several lines in
+  `.claude/settings.json`; v0.7.0's bump had left marola's and marola-app's at v0.4.1 (#65).
 
 ## v0.7.0 — 2026-10-09
 
