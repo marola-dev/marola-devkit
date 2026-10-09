@@ -27,7 +27,8 @@ model cannot start it on its own.
 | `skill-copy` | Same as `sharingan` | An alias. human-only |
 | `obsidian-vault` | Saving or resuming a session handoff, or refreshing the marola note in the maintainer's vault | Vault at `MAROLA_OBSIDIAN_VAULT`; usually invisible inside ai-jail. Has evals |
 
-Where a vendored skill disagrees with a repo's AGENTS.md, AGENTS.md wins.
+Where a vendored skill disagrees with a repo's AGENTS.md, AGENTS.md wins. The four vendored
+skills are pinned in `skills.lock` beside them ([skills-vendor](4-reference_tools.md#skills-vendor)).
 
 ## Agents
 

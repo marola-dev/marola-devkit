@@ -1,0 +1,89 @@
+# skills-update: re-vendor every skill in the caller's skills.lock at its upstream's newest commit
+# at least `min-age` days old, and keep one PR open on `branch` with the diffs as its body
+# (MIP-0080; docs/4-reference_workflows.md#skills-update). Nothing merges on its own.
+# A PR opened with the default GITHUB_TOKEN starts no CI; pass a PAT or App token as `token`.
+name: skills-update
+
+on:
+  workflow_call:
+    inputs:
+      devkit-ref:
+        description: "git ref of marola-devkit, whose scripts/skills_vendor.py runs"
+        type: string
+        required: true
+      devkit-repo:
+        type: string
+        default: marola-dev/marola-devkit
+      lock:
+        type: string
+        default: .claude/skills/skills.lock
+      min-age:
+        description: "days an upstream commit must have been public before it is vendored"
+        type: number
+        default: 14
+      branch:
+        type: string
+        default: chore/skills-update
+    secrets:
+      token:
+        description: "pushes the branch and opens the PR; the default GITHUB_TOKEN otherwise"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: skills-update-${{ inputs.branch }}
+      cancel-in-progress: true
+    env:
+      GH_TOKEN: ${{ secrets.token || github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.token || github.token }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ inputs.devkit-repo }}
+          ref: ${{ inputs.devkit-ref }}
+          path: .devkit-checkout
+
+      - name: skills-vendor update --all, then push the branch and open or refresh the PR
+        env:
+          BRANCH: ${{ inputs.branch }}
+          LOCK: ${{ inputs.lock }}
+          MIN_AGE: ${{ inputs.min-age }}
+        run: |
+          set -euo pipefail
+          [ -f "$LOCK" ] || { echo "::warning::no $LOCK in this repo; nothing to update"; exit 0; }
+          vendor=".devkit-checkout/scripts/skills_vendor.py"
+          python3 "$vendor" update --all --lock "$LOCK" --min-age "$MIN_AGE" --report "$RUNNER_TEMP/report.md"
+          python3 "$vendor" check --lock "$LOCK"
+          rm -rf .devkit-checkout
+          if git diff --quiet; then
+            echo "every skill is at its pin"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add -A
+          names="$(git diff --cached --name-only | sed -n "s|^$(dirname "$LOCK")/\([^/]*\)/.*|\1|p" | sort -u | paste -sd, -)"
+          title="chore: update vendored skills ($names)"
+          trailers="$(printf 'Tested: skills-vendor check\nCost: n/a (automation)\nCo-Authored-By: Claude <noreply@anthropic.com>')"
+          git -c core.hooksPath=/dev/null commit -qm "$title" -m "skills-vendor update --all, from the skills-update workflow." -m "$trailers"
+          git push -f -u origin "$BRANCH"
+          gh label create skills-update --color c5def5 --force \
+            --description "A vendored skill re-pinned by the skills-update workflow (skills.lock)" >/dev/null
+          # shellcheck disable=SC2016  # the backticks are Markdown in the PR body
+          body="$(printf '**Summary**: re-vendor %s at upstream, `skills-vendor update --all --min-age %s`.\n\n' "$names" "$MIN_AGE"; cat "$RUNNER_TEMP/report.md")"
+          if pr="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')" && [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body "$body" --add-label skills-update
+          else
+            gh pr create --head "$BRANCH" --title "$title" --body "$body" --label skills-update
+          fi
