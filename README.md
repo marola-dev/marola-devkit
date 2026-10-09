@@ -46,6 +46,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `wiring` | MIP-0076's cross-repo wiring tables (artifacts, dispatches, pin bumps, deploys), parsed from an umbrella checkout and its submodules |
 | `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
+| `graph` | A pinned graphify, offline and keyless, its graph in the user cache: `build`, `query`, `path`, `explain` |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
 | `mip-stack`, `docs-mip-stack`, `deps-stack`, `deps-merge`, `branches` | Stack and merge helpers |
 | `pr-label`, `backfill-pr-labels` | Apply the deterministic `area/*` label taxonomy to one PR; to every finalized unlabelled PR |

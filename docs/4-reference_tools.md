@@ -92,6 +92,12 @@ works wherever that does, Actions included.
 | `mip-resolve` | `mip-resolve.sh` | (none) | Print a MIP's doc or `.tasks.md` (`MIP-NNNN [tasks]`), or with `--path` where it was found, by the lookup in [design](1-design.md#how-tools-find-the-umbrella) |
 | `api-docs-push` | `api-docs-push.sh` | (none) | `api-docs-push <dir> <remote> <sha> [--branch api-docs]`: force-push a directory as one orphan commit, the `api-docs` workflow's push step |
 
+## Code graph
+
+| Tool | Script | Recipe | Does |
+|---|---|---|---|
+| `graph` | `graph.sh` | `just graph` | MIP-0076 §5.2's pinned graphify. `build` runs `extract . --code-only --no-label` then `update .` into `${XDG_CACHE_HOME:-~/.cache}/marola-graph/<repo>`, recording `HEAD` and `git submodule status` in `build.json`; an uninitialised submodule fails it. `query` (`--budget 400` by default), `path` and `explain` read that graph and warn when it is stale. Every call runs under `env -i` with five variables, and `unshare -rn` where allowed; `--backend` and `extract` without `--code-only` are refused |
+
 ## Self-hosted runner
 
 | Tool | Script | Recipe | Does |
