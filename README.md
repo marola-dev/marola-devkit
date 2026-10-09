@@ -43,6 +43,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
 | `docs-lint` | MIP-0074's stale-content check over `README.md` and `docs/**/*.md` |
 | `skills-vendor` | Pin vendored skills to an upstream commit in `skills.lock` (`check`, `outdated`, `update`, `init`) |
+| `wiring` | MIP-0076's cross-repo wiring tables (artifacts, dispatches, pin bumps, deploys), parsed from an umbrella checkout and its submodules |
 | `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
 | `graph` | A pinned graphify, offline and keyless, its graph in the user cache: `build`, `query`, `path`, `explain` |
