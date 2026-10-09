@@ -63,17 +63,20 @@ step 1 is skipped.
 Once the release is published, `release.yml` calls `bump-consumers.yml`, which opens one PR in
 each repo of `.github/consumers.txt` on `chore/devkit-vX.Y.Z`: the flake input and its
 `flake.lock` node, every devkit workflow `@v…`, `devkit-ref` and docs-lint clone, and the
-marketplace `ref`. A person merges each. It uses the org secret `MAROLA_CROSS_REPO_PAT`, so the
-PRs are authored by that token's owner; the token needs Contents, Pull requests and Workflows
-write on every listed repo. h0ffmann/ww3-gpu is outside the org token's reach and not listed: bump
+marketplace `ref`. A person merges each. It uses the org secret `MAROLA_BUMP_PAT`, so the PRs are
+authored by that token's owner: a fine-grained PAT owned by marola-dev with access to all its
+repositories and Contents, Pull requests and Workflows write, whose secret only marola-devkit may
+read. It is not `MAROLA_CROSS_REPO_PAT`, which ten workflows across the org receive: with Workflows
+write, any of them could push a branch whose new workflow runs with that repo's secrets. h0ffmann/ww3-gpu is outside the org token's reach and not listed: bump
 the `@v…` and `devkit-ref` in its `skills.yml` by hand. Dispatch
 `bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
 Adding a consumer is one line in `.github/consumers.txt`.
 
 ## Secrets and cost
 
-The devkit deploys nothing and holds no secret. Its workflows take what the caller passes (the
-`notify-umbrella` token, `MAROLA_CROSS_REPO_PAT` in the callers) or the default `GITHUB_TOKEN`.
+The devkit deploys nothing. Its one secret is `MAROLA_BUMP_PAT`, read by `bump-consumers.yml`
+alone; its reusable workflows take what the caller passes (the `notify-umbrella` token,
+`MAROLA_CROSS_REPO_PAT` in the callers) or the default `GITHUB_TOKEN`.
 `setup-runners` and `gha-runner` touch a self-hosted runner only when a human runs them
 ([runners](4-reference_runners.md)).
 
