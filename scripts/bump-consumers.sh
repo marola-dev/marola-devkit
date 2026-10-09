@@ -74,7 +74,7 @@ if [ -n "$one" ]; then
   exit
 fi
 
-[ -n "${GH_TOKEN:-}" ] || { echo "bump-consumers: GH_TOKEN is empty; give marola-devkit access to the org secret MAROLA_CROSS_REPO_PAT (docs/3-development.md, Releases)" >&2; exit 1; }
+[ -n "${GH_TOKEN:-}" ] || { echo "bump-consumers: GH_TOKEN is empty; give marola-devkit access to the org secret MAROLA_BUMP_PAT (docs/3-development.md, Releases)" >&2; exit 1; }
 # Each repo in its own process: set -e does not apply inside a function called from `||`.
 gh auth setup-git
 failed=()

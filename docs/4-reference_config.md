@@ -20,6 +20,7 @@ has a default, so a repo that sets none of them gets the org's behaviour.
 | `MAROLA_RUNNER_PREFIX` | `setup-runners` | `marola` | The runner name prefix |
 | `MAROLA_RUNNER_SOURCE` | `setup-runners` | `~/code/actions-runner`, then `~/actions-runner` | An unpacked actions-runner release to copy from |
 | `MAROLA_OBSIDIAN_VAULT` | the `obsidian-vault` skill | `~/Documents/2nd-brain` | The maintainer's Obsidian vault |
+| `MAROLA_BUMP_PAT` | `bump-consumers.yml` | — | Not an environment variable: the org secret, readable by marola-devkit alone, whose PAT opens the pin-bump PRs ([releases](3-development.md#releases)) |
 | `MAROLA_CROSS_REPO_PAT` | a caller of `notify-umbrella` | — | Not an environment variable: the repository secret a caller passes as the workflow's `token` ([workflows](4-reference_workflows.md#notify-umbrella)) |
 
 `MAROLA_TRACES` also appears in `scripts/`, but only as sample text in `tasks_issues.py`'s
