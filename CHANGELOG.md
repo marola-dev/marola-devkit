@@ -4,6 +4,20 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.6.0 — 2026-10-08
+
+- `skills-vendor` pins vendored skills to an upstream commit in `skills.lock` (MIP-0080):
+  `check` (offline, in `just quality`), `outdated`, `update` and `init`, as the recipes
+  `skills-check`, `skills-outdated` and `skills-update`.
+- The `skills-update` reusable workflow re-vendors a repo's skills weekly, 14 days behind upstream
+  HEAD, as one PR labelled `skills-update` with the diffs in its body; `skills.yml` calls it here
+  for the plugin's four vendored skills, pinned in `plugins/marola-devkit/skills/skills.lock`.
+
+## v0.5.1 — 2026-10-07
+
+- `gemini-review` retries a dropped connection to the Gemini API (`RemoteDisconnected`, a reset,
+  a timeout) after 20 s and 60 s, as it already did a 503; a 429 still fails at once (#34).
+
 ## v0.5.0 — 2026-10-04
 
 - `gemini-review` reviews fork PRs too, review only: the base branch is the workspace, the fork's

@@ -1,18 +1,18 @@
 # Reusable workflows
 
-Ten `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
+Eleven `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
 `ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
-(MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's and `gemini-review.yml` is
-marola-dev/marola#641's. An eleventh, `devkit-ci.yml`, is this repo's
-own CI — not reusable, nothing to call.
+(MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's, `gemini-review.yml` is
+marola-dev/marola#641's and `skills-update.yml` is MIP-0080's. A twelfth,
+`devkit-ci.yml`, is this repo's own CI — not reusable, nothing to call.
 
 Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
 actionlint, hadolint, shellcheck, which a repo's flake supplies locally), the default below is the
 version the umbrella's flake pinned when the workflow was written. Bump the input, not the
 workflow file, when a newer version is wanted.
 
-Five of the ten (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`) take a required
-`devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
+Six of the eleven (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`,
+`skills-update`) take a required `devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
 repo out a second time at that ref. Pin it to the same tag as the `uses:` line below — nothing
 keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`,
 `python-ci` and `static-ci` need no such checkout.
@@ -22,7 +22,7 @@ keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `sca
 called file's (checked on marola-devkit#2's first run:
 `workflow_ref=marola-dev/marola-devkit/.github/workflows/pr.yml@refs/pull/2/merge`).
 
-These five also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
+These six also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
 private devkit would need a cross-repo PAT input on each of them, the same shape as
 `notify-umbrella`'s `token` secret.
@@ -37,7 +37,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.6.0
 ```
 
 | Input | Default | Notes |
@@ -56,7 +56,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.6.0
     with:
       self-test-commands: |
         python3 scripts/cost-split.py --self-test
@@ -89,7 +89,7 @@ with a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.6.0
     with:
       hadolint-files: |
         Dockerfile
@@ -130,7 +130,7 @@ on:
     branches: [main]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.6.0
     secrets:
       token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
 ```
@@ -167,9 +167,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.6.0
     with:
-      devkit-ref: v0.5.0
+      devkit-ref: v0.6.0
 ```
 
 | Input | Default | Notes |
@@ -203,9 +203,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.6.0
     with:
-      devkit-ref: v0.5.0
+      devkit-ref: v0.6.0
 ```
 
 | Input | Default | Notes |
@@ -243,11 +243,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.6.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.5.0
+      devkit-ref: v0.6.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -284,9 +284,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.6.0
     with:
-      devkit-ref: v0.5.0
+      devkit-ref: v0.6.0
 ```
 
 | Input | Default | Notes |
@@ -294,6 +294,7 @@ jobs:
 | `devkit-ref` | *(required)* | pin to the same tag as `uses:` |
 | `devkit-repo` | `marola-dev/marola-devkit` | |
 | `umbrella` | `""` | MAROLA_UMBRELLA — resolves a MIP-scoped branch's doc link when this repo carries no `docs/MIPs/` of its own |
+| `deny-branches` | `^claude/project-thread-` | ERE: the `branch` job fails a PR whose head branch matches, so a generic session name never reaches review. Empty turns it off |
 
 `umbrella` defaults to empty, not `marola-dev/marola`: an empty `MAROLA_UMBRELLA` env var and an
 unset one are the same thing to `scripts/lib/mip_ref.sh`'s own `${MAROLA_UMBRELLA:-marola-dev/marola}`,
@@ -315,7 +316,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.6.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
@@ -336,7 +337,8 @@ findings Gemini gave an exact fix for (marola-dev/marola#641). One job, one API 
   token, and one `fix: apply Gemini review findings` commit with `Tested:`/`Cost:` is pushed.
 
 One call per review because the free tier allows 20 requests a day per model; an agent loop
-(`run-gemini-cli`) spent them on a single PR.
+(`run-gemini-cli`) spent them on a single PR. A 503 or a dropped connection is retried after 20 s and 60 s; a
+429 is the daily cap and fails at once.
 
 **Fork PRs** get the review and no fix commit, since the App can't push to a fork. The caller
 triggers on `pull_request_target`, so the run takes the workflow and secrets from the base
@@ -353,10 +355,10 @@ on:
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.5.0
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.6.0
     secrets: inherit
     with:
-      devkit-ref: v0.5.0
+      devkit-ref: v0.6.0
       check-command: ""          # e.g. node scripts/site_check.js
 ```
 
@@ -375,6 +377,38 @@ set at the org, scoped to the repos the `marola-gemini-bot` App is installed on.
 Contents and Pull requests read/write and no Workflows permission, so GitHub itself refuses a
 push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s, starts the
 PR's CI.
+
+## skills-update
+
+`skills-vendor update --all` on the caller's `skills.lock`
+([tools](4-reference_tools.md#skills-vendor)), then one PR on `branch`, labelled `skills-update`,
+with the per-skill diff as its body. A lock with nothing behind pushes nothing, and nothing merges
+on its own. This repo calls it weekly from `skills.yml`.
+
+```yaml
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  update:
+    uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.6.0
+    with:
+      devkit-ref: v0.6.0
+```
+
+| Input | Default | Notes |
+|---|---|---|
+| `devkit-ref` | required | same tag as the `uses:` line |
+| `lock` | `.claude/skills/skills.lock` | a missing lock is a warning, not a failure |
+| `min-age` | `14` | days an upstream commit must have been public before it is vendored |
+| `branch` | `chore/skills-update` | force-pushed on every run that finds a change |
+
+Secret `token`, optional: a PR opened with the default `GITHUB_TOKEN` starts no CI; one opened
+with a PAT or App token does.
 
 ## devkit-ci (not reusable)
 

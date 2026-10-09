@@ -15,6 +15,7 @@ agent loop spent them all on one PR (marola-dev/marola-devkit#19's first runs).
 """
 
 import argparse
+import http.client
 import json
 import os
 import re
@@ -264,6 +265,15 @@ def call_gemini(model: str, prompt: str, key: str) -> dict:
                 raise SystemExit(f"Gemini API {err.code} on {model}: {detail}") from err
             print(f"Gemini API 503 (attempt {attempt + 1}); retrying in {wait}s", file=sys.stderr)
             time.sleep(wait)
+        except (OSError, http.client.HTTPException) as err:
+            # A dropped connection (RemoteDisconnected, a reset, a timeout) is transient, like a 503.
+            if not wait:
+                raise SystemExit(f"Gemini API on {model}: {type(err).__name__}: {err}") from err
+            print(
+                f"{type(err).__name__} (attempt {attempt + 1}); retrying in {wait}s",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
     raise SystemExit("unreachable")
 
 
@@ -310,6 +320,35 @@ def cmd_fix(a: argparse.Namespace) -> None:
 
 
 def self_test() -> None:
+    import io
+
+    calls = []
+    answer = {"candidates": [{"content": {"parts": [{"text": '{"summary": "ok"}'}]}}]}
+
+    def flaky(_req, timeout):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise http.client.RemoteDisconnected("Remote end closed connection without response")
+        return io.BytesIO(json.dumps(answer).encode())
+
+    def dead(_req, timeout):
+        calls.append(timeout)
+        raise ConnectionResetError("reset")
+
+    real_open, real_sleep = urllib.request.urlopen, time.sleep
+    urllib.request.urlopen, time.sleep = flaky, lambda _s: None
+    try:
+        assert call_gemini("m", "p", "k") == {"summary": "ok"} and len(calls) == 2
+        calls.clear()
+        urllib.request.urlopen = dead
+        try:
+            call_gemini("m", "p", "k")
+            raise AssertionError("a connection that always drops must fail")
+        except SystemExit as err:
+            assert "ConnectionResetError" in str(err) and len(calls) == 3, (err, calls)
+    finally:
+        urllib.request.urlopen, time.sleep = real_open, real_sleep
+
     diff = "\n".join(
         [
             "diff --git a/x.sh b/x.sh",

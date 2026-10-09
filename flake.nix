@@ -55,13 +55,14 @@
           temps = "scripts/temps.sh";
           workflow-runners = "scripts/workflow_runners.py";
           docs-lint = "scripts/docs_lint.py";
+          skills-vendor = "scripts/skills_vendor.py";
         };
 
         # The whole tree is installed with its layout intact under share/marola-devkit: the scripts
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.5.0";
+          version = "0.6.0";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];
