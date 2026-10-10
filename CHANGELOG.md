@@ -4,6 +4,20 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.8.3 — 2026-10-10
+
+- `graph build` is code-only and pruned: no `update .` Markdown pass, no node without a source
+  file, no self-loop; the report and HTML are rebuilt from the pruned graph with no model call, and
+  communities are named by their hub symbol. `graph update`/`extract` refuse, since either would
+  overwrite the pruned graph. The umbrella's graph went from 6,441 nodes, 53% noise in answers, to
+  about 1,600 and 0% (#82, #85).
+- The `routing` skill asks `graph query` with identifiers (class, file or function names) and sends
+  a concept or behaviour to `git grep` first: the graph matches symbol names, not meanings (#82).
+- `bump-consumers` regenerates the umbrella's REPOS.md wiring block in its bump commit, so the
+  umbrella's bump PR passes `wiring --check` with no hand edit (#78, #81).
+- `tests/self-tests.sh` refuses a fake script with an env shebang, which the Nix sandbox lacks
+  (#83, #84).
+
 ## v0.8.2 — 2026-10-10
 
 - `ruleset-sync` merges each repo's bypass extras from `.github/rulesets/bypass-extras.json`
