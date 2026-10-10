@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.8.1 — 2026-10-10
+
+- `wiring` counts dispatch types a `run:` builds in a bash array (`events=(…)`, `events+=(…)`)
+  as sent: v0.7.0's own `notify-umbrella` does, so the umbrella's block had lost every sender of
+  `submodule-updated` and `submodule-docs-updated`, and `wiring --check` called both orphaned (#69).
+
 ## v0.8.0 — 2026-10-10
 
 - `graph`, MIP-0076 §5.2's code graph: graphify 0.9.66 pinned from the flake's nixpkgs, run offline
