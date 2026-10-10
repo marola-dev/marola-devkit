@@ -89,7 +89,9 @@ runs a fake graphify, so it cannot catch that. The locked version:
      prune reads;
    - `cluster-only . --no-label --graph <file>`: it must rewrite `graph.json`, `GRAPH_REPORT.md`
      and `graph.html` beside that file with no model call (0.9.66 labels communities with a model
-     only when neither `--no-label` nor a saved `.graphify_labels.json` is there);
+     only when neither `--no-label` nor a saved `.graphify_labels.json` is there), and must keep a
+     `.graphify_labels.json` (`{"<community id>": "<name>"}`, no `.sig` beside it) whose count
+     matches the communities: `grep -c 'Community [0-9]* - "Community'` on the report says 0;
    - `query … --graph <file> --budget N`, and `path`/`explain` with `--graph <file>`;
    - `GRAPHIFY_OUT`, where `graph.json` must land; `GRAPHIFY_NO_AUTO_REFRESH=1` (honoured from
      0.9.72, inert before); `HOME` set to the cache dir; `OLLAMA_BASE_URL=http://127.0.0.1:9`.
