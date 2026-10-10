@@ -46,6 +46,8 @@ RELEASE = re.compile(r"gh release (?:upload|create)\b([^\n]*)")
 VALUED = {"--repo", "-R", "--title", "-t", "--notes", "-n", "--notes-file", "-F", "--target"}
 VALUED |= {"--discussion-category", "--notes-start-tag"}
 ASSIGN = re.compile(r"""^\s*(\w+)=["']?([^"'\s]+)""", re.M)
+ARRAY = re.compile(r"\b\w+\+?=\(([^)]*)\)")
+TYPE = re.compile(r"[a-z][a-z0-9-]*")
 SHVAR = re.compile(r"\$\{?(\w+)\}?")
 EXPR = re.compile(r"\$\{\{\s*(env|inputs|github)\.([\w-]+)\s*\}\}")
 
@@ -260,6 +262,8 @@ def effects(doc: dict, repo: str, inputs: dict, callee, d: Path) -> list[tuple]:
             out += [("send", t, "") for t in sent if t and "$" not in t]
             if "/dispatches" in run:
                 evs = [sub(v, {}, inputs) for k, v in senv.items() if "EVENT" in k]
+                # v0.7.0's notify-umbrella builds its types in an array (`events+=(…)`, #69).
+                evs += [w for a in ARRAY.findall(run) for w in a.split() if TYPE.fullmatch(w)]
                 out += [("send", t, "") for t in evs if "$" not in t]
             for asset in release_files(run):
                 name = sub(asset, assigned, {}).rsplit("/", 1)[-1]
@@ -658,6 +662,16 @@ def self_test() -> int:
         for name, want in CASES.items()
     ]
     shell = 'gh release upload --clobber "$TAG" "$f"; echo done\ngh release create "$TAG" --discussion-category General --notes-start-tag v1 \\\n  dist/a.tgz>out.log\n'
+    array = load(
+        "on: {workflow_call: {}}\njobs:\n  d:\n    steps:\n      - run: |\n"
+        '          events=(submodule-updated)\n          [ -z "$DOCS" ] || events+=(submodule-docs-updated)\n'
+        '          for e in "${events[@]}"; do curl https://api.github.com/repos/$U/dispatches -d x; done\n',
+        "array fixture",
+    )
+    sent = sorted(
+        v for k, v, _ in effects(array, "r", {}, lambda *a: (None, ""), root) if k == "send"
+    )
+    cases.append(("dispatch_array_send", sent == ["submodule-docs-updated", "submodule-updated"]))
     cases.append(("release_files_shell_forms", release_files(shell) == ["$f", "dist/a.tgz"]))
     cases.append(("missing_callee_warns", "gemini-review.yml@v0.5.0 not found" in err.getvalue()))
     cases.append(("uncloned_callee_warns", "marola-infra/x.yml@v1 not found" in err.getvalue()))
