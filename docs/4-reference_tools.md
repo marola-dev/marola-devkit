@@ -96,7 +96,7 @@ works wherever that does, Actions included.
 
 | Tool | Script | Recipe | Does |
 |---|---|---|---|
-| `graph` | `graph.sh` | `just graph` | MIP-0076 §5.2's pinned graphify. `build` runs `extract . --code-only --no-label` then `update .` into `${XDG_CACHE_HOME:-~/.cache}/marola-graph/<repo>`, recording `HEAD` and `git submodule status` in `build.json`; an uninitialised submodule fails it. `query` (`--budget 400` by default), `path` and `explain` read that graph and warn when it is stale. Every call runs under `env -i` with five variables, and `unshare -rn` where allowed; `--backend` and `extract` without `--code-only` are refused |
+| `graph` | `graph.sh` | `just graph` | MIP-0076 §5.2's pinned graphify. `build` runs `extract . --code-only --no-label` then `update .` into `${XDG_CACHE_HOME:-~/.cache}/marola-graph/<repo>`, recording `HEAD` and `git submodule status` in `build.json`; an uninitialised submodule fails it. `query` (`--budget 400` by default), `path` and `explain` read that graph and warn when it is stale. Every call runs under `env -i` with five variables, and `unshare -rn` where allowed; `--backend` and `extract` without `--code-only` are refused. Bumping graphify: [Updating graphify](3-development.md#updating-graphify) |
 
 ## Self-hosted runner
 

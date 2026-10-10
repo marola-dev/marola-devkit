@@ -72,6 +72,38 @@ the `@v…` and `devkit-ref` in its `skills.yml` by hand. Dispatch
 `bump-consumers.yml` by hand to retry a version: it updates the open PRs instead of adding more.
 Adding a consumer is one line in `.github/consumers.txt`.
 
+## Updating graphify
+
+`graph` runs whatever `graphify` the locked nixpkgs carries (0.9.66 as of v0.8.1). Nothing else pins
+it, so any `nix flake update` can move it, and its CLI drifts between versions. `graph --self-test`
+runs a fake graphify, so it cannot catch that. The locked version:
+`nix eval --raw --inputs-from . nixpkgs#graphify.version`.
+
+1. `nix flake update nixpkgs`. If that drags in too much (`lint` and `agentic` follow it), pin
+   graphify alone instead: a second nixpkgs input locked where it carries the version you want,
+   with `runtimeDeps` taking `graphify` from it.
+2. Check everything [graph.sh](https://github.com/marola-dev/marola-devkit/blob/main/scripts/graph.sh)
+   relies on against `nix develop -c graphify <subcommand> --help`:
+   - `extract . --code-only --no-label` (0.9.66 lists `--no-label` only under `cluster-only`, but
+     `extract` accepts it) and `update .`;
+   - `query … --graph <file> --budget N`, and `path`/`explain` with `--graph <file>`;
+   - `GRAPHIFY_OUT`, where `graph.json` must land; `GRAPHIFY_NO_AUTO_REFRESH=1` (honoured from
+     0.9.72, inert before); `HOME` set to the cache dir; `OLLAMA_BASE_URL=http://127.0.0.1:9`.
+3. In a fresh clone of this repo, `graph build` then `graph query "<question>"`:
+   `git status --porcelain --ignored` still prints nothing, and `grep 'Token cost'` on the
+   `GRAPH_REPORT.md` beside the `graph.json` that `build` names says 0 input and 0 output (grep
+   it: the whole report is about 21k tokens).
+4. `bash tests/self-tests.sh`. A moved flag changes `graph.sh` and its self-test together, and the
+   release entry names the new graphify version.
+
+What proves it after the release is the umbrella's `graph` CI job on the devkit bump PR, a real
+build and query (marola-dev/marola#755; it runs without `unshare -rn`, which GitHub's
+`ubuntu-latest` refuses). For a minor graphify jump, also re-run the routing questions of
+[MIP-0076 §7](https://docs.marola.dev/6-MIPs/MIP-0076-agent-routing-tooling/#7-verification-plan).
+
+Never install graphify any other way, pass `--backend`, or run its installers or hooks (MIP-0076
+§5.2).
+
 ## Secrets and cost
 
 The devkit deploys nothing. Its one secret is `MAROLA_BUMP_PAT`, read by `bump-consumers.yml`
