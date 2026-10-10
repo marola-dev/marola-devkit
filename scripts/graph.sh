@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # graph — a pinned graphify, run offline and keyless, its output outside the checkout (MIP-0076 §5.2).
 #
-#   graph build                      extract --code-only --no-label, then update, into the cache
+#   graph build                      extract --code-only --no-label, prune, cluster-only --no-label, into the cache
 #   graph query "<question>" [...]   --budget 400 unless one is given
 #   graph path <a> <b>  |  graph explain <name>
 #   graph extract|update . [...]     passed through; extract needs --code-only
@@ -27,11 +27,18 @@ self_test() {
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
   bin="$tmp/bin" log="$tmp/graphify.log" repo="$tmp/r" sub="$tmp/s"
   mkdir -p "$bin" && : >"$log"
+  # extract's graph: a library node (no source_file), an edge to it, and a self-loop.
+  FAKE_GRAPH='{"nodes":[{"id":"a","source_file":"a.py"},{"id":"b","source_file":"a.py"},{"id":"String","source_file":""},{"id":"kyo"}],"links":[{"source":"a","target":"b"},{"source":"a","target":"String"},{"source":"kyo","target":"b"},{"source":"b","target":"b"}]}'
   # env -i strips anything that could point the fake at its log, so the path is baked in.
   cat >"$bin/graphify" <<EOF
 #!$BASH
 { printf 'ARGV'; printf ' %s' "\$@"; echo; env | sed 's/^/ENV /'; } >>"$log"
-o=\${GRAPHIFY_OUT:-graphify-out}; mkdir -p "\$o"; echo '{}' >"\$o/graph.json"
+o=\${GRAPHIFY_OUT:-graphify-out}; mkdir -p "\$o"
+case "\$1" in
+  extract) echo '$FAKE_GRAPH' >"\$o/graph.json" ;;
+  cluster-only) echo "CLUSTERED \$(tr ',' '\\n' <"\$o/graph.json" | grep -c '"id"')" >>"$log"
+    echo 'Token cost: 0 input · 0 output' >"\$o/GRAPH_REPORT.md"; : >"\$o/graph.html" ;;
+esac
 EOF
   chmod +x "$bin/graphify"
   export PATH="$bin:$PATH" XDG_CACHE_HOME="$tmp/cache"
@@ -54,9 +61,19 @@ EOF
     "$(grep '^ENV ' "$log" | sed 's/^ENV //; s/=.*//' | grep -vxE 'PWD|SHLVL|_|OLDPWD' | sort -u | tr '\n' ' ')" \
     "GRAPHIFY_NO_AUTO_REFRESH GRAPHIFY_OUT HOME OLLAMA_BASE_URL PATH "
   check "OLLAMA_BASE_URL points nowhere" "$(grep -c '^ENV OLLAMA_BASE_URL=http://127.0.0.1:9$' "$log")" "2"
-  check "build runs extract --code-only --no-label, then update" "$(grep '^ARGV' "$log" | tr '\n' '|')" \
-    "ARGV extract . --code-only --no-label|ARGV update .|"
+  check "build runs extract --code-only --no-label, then cluster-only --no-label on the cached graph" \
+    "$(grep '^ARGV' "$log" | tr '\n' '|')" \
+    "ARGV extract . --code-only --no-label|ARGV cluster-only . --no-label --graph $cache/graph.json|"
   hasnot "never --backend" "$(cat "$log")" "--backend"
+
+  echo "build_is_code_only"
+  hasnot "no update call" "$(grep '^ARGV' "$log")" "ARGV update"
+
+  echo "build_prunes_library_nodes_and_self_loops"
+  check "nodes without a source_file are gone" "$(jq -c '[.nodes[].id]' "$cache/graph.json")" '["a","b"]'
+  check "edges touching them and self-loops are gone" "$(jq -c '[.links[] | [.source, .target]]' "$cache/graph.json")" '[["a","b"]]'
+  check "cluster-only read the pruned graph" "$(grep '^CLUSTERED' "$log")" "CLUSTERED 2"
+  check "a report and HTML beside it" "$(test -f "$cache/GRAPH_REPORT.md" && test -f "$cache/graph.html" && echo y)" "y"
 
   echo "no_auto_refresh_set"
   check "both build calls have GRAPHIFY_NO_AUTO_REFRESH=1" "$(grep -c '^ENV GRAPHIFY_NO_AUTO_REFRESH=1$' "$log")" "2"
@@ -133,12 +150,26 @@ stamp() {
     '{head: $head, submodules: $submodules}'
 }
 
+# Library and package nodes (no source_file: `String`, `kyo`) are hubs that bridge unrelated code,
+# and self-loops are noise; both crowd real symbols out of a query's budget (#82).
+prune() {
+  jq '(reduce (.nodes[] | select((.source_file // "") != "") | .id) as $i ({}; .[$i] = true)) as $keep
+    | .nodes |= map(select($keep[.id]))
+    | .links |= map(select($keep[.source] and $keep[.target] and .source != .target))' \
+    "$OUT/graph.json" >"$OUT/graph.json.tmp"
+  mv "$OUT/graph.json.tmp" "$OUT/graph.json"
+}
+
+# No `update`: its Markdown pass filled the graph with section headings (#82). cluster-only rewrites
+# graph.json, GRAPH_REPORT.md and graph.html from the pruned graph; --no-label keeps it model-free.
 build() {
   local missing
   missing=$(git -C "$TOP" submodule status | awk '/^-/ {print $2}' | tr '\n' ' ')
   [ -z "$missing" ] || die "uninitialised submodule(s): ${missing% }; run git submodule update --init"
   mkdir -p "$OUT"
-  (cd "$TOP" && run extract . --code-only --no-label && run update .)
+  (cd "$TOP" && run extract . --code-only --no-label)
+  prune
+  (cd "$TOP" && run cluster-only . --no-label --graph "$OUT/graph.json")
   stamp >"$OUT/build.json"
   echo "graph: built $OUT/graph.json"
 }
