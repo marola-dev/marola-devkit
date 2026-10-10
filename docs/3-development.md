@@ -24,7 +24,10 @@ Every tool and hook has a `--self-test` that runs offline: no network, no `gh` l
 in temporary repos, `gh` stubbed where a command needs it, and fixtures from `scripts/fixtures/`.
 A change to a script extends its self-test first and watches it fail, then makes it pass. A new
 script goes into `tests/self-tests.sh`'s `sh_tests` or `py_tests` list, which is the one list
-both `just quality` and the flake's `self-tests` check read.
+both `just quality` and the flake's `self-tests` check read. A fake script a self-test writes
+starts with `#!$BASH` (a Python one runs under `sys.executable`), never `#!/usr/bin/env`: the
+flake's sandbox has no `/usr/bin/env`, so such a fake passes locally and fails in CI, and
+`tests/self-tests.sh` refuses it.
 
 A self-test that creates git repos starts with
 `unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR` and
