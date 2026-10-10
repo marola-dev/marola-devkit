@@ -28,9 +28,9 @@ if [ "${1:-}" = --self-test ]; then
   # git >= 2.38.1 refuses file:// submodules unless told otherwise.
   export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.file.allow GIT_CONFIG_VALUE_0=always
   mkdir -p "$t/bin" "$t/remote/a"
-  printf '#!/usr/bin/env bash\necho "gh $*" >>"%s/gh.log"\n' "$t" >"$t/bin/gh"
+  printf '#!%s\necho "gh $*" >>"%s/gh.log"\n' "$BASH" "$t" >"$t/bin/gh"
   cat >"$t/bin/wiring" <<EOF
-#!/usr/bin/env bash
+#!$BASH
 set -euo pipefail
 echo "\$*" >>"$t/wiring.log"
 [ -z "\${WIRING_FAIL:-}" ] || exit 3
