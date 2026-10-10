@@ -27,5 +27,18 @@ t() {   # </dev/null: a self-test that falls through to a stdin read must fail, 
 }
 for s in "${sh_tests[@]}"; do t bash "$s"; done
 for p in "${py_tests[@]}"; do t python3 "$p"; done
+
+# A fake written with an env shebang passes here and never runs in nix flake check's sandbox, which
+# has no /usr/bin/env (#61, #81, #83): fakes start with #!$BASH. `en[v]` keeps this file off its own list.
+env_shebangs() { grep -rnHE '#!/usr/bin/en[v]' "$@" --include='*.sh' --include='*.py' 2>/dev/null | grep -vE '^[^:]+:1:'; }
+fx="$(mktemp -d)"; trap 'rm -rf "$log" "$fx"' EXIT
+printf '#!/usr/bin/%s bash\ncat >fake <<EOF\n#!/usr/bin/%s bash\nEOF\n' env env >"$fx/red.sh"
+printf '#!/usr/bin/%s bash\ncat >fake <<EOF\n%s\nEOF\n' env "#!\$BASH" >"$fx/green.sh"
+if [ "$(env_shebangs "$fx/red.sh" | wc -l)" -eq 1 ] && [ -z "$(env_shebangs "$fx/green.sh")" ]; then
+  echo "ok    env-shebang check (fixtures)"
+else failed=$((failed + 1)); echo "FAIL  env-shebang check: its fixtures were judged wrong"; fi
+if offenders="$(env_shebangs scripts plugins tests)"; then
+  failed=$((failed + 1)); echo "FAIL  a fake with an env shebang (use #!\$BASH, or sys.executable in Python):"; sed 's/^/      /' <<<"$offenders"
+else echo "ok    no env-shebang fakes"; fi
 [ "$failed" -eq 0 ] || { echo "self-tests: $failed failed" >&2; exit 1; }
 echo "self-tests: all ok"
