@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # graph — a pinned graphify, run offline and keyless, its output outside the checkout (MIP-0076 §5.2).
 #
-#   graph build                      extract --code-only --no-label, then update, into the cache
+#   graph build                      extract --code-only, prune, cluster-only, name communities, into the cache
 #   graph query "<question>" [...]   --budget 400 unless one is given
 #   graph path <a> <b>  |  graph explain <name>
-#   graph extract|update . [...]     passed through; extract needs --code-only
 #   graph --self-test
 #
 # The cache is ${XDG_CACHE_HOME:-$HOME/.cache}/marola-graph/<repo>, <repo> the checkout's dir name.
 set -euo pipefail
 
-usage() { sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "graph: $*" >&2; exit 1; }
 
 self_test() {
@@ -27,11 +26,22 @@ self_test() {
   tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' RETURN
   bin="$tmp/bin" log="$tmp/graphify.log" repo="$tmp/r" sub="$tmp/s"
   mkdir -p "$bin" && : >"$log"
+  # extract's graph: library nodes (no source_file), edges to them, a self-loop, and file nodes
+  # (label = file name). cluster-only puts f, run, go in 0; alfa, beta in 1; g alone in 2.
+  FAKE_GRAPH='{"nodes":[{"id":"f","label":"a.py","source_file":"a.py"},{"id":"run","label":"run()","source_file":"a.py"},{"id":"go","label":"go","source_file":"a.py"},{"id":"alfa","label":"alfa","source_file":"c.py"},{"id":"beta","label":"beta","source_file":"c.py"},{"id":"g","label":"b.py","source_file":"b.py"},{"id":"String","source_file":""},{"id":"kyo"}],"links":[{"source":"f","target":"run"},{"source":"f","target":"go"},{"source":"f","target":"g"},{"source":"run","target":"go"},{"source":"alfa","target":"beta"},{"source":"f","target":"String"},{"source":"kyo","target":"alfa"},{"source":"beta","target":"beta"}]}'
+  echo '.nodes |= map(.community = ({"f":0,"run":0,"go":0,"alfa":1,"beta":1,"g":2}[.id]))' >"$tmp/assign.jq"
   # env -i strips anything that could point the fake at its log, so the path is baked in.
   cat >"$bin/graphify" <<EOF
 #!$BASH
 { printf 'ARGV'; printf ' %s' "\$@"; echo; env | sed 's/^/ENV /'; } >>"$log"
-o=\${GRAPHIFY_OUT:-graphify-out}; mkdir -p "\$o"; echo '{}' >"\$o/graph.json"
+o=\${GRAPHIFY_OUT:-graphify-out}; mkdir -p "\$o"
+case "\$1" in
+  extract) echo '$FAKE_GRAPH' >"\$o/graph.json" ;;
+  cluster-only)
+    echo "CLUSTERED \$(jq '.nodes | length' "\$o/graph.json") LABELS \$(jq -c . "\$o/.graphify_labels.json" 2>/dev/null)" >>"$log"
+    jq -f "$tmp/assign.jq" "\$o/graph.json" >"\$o/g.tmp" && mv "\$o/g.tmp" "\$o/graph.json"
+    echo 'Token cost: 0 input · 0 output' >"\$o/GRAPH_REPORT.md"; : >"\$o/graph.html" ;;
+esac
 EOF
   chmod +x "$bin/graphify"
   export PATH="$bin:$PATH" XDG_CACHE_HOME="$tmp/cache"
@@ -53,19 +63,41 @@ EOF
   check "only §5.2's five variables (bash adds PWD, SHLVL, _)" \
     "$(grep '^ENV ' "$log" | sed 's/^ENV //; s/=.*//' | grep -vxE 'PWD|SHLVL|_|OLDPWD' | sort -u | tr '\n' ' ')" \
     "GRAPHIFY_NO_AUTO_REFRESH GRAPHIFY_OUT HOME OLLAMA_BASE_URL PATH "
-  check "OLLAMA_BASE_URL points nowhere" "$(grep -c '^ENV OLLAMA_BASE_URL=http://127.0.0.1:9$' "$log")" "2"
-  check "build runs extract --code-only --no-label, then update" "$(grep '^ARGV' "$log" | tr '\n' '|')" \
-    "ARGV extract . --code-only --no-label|ARGV update .|"
+  check "OLLAMA_BASE_URL points nowhere" "$(grep -c '^ENV OLLAMA_BASE_URL=http://127.0.0.1:9$' "$log")" "3"
+  check "build runs extract --code-only --no-label, then cluster-only --no-label twice on the cached graph" \
+    "$(grep '^ARGV' "$log" | tr '\n' '|')" \
+    "ARGV extract . --code-only --no-label|ARGV cluster-only . --no-label --graph $cache/graph.json|ARGV cluster-only . --no-label --graph $cache/graph.json|"
   hasnot "never --backend" "$(cat "$log")" "--backend"
 
-  echo "no_auto_refresh_set"
-  check "both build calls have GRAPHIFY_NO_AUTO_REFRESH=1" "$(grep -c '^ENV GRAPHIFY_NO_AUTO_REFRESH=1$' "$log")" "2"
+  echo "build_is_code_only"
+  hasnot "no update call" "$(grep '^ARGV' "$log")" "ARGV update"
 
-  echo "refuses_extract_without_code_only"
+  echo "build_prunes_library_nodes_and_self_loops"
+  check "nodes without a source_file are gone" "$(jq -c '[.nodes[].id]' "$cache/graph.json")" '["f","run","go","alfa","beta","g"]'
+  check "edges touching them and self-loops are gone" "$(jq -c '[.links[] | .source + "-" + .target]' "$cache/graph.json")" \
+    '["f-run","f-go","f-g","run-go","alfa-beta"]'
+  check "cluster-only read the pruned graph" "$(grep -c '^CLUSTERED 6 ' "$log")" "2"
+
+  echo "communities_named_by_hub"
+  check "the first cluster-only sees no labels" "$(grep '^CLUSTERED' "$log" | head -1)" "CLUSTERED 6 LABELS "
+  check "the second gets each community's hub: no file node, then shortest, then alphabetical" \
+    "$(grep '^CLUSTERED' "$log" | tail -1)" 'CLUSTERED 6 LABELS {"0":"go","1":"alfa","2":"b.py"}'
+  sed -i 's/^CLUSTERED/BUILT1/' "$log"; g build >/dev/null
+  check "a rebuild drops the last build's labels first" "$(grep '^CLUSTERED' "$log" | head -1)" "CLUSTERED 6 LABELS "
+  check "a report and HTML beside it" "$(test -f "$cache/GRAPH_REPORT.md" && test -f "$cache/graph.html" && echo y)" "y"
+
+  echo "no_auto_refresh_set"
+  check "every build call has GRAPHIFY_NO_AUTO_REFRESH=1" "$(grep -c '^ENV GRAPHIFY_NO_AUTO_REFRESH=1$' "$log")" \
+    "$(grep -c '^ARGV' "$log")"
+
+  echo "refuses_update_and_extract"
   : >"$log"
-  rc=0; out=$(g extract .) || rc=$?
-  check "extract without --code-only exits non-zero" "$((rc != 0))" "1"
-  has "and says why" "$out" "--code-only"
+  rc=0; out=$(g extract . --code-only --no-label) || rc=$?
+  check "extract exits non-zero" "$((rc != 0))" "1"
+  has "and points at graph build" "$out" "graph build"
+  rc=0; out=$(g update .) || rc=$?
+  check "update exits non-zero" "$((rc != 0))" "1"
+  has "and points at graph build" "$out" "graph build"
   rc=0; out=$(g query q --backend claude) || rc=$?
   check "--backend is refused too" "$((rc != 0))" "1"
   check "graphify was never called" "$(wc -c <"$log" | tr -d ' ')" "0"
@@ -133,12 +165,45 @@ stamp() {
     '{head: $head, submodules: $submodules}'
 }
 
+# Library and package nodes (no source_file: `String`, `kyo`) are hubs that bridge unrelated code,
+# and self-loops are noise; both crowd real symbols out of a query's budget (#82).
+prune() {
+  jq '(reduce (.nodes[] | select((.source_file // "") != "") | .id) as $i ({}; .[$i] = true)) as $keep
+    | .nodes |= map(select($keep[.id]))
+    | .links |= map(select($keep[.source] and $keep[.target] and .source != .target))' \
+    "$OUT/graph.json" >"$OUT/graph.json.tmp"
+  mv "$OUT/graph.json.tmp" "$OUT/graph.json"
+}
+
+# Each community after its highest-degree member, a file node only when nothing else is there;
+# ties go to the shortest label, then the first alphabetically.
+name_communities() {
+  jq '(reduce .links[] as $l ({}; .[$l.source] += 1 | .[$l.target] += 1)) as $deg
+    | [.nodes[] | select(.community != null)
+       | {c: .community, l: ((.label // .id) | sub("\\(\\)$"; "")), d: ($deg[.id] // 0),
+          file: (.label == ((.source_file // "") | split("/") | last))}]
+    | group_by(.c)
+    | map(([.[] | select(.file | not)] | if length > 0 then . else null end) // .
+          | sort_by(-.d, (.l | length), .l) | first | {key: (.c | tostring), value: .l})
+    | from_entries' "$OUT/graph.json" >"$OUT/.graphify_labels.json"
+}
+
+# No `update`: its Markdown pass filled the graph with section headings (#82). The first cluster-only
+# assigns communities; given a labels file and no .sig, the second keeps those names when the
+# community count matches and hub-names the rest itself. --no-label: no model call either way.
 build() {
   local missing
   missing=$(git -C "$TOP" submodule status | awk '/^-/ {print $2}' | tr '\n' ' ')
   [ -z "$missing" ] || die "uninitialised submodule(s): ${missing% }; run git submodule update --init"
   mkdir -p "$OUT"
-  (cd "$TOP" && run extract . --code-only --no-label && run update .)
+  rm -f "$OUT/.graphify_labels.json" "$OUT/.graphify_labels.json.sig"
+  (cd "$TOP" && run extract . --code-only --no-label)
+  prune
+  (cd "$TOP" && run cluster-only . --no-label --graph "$OUT/graph.json")
+  name_communities
+  (cd "$TOP" && run cluster-only . --no-label --graph "$OUT/graph.json")
+  # Trap: with named labels present, cluster-only first copies the graph to a dated backup dir.
+  rm -rf "$OUT"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]
   stamp >"$OUT/build.json"
   echo "graph: built $OUT/graph.json"
 }
@@ -168,9 +233,6 @@ case "$verb" in
     for a in "$@"; do case "$a" in --budget|--budget=*) budget=() ;; esac; done
     run query "$@" --graph "$OUT/graph.json" "${budget[@]}" ;;
   path|explain) stale_notice; run "$verb" "$@" --graph "$OUT/graph.json" ;;
-  extract|update)
-    [ "$verb" = update ] || [[ " $* " == *" --code-only "* ]] || die "extract needs --code-only (without it graphify calls a model)"
-    [ "$verb" = update ] || [[ " $* " == *" --no-label "* ]] || set -- "$@" --no-label
-    mkdir -p "$OUT"; run "$verb" "$@" ;;
-  *) die "unknown command '$verb' (build, query, path, explain, extract, update)" ;;
+  extract|update) die "$verb would overwrite the pruned graph; run: graph build" ;;
+  *) die "unknown command '$verb' (build, query, path, explain)" ;;
 esac

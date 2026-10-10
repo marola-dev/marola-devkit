@@ -89,14 +89,20 @@ runs a fake graphify, so it cannot catch that. The locked version:
 2. Check everything [graph.sh](https://github.com/marola-dev/marola-devkit/blob/main/scripts/graph.sh)
    relies on against `nix develop -c graphify <subcommand> --help`:
    - `extract . --code-only --no-label` (0.9.66 lists `--no-label` only under `cluster-only`, but
-     `extract` accepts it) and `update .`;
+     `extract` accepts it), and `graph.json`'s `nodes[].source_file` and `links[]`, which the
+     prune reads;
+   - `cluster-only . --no-label --graph <file>`: it must rewrite `graph.json`, `GRAPH_REPORT.md`
+     and `graph.html` beside that file with no model call (0.9.66 labels communities with a model
+     only when neither `--no-label` nor a saved `.graphify_labels.json` is there), and must keep a
+     `.graphify_labels.json` (`{"<community id>": "<name>"}`, no `.sig` beside it) whose count
+     matches the communities: `grep -c 'Community [0-9]* - "Community'` on the report says 0;
    - `query … --graph <file> --budget N`, and `path`/`explain` with `--graph <file>`;
    - `GRAPHIFY_OUT`, where `graph.json` must land; `GRAPHIFY_NO_AUTO_REFRESH=1` (honoured from
      0.9.72, inert before); `HOME` set to the cache dir; `OLLAMA_BASE_URL=http://127.0.0.1:9`.
 3. In a fresh clone of this repo, `graph build` then `graph query "<question>"`:
    `git status --porcelain --ignored` still prints nothing, and `grep 'Token cost'` on the
-   `GRAPH_REPORT.md` beside the `graph.json` that `build` names says 0 input and 0 output (grep
-   it: the whole report is about 21k tokens).
+   `GRAPH_REPORT.md` beside the `graph.json` that `build` names says 0 input and 0 output, and
+   `jq '[.nodes[] | select((.source_file // "") == "")] | length'` on that `graph.json` says 0.
 4. `bash tests/self-tests.sh`. A moved flag changes `graph.sh` and its self-test together, and the
    release entry names the new graphify version.
 
