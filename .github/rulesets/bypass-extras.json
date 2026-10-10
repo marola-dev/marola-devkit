@@ -1,0 +1,22 @@
+{
+  "marola-dev/marola": [
+    {
+      "actor_id": null,
+      "actor_type": "OrganizationAdmin",
+      "bypass_mode": "pull_request",
+      "reason": "No direct pushes to main, even by an admin's PAT (MAROLA_CROSS_REPO_PAT): bypass only through a PR."
+    },
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "pull_request",
+      "reason": "No direct pushes to main by a repo admin either: bypass only through a PR."
+    },
+    {
+      "actor_id": 5257042,
+      "actor_type": "Integration",
+      "bypass_mode": "pull_request",
+      "reason": "The marola-pointer-sync App merges pointer-sync's PR (marola-dev/marola#739)."
+    }
+  ]
+}

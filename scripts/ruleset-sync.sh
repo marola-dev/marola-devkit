@@ -5,9 +5,11 @@
 #
 #   ruleset-sync check [owner/repo ...]   # default: the caller's repo (gh repo view)
 #   ruleset-sync apply <owner/repo ...>   # create when missing, update in place when drifted
-#   ruleset-sync [--manifest FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
+#   ruleset-sync [--manifest FILE] [--extras FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
 #   ruleset-sync --self-test
 #
+# A repo keyed in .github/rulesets/bypass-extras.json expects the manifest's bypass list with its
+# extras merged by (actor_type, actor_id): a match overrides bypass_mode, anything else is added.
 # check prints ok/missing/drifted per repo (stderr) and a unified diff for a drifted one
 # (stdout); it exits non-zero if any repo is missing or drifted. apply prints what it did
 # (stderr) and the gh call it ran or, under --dry-run, would have run (stdout) instead. Never
@@ -16,8 +18,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest_default="$root/.github/rulesets/main-rule.json"
+extras_default="$root/.github/rulesets/bypass-extras.json"
 
-usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # normalize_ruleset <stdin JSON> -> stdout: the manifest's own shape (pretty, sorted keys), so a
 # live `gh api .../rulesets/<id>` response compares byte-for-byte against the manifest. The
@@ -26,9 +29,33 @@ usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 normalize_ruleset() {
   jq -S '
     del(.id, .node_id, ._links, .source, .source_type, .created_at, .updated_at, .current_user_can_bypass)
-    | .bypass_actors |= (. // [] | sort_by(.actor_type))
+    | .bypass_actors |= (. // [] | sort_by(.actor_type, .actor_id))
     | .rules |= (. // [] | sort_by(.type))
   '
+}
+
+# expected_ruleset <repo> -> stdout: the manifest with <repo>'s extras merged in, reasons dropped
+# (GitHub doesn't store them, so left in they would be drift on every check).
+expected_ruleset() {
+  jq --arg r "$1" --slurpfile x "$extras" '
+    .bypass_actors = reduce (($x[0][$r] // [])[] | del(.reason)) as $e (.bypass_actors // [];
+      if any(.[]; .actor_type == $e.actor_type and .actor_id == $e.actor_id)
+      then map(if .actor_type == $e.actor_type and .actor_id == $e.actor_id then .bypass_mode = $e.bypass_mode else . end)
+      else . + [$e] end)
+  ' "$manifest"
+}
+
+# want_for <repo>: sets $want (the file apply sends), $want_norm and $want_label for <repo>. A repo
+# with no extras sends the manifest itself, byte for byte.
+want_for() {
+  if jq -e --arg r "$1" '(.[$r] // []) | length > 0' "$extras" >/dev/null; then
+    want="$work/${1//\//_}.json"
+    expected_ruleset "$1" > "$want"
+    want_norm="$(normalize_ruleset < "$want")"
+    want_label="manifest+extras"
+  else
+    want="$manifest"; want_norm="$manifest_norm"; want_label="manifest"
+  fi
 }
 
 resolve_repo() { gh repo view --json nameWithOwner -q .nameWithOwner </dev/null; }
@@ -76,12 +103,13 @@ check_repo() {
   fi
   payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync check: $repo: failed to fetch ruleset $id" >&2; return 1; }
   repo_norm="$(normalize_ruleset <<<"$payload")"
-  if [ "$repo_norm" = "$manifest_norm" ]; then
+  want_for "$repo"
+  if [ "$repo_norm" = "$want_norm" ]; then
     echo "ruleset-sync check: $repo: ok" >&2
     return 0
   fi
   echo "ruleset-sync check: $repo: drifted" >&2
-  diff -u --label manifest --label "$repo" <(printf '%s\n' "$manifest_norm") <(printf '%s\n' "$repo_norm") || true
+  diff -u --label "$want_label" --label "$repo" <(printf '%s\n' "$want_norm") <(printf '%s\n' "$repo_norm") || true
   return 1
 }
 
@@ -91,20 +119,21 @@ check_repo() {
 apply_repo() {
   local repo="$1" id payload repo_norm
   apply_outcome=failed
+  want_for "$repo"
   id="$(ruleset_id "$repo" "$ruleset_name")" || { echo "ruleset-sync apply: $repo: failed to list rulesets" >&2; return 1; }
   if [ -z "$id" ]; then
     echo "ruleset-sync apply: $repo: missing — creating" >&2
-    if run gh api "repos/$repo/rulesets" --method POST --input "$manifest"; then apply_outcome=created; return 0; fi
+    if run gh api "repos/$repo/rulesets" --method POST --input "$want"; then apply_outcome=created; return 0; fi
     return 1
   fi
   payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync apply: $repo: failed to fetch ruleset $id" >&2; return 1; }
   repo_norm="$(normalize_ruleset <<<"$payload")"
-  if [ "$repo_norm" = "$manifest_norm" ]; then
+  if [ "$repo_norm" = "$want_norm" ]; then
     echo "ruleset-sync apply: $repo: ok, nothing to do" >&2
     apply_outcome=ok; return 0
   fi
   echo "ruleset-sync apply: $repo: drifted — updating ruleset $id" >&2
-  if run gh api "repos/$repo/rulesets/$id" --method PUT --input "$manifest"; then apply_outcome=updated; return 0; fi
+  if run gh api "repos/$repo/rulesets/$id" --method PUT --input "$want"; then apply_outcome=updated; return 0; fi
   return 1
 }
 
@@ -172,8 +201,18 @@ self_test() {
 }
 JSON
 
+  local extras="$tmp/bypass-extras.json"
+  cat > "$extras" <<'JSON'
+{
+  "acme/extras-repo": [
+    { "actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "pull_request", "reason": "admins PR-only" },
+    { "actor_id": 7, "actor_type": "Integration", "bypass_mode": "pull_request", "reason": "the merge App" }
+  ]
+}
+JSON
+
   local script="${BASH_SOURCE[0]}"
-  run_script() { PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" "$@" 2>&1; }
+  run_script() { PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --extras "$extras" "$@" 2>&1; }
 
   echo "-- an identical ruleset, alongside an unrelated one on the same repo --"
   jq '.id = 1' "$manifest" > "$tmp/stub/detail.acme_ok-repo.1.json"
@@ -249,7 +288,7 @@ JSON
   has "all-org --include-forks: reaches the fork" "$out" "fork-repo"
 
   echo "-- a clean check keeps stdout empty: status and tally go to stderr --"
-  out="$(PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" check acme/ok-repo 2>/dev/null)" && rc=0 || rc=$?
+  out="$(PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --extras "$extras" check acme/ok-repo 2>/dev/null)" && rc=0 || rc=$?
   check "clean check: exit 0" "$rc" "0"
   check "clean check: nothing on stdout" "$out" ""
 
@@ -259,6 +298,59 @@ JSON
   check "duplicate name: non-zero exit" "$([ "$rc" -ne 0 ] && echo nonzero)" "nonzero"
   has "duplicate name: says so" "$out" "2 rulesets named"
 
+  local app='{"actor_id":7,"actor_type":"Integration","bypass_mode":"pull_request"}'
+  local admin_pr='{"actor_id":null,"actor_type":"OrganizationAdmin","bypass_mode":"pull_request"}'
+  jq -n '[{id:5,name:"main-rule"}]' > "$tmp/stub/list.acme_extras-repo.json"
+  live_extras() { jq --argjson b "$1" '.id = 5 | .bypass_actors = $b' "$manifest" > "$tmp/stub/detail.acme_extras-repo.5.json"; }
+
+  echo "-- check_ok_with_repo_extras: base + that repo's extras, in any order --"
+  live_extras "[$app,$admin_pr]"
+  out="$(run_script check acme/extras-repo)" && rc=0 || rc=$?
+  check "check_ok_with_repo_extras: exit 0" "$rc" "0"
+  has "check_ok_with_repo_extras: prints ok" "$out" "acme/extras-repo: ok"
+
+  echo "-- check_drifted_when_extra_missing: the App gone, or the admin mode reverted --"
+  live_extras "[$admin_pr]"
+  out="$(run_script check acme/extras-repo)" && rc=0 || rc=$?
+  check "check_drifted_when_extra_missing (App): exit 1" "$rc" "1"
+  has "check_drifted_when_extra_missing (App): diff names it" "$out" '-      "actor_type": "Integration"'
+  live_extras "[$app,{\"actor_id\":null,\"actor_type\":\"OrganizationAdmin\",\"bypass_mode\":\"always\"}]"
+  out="$(run_script check acme/extras-repo)" && rc=0 || rc=$?
+  check "check_drifted_when_extra_missing (admin mode): exit 1" "$rc" "1"
+  has "check_drifted_when_extra_missing (admin mode): diff shows it" "$out" '+      "bypass_mode": "always"'
+
+  echo "-- check_drifted_on_unlisted_actor: an actor in neither base nor extras --"
+  live_extras "[$app,$admin_pr,{\"actor_id\":99,\"actor_type\":\"Integration\",\"bypass_mode\":\"always\"}]"
+  out="$(run_script check acme/extras-repo)" && rc=0 || rc=$?
+  check "check_drifted_on_unlisted_actor: exit 1" "$rc" "1"
+  has "check_drifted_on_unlisted_actor: diff names it" "$out" '+      "actor_id": 99'
+
+  echo "-- apply_keeps_extras: the PUT body is base + extras, reasons stripped --"
+  live_extras "[{\"actor_id\":null,\"actor_type\":\"OrganizationAdmin\",\"bypass_mode\":\"always\"}]"
+  : > "$tmp/stub/log"
+  out="$(run_script apply acme/extras-repo)" && rc=0 || rc=$?
+  check "apply_keeps_extras: exit 0" "$rc" "0"
+  has "apply_keeps_extras: PUT to id 5" "$(cat "$tmp/stub/log")" "PUT repos/acme/extras-repo/rulesets/5"
+  has "apply_keeps_extras: keeps the App" "$(cat "$tmp/stub/log")" "$app"
+  has "apply_keeps_extras: keeps the admin mode" "$(cat "$tmp/stub/log")" "$admin_pr"
+  hasnt "apply_keeps_extras: no admin at always" "$(cat "$tmp/stub/log")" '"bypass_mode":"always"'
+  hasnt "apply_keeps_extras: reason never sent" "$(cat "$tmp/stub/log")" "reason"
+  live_extras "[$app,$admin_pr]"
+  : > "$tmp/stub/log"
+  out="$(run_script apply acme/extras-repo)" && rc=0 || rc=$?
+  check "apply_keeps_extras: already matching makes no call" "$(cat "$tmp/stub/log")" ""
+
+  echo "-- extras_entry_needs_reason: a missing or empty reason is refused --"
+  jq '.["acme/extras-repo"][1] |= del(.reason)' "$extras" > "$tmp/no-reason.json"
+  jq '.["acme/extras-repo"][0].reason = " "' "$extras" > "$tmp/blank-reason.json"
+  for f in no-reason blank-reason; do
+    : > "$tmp/stub/log"
+    out="$(PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --extras "$tmp/$f.json" apply acme/extras-repo 2>&1)" && rc=0 || rc=$?
+    check "extras_entry_needs_reason ($f): exit 1" "$rc" "1"
+    has "extras_entry_needs_reason ($f): says so" "$out" "reason"
+    check "extras_entry_needs_reason ($f): makes no call" "$(cat "$tmp/stub/log")" ""
+  done
+
   if [ "$fails" -eq 0 ]; then echo "ruleset-sync self-test: ok"; return 0; fi
   echo "ruleset-sync self-test: $fails failure(s)" >&2; return 1
 }
@@ -266,6 +358,7 @@ JSON
 # --- argument parsing ---
 
 manifest="$manifest_default"
+extras="$extras_default"
 all_org=""
 include_forks=false
 cmd=""
@@ -274,6 +367,7 @@ repos=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --manifest) manifest="${2:?--manifest needs a file}"; shift 2 ;;
+    --extras) extras="${2:?--extras needs a file}"; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --all-org) all_org="${2:?--all-org needs an org}"; shift 2 ;;
     --include-forks) include_forks=true; shift ;;
@@ -291,6 +385,18 @@ done
 [ -f "$manifest" ] || { echo "ruleset-sync: manifest not found: $manifest" >&2; exit 1; }
 ruleset_name="$(jq -r .name "$manifest")"
 manifest_norm="$(normalize_ruleset < "$manifest")"
+
+[ -f "$extras" ] || { echo "ruleset-sync: extras not found: $extras" >&2; exit 1; }
+# A reason is what makes an extra reviewable: an exception to the shared bypass list nobody can
+# explain is the one this file exists to stop.
+bad_extras="$(jq -r '
+  to_entries[] | .key as $r | .value[]
+  | select((.reason | type) != "string" or (.reason | test("\\S") | not)
+      or .actor_type == null or .bypass_mode == null or (has("actor_id") | not))
+  | "  \($r): \(tojson)"
+' "$extras")" || { echo "ruleset-sync: $extras: not a {\"owner/repo\": [actor, ...]} map" >&2; exit 1; }
+[ -z "$bad_extras" ] || { printf 'ruleset-sync: %s: each entry needs actor_id, actor_type, bypass_mode and a non-empty reason:\n%s\n' "$extras" "$bad_extras" >&2; exit 1; }
+work="$(mktemp -d)"; trap 'rm -rf "$work"' EXIT
 
 if [ -n "$all_org" ]; then
   mapfile -t repos < <(org_repos "$all_org" "$include_forks")
