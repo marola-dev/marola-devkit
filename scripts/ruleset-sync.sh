@@ -205,8 +205,8 @@ JSON
   cat > "$extras" <<'JSON'
 {
   "acme/extras-repo": [
-    { "actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "pull_request", "reason": "admins PR-only" },
-    { "actor_id": 7, "actor_type": "Integration", "bypass_mode": "pull_request", "reason": "the merge App" }
+    { "actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "pull_request", "reason": "synthetic: overrides the base actor's mode" },
+    { "actor_id": 7, "actor_type": "Integration", "bypass_mode": "pull_request", "reason": "synthetic: an actor the base lacks" }
   ]
 }
 JSON
