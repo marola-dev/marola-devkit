@@ -1,0 +1,10 @@
+{
+  "marola-dev/marola": [
+    {
+      "actor_id": 5257042,
+      "actor_type": "Integration",
+      "bypass_mode": "pull_request",
+      "reason": "The marola-pointer-sync App merges pointer-sync's PR (marola-dev/marola#739)."
+    }
+  ]
+}
