@@ -4,6 +4,17 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.8.2 — 2026-10-10
+
+- `ruleset-sync` merges each repo's bypass extras from `.github/rulesets/bypass-extras.json`
+  (`owner/repo` → actors, each with a reason) into `main-rule`'s bypass list, so `apply` keeps the
+  umbrella's `marola-pointer-sync` App instead of dropping it (#68).
+- `main-rule`'s two admin bypasses are `pull_request`, not `always`: no admin, and no admin's PAT,
+  pushes straight to `main`. After this release, `just rulesets-apply` per repo; no workflow
+  pushes to a default branch, so only a person's direct push to `main` stops working.
+- `docs/3-development.md` has an "Updating graphify" guide: what `graph.sh` depends on, and what
+  proves a new version works (#72, #73).
+
 ## v0.8.1 — 2026-10-10
 
 - `wiring` counts dispatch types a `run:` builds in a bash array (`events=(…)`, `events+=(…)`)
