@@ -17,6 +17,8 @@ marketplace `ref` at once.
   copies the new block from `agents/invariants.md` and drops `Cost:` from its AGENTS.md when it
   bumps, or `agents-check` fails.
 - `gemini-review.yml` has no `cost-trailer` input any more; a caller that passes it must remove it.
+- `gemini-review.yml` falls back to `gemini-3.6-flash`; Google deprecated `gemini-3.5-flash` and
+  redirects it there (#106). An org or repo `GEMINI_MODEL` variable still wins.
 
 ## v0.8.3 — 2026-10-10
 

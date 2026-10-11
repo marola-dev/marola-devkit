@@ -44,7 +44,7 @@ on:
         type: string
         default: ""
       gemini-model:
-        description: "Model id; empty uses vars.GEMINI_MODEL, then gemini-3.5-flash."
+        description: "Model id; empty uses vars.GEMINI_MODEL, then gemini-3.6-flash."
         type: string
         default: ""
     secrets:
@@ -113,7 +113,7 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PR: ${{ github.event.pull_request.number }}
-          MODEL: ${{ inputs.gemini-model || vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+          MODEL: ${{ inputs.gemini-model || vars.GEMINI_MODEL || 'gemini-3.6-flash' }}
         run: |
           set -euo pipefail
           root=.
