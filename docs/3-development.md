@@ -99,6 +99,9 @@ runs a fake graphify, so it cannot catch that. The locked version:
    - `query … --graph <file> --budget N`, and `path`/`explain` with `--graph <file>`;
    - `GRAPHIFY_OUT`, where `graph.json` must land; `GRAPHIFY_NO_AUTO_REFRESH=1` (honoured from
      0.9.72, inert before); `HOME` set to the cache dir; `OLLAMA_BASE_URL=http://127.0.0.1:9`.
+   - `PYTHONHASHSEED=0`: without it `extract` and `cluster-only` re-exec `sys.executable` to pin
+     the seed, which drops nixpkgs' wrapper and fails (0.9.66: a `SyntaxError` on the wrapper;
+     0.9.74: `No module named graphify`).
 3. In a fresh clone of this repo, `graph build` then `graph query "<question>"`:
    `git status --porcelain --ignored` still prints nothing, and `grep 'Token cost'` on the
    `GRAPH_REPORT.md` beside the `graph.json` that `build` names says 0 input and 0 output, and
