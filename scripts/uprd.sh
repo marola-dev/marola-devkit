@@ -7,9 +7,9 @@
 # just uprd # base branch (default: the PR's base, else main) BRANCH=x EXTRA_FILE=f #
 # (scripts/uprds.sh) another branch than the checked-out one, and a # file appended to the
 # generated body — the stack section Generated body follows .github/PULL_REQUEST_TEMPLATE.md's
-# shape (bold labels + a table, no `#` headings — see AGENTS.md "Attribution and cost
-# accounting"): Summary — the first (oldest) commit's body paragraph, trimmed to ~2 sentences, or
-# a `<!-- fill -->` placeholder when that commit has no body.
+# shape (bold labels + a table, no `#` headings — see AGENTS.md "Attribution"): Summary — the
+# first (oldest) commit's body paragraph, trimmed to ~2 sentences, or a `<!-- fill -->`
+# placeholder when that commit has no body.
 set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/uprd_title.sh.
@@ -197,7 +197,7 @@ lines = []
 for line in body.splitlines():
     if line.strip() == "":
         break
-    if re.match(r"^(Co-Authored-By|Cost|Claude-Session|Signed-off-by):", line):
+    if re.match(r"^(Co-Authored-By|Claude-Session|Signed-off-by):", line):
         continue
     lines.append(line)
 para = " ".join(" ".join(lines).split())
@@ -296,33 +296,8 @@ generate_tested() {
   echo "$cell"
 }
 
-generate_cost() {
-  # One line per commit, oldest first, joined with `<br>` (a markdown table cell can't hold a raw
-  # newline): the commit's own `Cost:` trailer when it has one; otherwise `scripts/cost-split.py
-  # --estimate-commit` for that commit, labelled `est.` and never mistaken for a measurement; "not
-  # recorded" only for a commit where even the estimator has nothing (an empty diff, or no
-  # calibratable history) — never a blanket fallback for the whole branch.
-  local sha short body line text out="" sep=""
-  while IFS= read -r sha; do
-    [ -n "$sha" ] || continue
-    short="$(git rev-parse --short "$sha")"
-    body="$(git log -1 --format=%B "$sha")"
-    line="$(grep '^Cost:' <<<"$body" | head -1 || true)"  # see the SIGPIPE note near the top of this file
-    if [ -n "$line" ]; then
-      text="${line#Cost: }"
-    else
-      text="$(python3 "$script_dir/cost-split.py" --estimate-commit "$sha" 2>/dev/null || true)"
-      text="${text#Cost: }"
-    fi
-    [ -n "$text" ] || text="not recorded — add a \`Cost:\` trailer"
-    out="${out}${sep}${text} (\`${short}\`)"
-    sep="<br>"
-  done < <(git log --reverse --format=%H "$range" 2>/dev/null)
-  printf '%s\n' "$out"
-}
-
 # The first line is a marker for .github/workflows/pr-body.yml: while it is present the workflow
-# regenerates the body on every push to the PR (new commits change What changed / Cost / Tested);
+# regenerates the body on every push to the PR (new commits change What changed / Tested);
 # a human who rewrites the body by hand removes the line and the workflow leaves the PR alone.
 generate_body() {
   echo "<!-- uprd: generated from the branch's commits — delete this line to stop pr-body.yml from regenerating it -->"
@@ -334,7 +309,6 @@ generate_body() {
   echo "|---|---|"
   echo "| **MIP** | $(generate_mip) |"
   echo "| **Tested** | $(generate_tested) |"
-  echo "| **Cost** | $(generate_cost) |"
   echo
   echo "**What changed**"
   # shellcheck disable=SC2016 # the backticks are literal markdown, not command substitution.

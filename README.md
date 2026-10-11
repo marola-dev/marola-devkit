@@ -1,17 +1,17 @@
 # marola-devkit
 
 The shared dev-flow harness for the marola repos (MIP-0070 §5.1): the stacked-PR, PR-body, issue
-and cost tools, the git hooks, the org invariants block, the issue forms and labels, the reusable
+and trailer tools, the git hooks, the org invariants block, the issue forms and labels, the reusable
 workflows, and a Claude Code plugin with the generic skills, agents and hooks. Every marola repo
 consumes it at a pinned version, and its own AGENTS.md says which pieces it opts out of.
 
-**Status:** this is v0.8.3; each repo pins its own version. Changes per release are in
+**Status:** this is v0.9.0; each repo pins its own version. Changes per release are in
 [CHANGELOG.md](https://github.com/marola-dev/marola-devkit/blob/main/CHANGELOG.md).
 
 ## Try it
 
 ```bash
-nix run github:marola-dev/marola-devkit/v0.8.3#docs-lint -- --self-test   # any tool, no checkout
+nix run github:marola-dev/marola-devkit/v0.9.0#docs-lint -- --self-test   # any tool, no checkout
 nix develop          # in a checkout: every tool on PATH, plus the lint toolchain
 just quality         # this repo's gates
 claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
@@ -38,7 +38,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `stack` | Stacked-PR mechanics for `mip-NNNN/k-slug` branches: `start`, `pr`, `restack`, `status`, `link` |
 | `uprd` / `uprds` | Write a PR body from the branch's commits; the same for a whole MIP stack |
 | `pr-flow` | The whole PR workflow: fill trailers, push, write the body (not `pr`, which is coreutils') |
-| `cost-split` / `cost-fill` | Attribute Claude Code usage to commits; add a missing `Cost:`/`Tested:` trailer |
+| `trailer-fill` | Add a missing `Tested:` trailer, and a task branch's `Closes #N` line |
 | `issues` | Labels sync, Definition of Ready, the `agent-ready` queue, claims, `tasks-to-issues`, the board |
 | `agents-check` | Compare AGENTS.md's invariants block with the pinned devkit's `agents/invariants.md` |
 | `docs-lint` | MIP-0074's stale-content check over `README.md` and `docs/**/*.md` |
@@ -83,7 +83,7 @@ The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`
 
 ```nix
 inputs.marola-devkit = {
-  url = "github:marola-dev/marola-devkit/v0.8.3";
+  url = "github:marola-dev/marola-devkit/v0.9.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 
@@ -103,7 +103,7 @@ import? '.devkit/devkit.just'
 
 A repo that defines a recipe with the same name needs `set allow-duplicate-recipes`.
 
-Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.8.3#uprd`.
+Each tool is also a flake app: `nix run github:marola-dev/marola-devkit/v0.9.0#uprd`.
 
 **Git hooks** are opt-in: `git config core.hooksPath .devkit/.githooks`. The contract a consuming
 repo implements is two recipes in its own justfile:
@@ -132,7 +132,7 @@ working exactly as before.
 {
   "extraKnownMarketplaces": {
     "marola-devkit": {
-      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.8.3" }
+      "source": { "source": "github", "repo": "marola-dev/marola-devkit", "ref": "v0.9.0" }
     }
   },
   "enabledPlugins": { "marola-devkit@marola-devkit": true }
@@ -201,9 +201,9 @@ One caller, needing a second checkout of this repo for its own scripts:
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.8.3
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.9.0
     with:
-      devkit-ref: v0.8.3
+      devkit-ref: v0.9.0
 ```
 
 This repo calls five of them on its own pull requests (`.github/workflows/pr.yml`: `python-ci`,
@@ -232,10 +232,10 @@ on:
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.8.3
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.9.0
     secrets: inherit
     with:
-      devkit-ref: v0.8.3
+      devkit-ref: v0.9.0
       check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
 ```
 

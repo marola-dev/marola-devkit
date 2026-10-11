@@ -24,7 +24,6 @@
       "Bash(uprd:*)",
       "Bash(uprds:*)",
       "Bash(stack:*)",
-      "Bash(cost-split:*)",
       "Bash(scripts/uprd.sh:*)",
       "Bash(scripts/uprds.sh:*)",
       "Bash(scripts/stack.sh:*)",

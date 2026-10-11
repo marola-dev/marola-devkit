@@ -11,13 +11,9 @@ uprd *args:
 uprds *args:
     uprds {{ args }}
 
-# Add a missing Cost:/Tested: trailer to a commit, measured from the session logs.
-cost-fill *args:
-    cost-fill {{ args }}
-
-# Attribute session usage to commits (the `Cost:` trailer).
-cost-split *args:
-    cost-split {{ args }}
+# Add a missing Tested: trailer and a task's Closes #N line to the branch's commits.
+trailer-fill *args:
+    trailer-fill {{ args }}
 
 # The whole PR workflow: fill trailers, push, write the PR body.
 pr *args:

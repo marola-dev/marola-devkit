@@ -41,12 +41,11 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
    deleting a heading. The numbering skips §10 on purpose, so §11 stays Open questions in every
    MIP. Keep it under ~250 lines; long research goes in an appendix at the end.
 5. **Add it to the index.** Append a row to `docs/MIPs/README.md`: number, title, status, date, and
-   the four triage columns (Effort, Gain, Verdict, Cost so far) copied from the MIP's own metadata
+   the three triage columns (Effort, Gain, Verdict) copied from the MIP's own metadata
    block; see "Filling the six triage fields" below.
 6. **Link it.** If it supersedes or implements a `FUTURE-WORK.md` section, add a one-line pointer
    there ("see `docs/MIPs/MIP-NNNN-...md`").
-7. **The implementation PR carries a `Cost` line** (AGENTS.md "Attribution and cost accounting")
-   and updates the MIP's status to Implemented with a link to the PR.
+7. **The implementation PR updates the MIP's status** to Implemented with a link to the PR.
 8. **Don't build it in the same change.** A MIP is merged as `Draft` or `Accepted`; implementation
    is a separate PR that flips the status to `Implemented` and links the PR. If the user asks for
    both, do the MIP first and confirm the design before writing code.
@@ -99,7 +98,6 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
 | **Depends on** | prose, for humans: other MIPs it needs or that need it, whether Phase 1 or a paid cloud resource gates it (`AGENTS.md`), and any non-blocking coordination (shared files, shared design decisions) — say the relationship in words, this field is never parsed |
 | **Blocked by** | machine-readable, for the umbrella's `scripts/mip_graph.py`: a comma-separated list of MIP numbers that must land first, or the literal `none`. Numbers only — no prose, no phase gates, no "not really, but". If a relationship doesn't cleanly reduce to "MIP-NNNN must merge before this one can", it belongs in `Depends on` only, not here — a wrong edge in the generated graph is worse than a missing one |
 | **Risk** | the one thing most likely to make this not worth it |
-| **Cost so far** | the summed `Cost:` trailers of its merged PRs, or "—" if nothing has merged yet |
 
 ### Readiness
 
@@ -179,13 +177,11 @@ assumed from memory. Say so here rather than letting it read as verified by omis
   comma-separated numbers or `none`. When in doubt whether something belongs here, it doesn't:
   leave it in `Depends on`'s prose only.
 - **Risk**: one real failure mode, not a hedge: the thing that would make you regret building it.
-- **Cost so far**: pull it from the merged PRs' `Cost:` trailers (`just cost-split MIP-NNNN`); write
-  "—" for nothing merged yet, never a guess.
 
 ## Index file
 
-`docs/MIPs/README.md` holds one table: `| MIP | Title | Status | Created | Effort | Gain | Verdict |
-Cost so far |` (`Verdict` = the MIP's `Effort vs Gain` field). Keep it sorted by number. Create it
+`docs/MIPs/README.md` holds one table: `| MIP | Title | Status | Created | Effort | Gain | Verdict |`
+(`Verdict` = the MIP's `Effort vs Gain` field). Keep it sorted by number. Create it
 with the first MIP if it doesn't exist.
 
 **Dependency graph.** In the umbrella, `just mip-graph` (`scripts/mip_graph.py`) regenerates a

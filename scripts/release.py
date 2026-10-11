@@ -152,7 +152,7 @@ def release(version, dry_run):
     git(
         "commit",
         "-aqm",
-        f"release: {tag}\n\nTested: python3 scripts/release.py --check {version}\nCost: n/a (release script)",
+        f"release: {tag}\n\nTested: python3 scripts/release.py --check {version}",
         cwd=root,
     )
     git("push", "-u", "origin", branch, cwd=root)

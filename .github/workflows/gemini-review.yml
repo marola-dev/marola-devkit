@@ -39,10 +39,6 @@ on:
           gate that needs no Nix). A failure drops the fix and says so on the PR. Empty: no check.
         type: string
         default: ""
-      cost-trailer:
-        description: "The fix commit's Cost: trailer."
-        type: string
-        default: "$0 (Gemini API free tier)"
       extra-trailers:
         description: "More trailer lines for the fix commit, one per line (marola-site: `MIP: none — Gemini review fix`)."
         type: string
@@ -139,7 +135,6 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           SLUG: ${{ steps.app.outputs.app-slug }}
           CHECK: ${{ inputs.check-command }}
-          COST: ${{ inputs.cost-trailer }}
           EXTRA: ${{ inputs.extra-trailers }}
         run: |
           set -euo pipefail
@@ -163,7 +158,7 @@ jobs:
           uid="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
           git config user.name "${SLUG}[bot]"
           git config user.email "${uid}+${SLUG}[bot]@users.noreply.github.com"
-          msg="$(printf 'fix: apply Gemini review findings (#%s)\n\n%s\n\nTested: %s\nCost: %s\nCo-Authored-By: Gemini <noreply@google.com>\n' "$PR" "$summary" "$tested" "$COST")"
+          msg="$(printf 'fix: apply Gemini review findings (#%s)\n\n%s\n\nTested: %s\nCo-Authored-By: Gemini <noreply@google.com>\n' "$PR" "$summary" "$tested")"
           [ -z "$EXTRA" ] || msg+=$'\n'"$EXTRA"
           git -c core.hooksPath=/dev/null commit -qam "$msg"
           git push -q "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"

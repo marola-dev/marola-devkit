@@ -75,7 +75,7 @@ jobs:
           git add -A
           names="$(git diff --cached --name-only | sed -n "s|^$(dirname "$LOCK")/\([^/]*\)/.*|\1|p" | sort -u | paste -sd, -)"
           title="chore: update vendored skills ($names)"
-          trailers="$(printf 'Tested: skills-vendor check\nCost: n/a (automation)\nCo-Authored-By: Claude <noreply@anthropic.com>')"
+          trailers="$(printf 'Tested: skills-vendor check\nCo-Authored-By: Claude <noreply@anthropic.com>')"
           git -c core.hooksPath=/dev/null commit -qm "$title" -m "skills-vendor update --all, from the skills-update workflow." -m "$trailers"
           git push -f -u origin "$BRANCH"
           gh label create skills-update --color c5def5 --force \

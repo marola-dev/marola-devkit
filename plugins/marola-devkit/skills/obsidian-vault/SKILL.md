@@ -57,15 +57,12 @@ Resume: `claude --resume <session name>` on <machine> · digest: [[marola]]
 
 ## Goal
 ## Done            — commit shas / PR numbers, what changed and why
-## Current state   — files modified; test commands run and their result; Cost so far
+## Current state   — files modified; test commands run and their result
 ## Next steps      — concrete, in order
 ## Open questions
 ## Don't retry     — what failed, and why
 ## Key files       — path — why it matters
 ```
-
-"Cost so far" comes from `just cost-split` or `/usage`. If neither was measured, write "not
-measured" rather than a guess.
 
 ## Sync — "sync the vault", "update obsidian"
 

@@ -86,7 +86,7 @@ Start a fresh session per task (`/clear`, `/rename mip-NNNN/k-slug`), then:
 
 ```bash
 stack start MIP-NNNN <k> <slug>   # branch mip-nnnn/k-slug off the previous task's branch
-# implement — test first (superpowers' test-driven-development), commit with a Cost: trailer
+# implement — test first (superpowers' test-driven-development), commit with a Tested: trailer
 just build && just test && just quality        # + a live check if a data path changed
 stack pr                            # push, open/update the PR with base = previous task
 ```
@@ -95,11 +95,8 @@ The PR body is generated (`uprd`) and starts with "Stacked on `<base>` — part 
 MIP-NNNN". Review and merge **in order, bottom of the stack first**, squash-merging as this repo
 does.
 
-When several tasks came out of one session, `just cost-split MIP-NNNN` splits that session's
-logged usage by commit time and prints the measured `Cost:` trailer per branch (amend before the
-PR, or note the split in the body). `just uprds MIP-NNNN` refreshes every PR of the stack at once,
-regenerated body plus a shared "Stack" section (merge order, states, summed Cost), and opens
-any PR still missing on its right base.
+`just uprds MIP-NNNN` refreshes every PR of the stack at once, regenerated body plus a shared
+"Stack" section (merge order, states), and opens any PR still missing on its right base.
 
 ## Step 3 — after a base PR merges: restack
 
@@ -126,13 +123,13 @@ stack restack --onto-base <sha>   # <sha> = the merged base branch's head
 
 ## Step 4 — finish
 
-When the last task merges: flip the MIP to `Implemented` (with the PR numbers), delete the task
-branches, and put the summed `Cost:` figures from the PRs into the MIP's status row.
+When the last task merges: flip the MIP to `Implemented` (with the PR numbers), and delete the task
+branches.
 
 ## House rules that still apply
 
 - The `mip` skill's rules (local-first, deterministic safety logic, no unsourced text) and
-  `AGENTS.md`'s `Cost:` trailer per commit.
+  `AGENTS.md`'s `Tested:` trailer per commit.
 - Never stack by accident: a follow-up to an *already merged* PR is a new branch off `main`, not a
   child of the old branch (memory: single PR per deliverable). Stacks are for planned task lists.
 - `gh` needs a login (not available inside the ai-jail sandbox): `stack pr --dry-run`

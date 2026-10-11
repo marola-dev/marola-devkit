@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # pr — the one-command agent path from a finished commit to a filled, pushed PR (AGENTS.md
-# "Attribution and cost accounting" — "write the commit, run `just pr`, nothing else"): 1. refuse
+# "Attribution" — "write the commit, run `just pr`, nothing else"): 1. refuse
 # on main or with a dirty working tree (tracked changes; untracked files are ignored) — commit
 # first 2. push — a mip-NNNN/k-* task branch goes through `scripts/stack.sh pr`, which runs
-# scripts/cost-fill.sh itself (#524: this script used to run it too, which would have doubled the
+# scripts/trailer-fill.sh itself (#524: this script used to run it too, which would have doubled the
 # run for no reason — stack.sh is the one script that also knows the right base, so it owns
-# cost-fill for a task branch); anything else runs scripts/cost-fill.sh here (idempotent, decides
-# on its own whether a trailer needs upgrading) then a plain `git push`, with `--force-with-lease`
-# when cost-fill just rewrote history (detected by comparing HEAD).
+# trailer-fill for a task branch); anything else runs scripts/trailer-fill.sh here (idempotent, decides
+# on its own whether a commit needs a Tested: placeholder) then a plain `git push`, with `--force-with-lease`
+# when trailer-fill just rewrote history (detected by comparing HEAD).
 set -euo pipefail
 
 dry_run=0
@@ -36,13 +36,13 @@ if [ "$dry_run" -eq 1 ]; then
   echo "pr --dry-run on $branch (mip task: $([ "$is_mip_task" -eq 1 ] && echo yes || echo no)):"
   echo
   if [ "$is_mip_task" -eq 1 ]; then
-    echo "+ stack pr   # runs cost-fill.sh itself — base = the previous task's branch, PR body via uprd.sh"
+    echo "+ stack pr   # runs trailer-fill.sh itself — base = the previous task's branch, PR body via uprd.sh"
     "$script_dir/stack.sh" pr --dry-run
   else
-    echo "+ just cost-fill"
-    "$script_dir/cost-fill.sh" --dry-run
+    echo "+ just trailer-fill"
+    "$script_dir/trailer-fill.sh" --dry-run
     echo
-    echo "+ git push -u origin $branch   # --force-with-lease instead, if cost-fill rewrote history above"
+    echo "+ git push -u origin $branch   # --force-with-lease instead, if trailer-fill rewrote history above"
     echo "+ just uprd"
     "$script_dir/uprd.sh" --dry-run
   fi
@@ -53,7 +53,7 @@ if [ "$is_mip_task" -eq 1 ]; then
   "$script_dir/stack.sh" pr
 else
   before_head="$(git rev-parse HEAD)"
-  "$script_dir/cost-fill.sh"
+  "$script_dir/trailer-fill.sh"
   if [ "$before_head" != "$(git rev-parse HEAD)" ]; then
     git push --force-with-lease -u origin "$branch"
   else
