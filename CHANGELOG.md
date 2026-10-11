@@ -4,6 +4,20 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.9.0 — 2026-10-11
+
+- The `Cost:` commit trailer is out of scope for marola, and the tooling around it is gone (#103):
+  `cost-split` and `cost-fill` (tools and recipes), the PR body's **Cost** row, `uprds`'s summed
+  stack cost, the `Cost:` line in every automation commit (`bump-consumers`, `release.py`,
+  `skills-update.yml`, `gemini-review.yml`) and the MIP skills' "Cost so far" field and column.
+- `trailer-fill` (`just trailer-fill`) replaces `cost-fill` for what it still has to do: a missing
+  `Tested:` placeholder and a task branch's `Closes #N` line. `pr-flow` and `stack pr` call it.
+- The invariant is now two trailers, `Tested:` and `Co-Authored-By: Claude
+  <noreply@anthropic.com>`, and the AGENTS.md section is "Attribution (hard rule)". A consumer
+  copies the new block from `agents/invariants.md` and drops `Cost:` from its AGENTS.md when it
+  bumps, or `agents-check` fails.
+- `gemini-review.yml` has no `cost-trailer` input any more; a caller that passes it must remove it.
+
 ## v0.8.3 — 2026-10-10
 
 - `graph build` is code-only and pruned: no `update .` Markdown pass, no node without a source

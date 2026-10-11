@@ -1,5 +1,5 @@
 {
-  description = "marola-devkit — the shared dev-flow harness (stack, uprd, issues, cost-split, …), a base dev shell and just module (MIP-0070)";
+  description = "marola-devkit — the shared dev-flow harness (stack, uprd, issues, pr-flow, …), a base dev shell and just module (MIP-0070)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -35,8 +35,7 @@
           uprds = "scripts/uprds.sh";
           pr-flow = "scripts/pr.sh";
           issues = "scripts/issues.sh";
-          cost-split = "scripts/cost-split.py";
-          cost-fill = "scripts/cost-fill.sh";
+          trailer-fill = "scripts/trailer-fill.sh";
           agents-check = "scripts/agents-check.sh";
           mip-resolve = "scripts/mip-resolve.sh";
           branches = "scripts/branches.sh";
@@ -64,7 +63,7 @@
         # find lib/, fixtures/, .github/labels.yml and agents/invariants.md relative to themselves.
         devkit = pkgs.stdenvNoCC.mkDerivation {
           pname = "marola-devkit";
-          version = "0.8.3";
+          version = "0.9.0";
           src = lib.cleanSource self;
           nativeBuildInputs = [ pkgs.makeWrapper ];
           buildInputs = [ pkgs.bash python ];

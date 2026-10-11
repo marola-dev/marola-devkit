@@ -32,7 +32,7 @@ self-test (a marola-app task row); the devkit does not read it.
 |---|---|---|
 | `GHA_RUNNER_DIR` | `gha-runner` | The registered runner's directory; no default |
 | `BASE`, `BRANCH`, `EXTRA_FILE` | `uprd` | The base branch, a branch other than the checked-out one, a file appended to the body |
-| `TASK_PARTIAL` | `cost-fill` | `1` skips the `Closes #N` line for a task that does not finish its issue |
+| `TASK_PARTIAL` | `trailer-fill` | `1` skips the `Closes #N` line for a task that does not finish its issue |
 | `NLP_MIN_SIMILARITY` | `backfill-pr-labels` | The `--nlp` score floor (default `0.15`) |
 | `GH_TOKEN` | `gh`, so every tool that calls it | A token for hosts with no `gh` login, such as ai-jail |
 | `CLAUDE_PROJECT_DIR` | the plugin's hooks | The repo root, set by Claude Code; `STOP_GATE_REPO_ROOT` and `SESSION_START_REPO_ROOT` override it for one hook |

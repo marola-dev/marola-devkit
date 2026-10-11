@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # task_issue — the issue line of a MIP task PR's body (#512): `Closes #N` for the issue its
 # MIP-NNNN.tasks.md row links, `Part of #N` when the PR carries the `task-partial` label.
-# A label, not a commit trailer, because AGENTS.md allows exactly three trailers. MIP-0070 §5.6:
+# A label, not a commit trailer, because AGENTS.md allows exactly two trailers. MIP-0070 §5.6:
 # once the .tasks.md itself can come from the umbrella (scripts/lib/mip_ref.sh), its row may link
 # an issue in a different repo than this PR's — written `owner/repo#N`, never bare, in that case.
 task_issue_line() {   # <branch> <tasks file text> <PR labels, one per line> <owner/repo>

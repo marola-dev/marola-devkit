@@ -10,10 +10,10 @@ making them. A tool that calls `gh` needs a login on the host; inside ai-jail it
 
 | Tool | Script | Recipe | Does |
 |---|---|---|---|
-| `pr-flow` | `pr.sh` | `just pr` | The whole PR path from a finished commit: refuses on `main` or a dirty tree, fills missing trailers (`cost-fill`), pushes (`stack pr` for a `mip-NNNN/k-*` branch), writes the body (`uprd`). `--dry-run` prints every step and the body. Not named `pr`, which would shadow coreutils' |
+| `pr-flow` | `pr.sh` | `just pr` | The whole PR path from a finished commit: refuses on `main` or a dirty tree, fills a missing `Tested:` trailer (`trailer-fill`), pushes (`stack pr` for a `mip-NNNN/k-*` branch), writes the body (`uprd`). `--dry-run` prints every step and the body. Not named `pr`, which would shadow coreutils' |
 | `stack` | `stack.sh` | `just stack`, `just stack-link` | Stacked branches for a MIP's tasks: `start MIP-NNNN k slug` (branch off the nearest lower task branch, else `origin/main`), `pr` (push, open or update with the right base), `restack` (after the base was squash-merged; `--onto-base <sha>` when it finds no fork point), `status`, `branches`, `link` (a GitHub Stack from the open PRs) |
 | `uprd` | `uprd.sh` | `just uprd` | Write the branch's PR body from its commits, in the PR template's shape, and create the PR if none exists. `uprd 84` works on that PR from any checkout; a file argument is used as the body. `BASE`, `BRANCH` and `EXTRA_FILE` override the base, the branch and an appended section |
-| `uprds` | `uprds.sh` | `just uprds` | `uprd` for every PR of a MIP stack, bottom first, each with a shared "Stack" section (states, the current PR marked, the summed `Cost`) |
+| `uprds` | `uprds.sh` | `just uprds` | `uprd` for every PR of a MIP stack, bottom first, each with a shared "Stack" section (states, the current PR marked) |
 | `mip-stack` | `mip-stack.sh` | `just mip-stack` | Chain every open MIP draft PR into one GitHub Stack, resolving the shared `docs/MIPs/README.md` row conflict; `--resume`, `--skip <PR#>`, `status`, `clean` |
 | `docs-mip-stack` | `docs-mip-stack.sh` | `just docs-mip-stack` | Chain un-merged `docs/mip-NNNN-*` branches: `auto` (push and plan the unambiguous local ones), `list`, `plan <branch>…` (conflict check with `git merge-tree`, prints the `gh pr create` lines) |
 | `deps-stack` | `deps-stack.sh` | `just deps-stack` | Chain open dependency-update PRs into one GitHub Stack, auto-resolving bump-vs-bump conflicts; `--resume`, `--skip`, `--include-steward`, `status`, `clean`. Built in `.tmp/wt-deps-stack`, never the caller's checkout |
@@ -23,12 +23,11 @@ making them. A tool that calls `gh` needs a login on the host; inside ai-jail it
 `just stack-setup`, `just stack-view` and `just stack-sync` wrap GitHub's own `gh stack`
 extension rather than a devkit tool.
 
-## Cost and trailers
+## Trailers
 
 | Tool | Script | Recipe | Does |
 |---|---|---|---|
-| `cost-split` | `cost-split.py` | `just cost-split` | Attribute Claude Code (and OpenCode, `--harness`) session usage to the commits it produced, per branch or `MIP-NNNN` stack. `--estimate` fills unlogged commits from a diff-size fit, labelled `est.`; `--estimate-commit <sha>` prints one commit's `Cost:` trailer with no logs |
-| `cost-fill` | `cost-fill.sh` | `just cost-fill` | Add a missing `Cost:` (measured, else `est.`) and `Tested:` (`ci-only`) trailer to each commit of the branch, dates preserved, and a `Closes #N` line for a task branch whose row links an issue (`TASK_PARTIAL=1` opts out). `--base <ref>` bounds the rewrite |
+| `trailer-fill` | `trailer-fill.sh` | `just trailer-fill` | Add a missing `Tested:` (`ci-only`) trailer to each commit of the branch, dates preserved, and a `Closes #N` line for a task branch whose row links an issue (`TASK_PARTIAL=1` opts out). `--base <ref>` bounds the rewrite; `--dry-run` changes nothing |
 
 ## Issues and the board
 

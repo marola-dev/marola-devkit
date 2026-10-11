@@ -5,7 +5,7 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
 sh_tests=(
-  scripts/stack.sh scripts/uprd.sh scripts/cost-fill.sh scripts/issues.sh scripts/mip-resolve.sh
+  scripts/stack.sh scripts/uprd.sh scripts/trailer-fill.sh scripts/issues.sh scripts/mip-resolve.sh
   scripts/agents-check.sh scripts/mip-stack.sh scripts/docs-mip-stack.sh
   scripts/deps-stack.sh scripts/deps-merge.sh scripts/gha-runner.sh scripts/setup-runners.sh
   scripts/runner-preflight.sh scripts/temps.sh scripts/bump-consumers.sh scripts/ruleset-sync.sh scripts/api-docs-push.sh
@@ -14,7 +14,7 @@ sh_tests=(
   plugins/marola-devkit/hooks/session-start.sh
 )
 py_tests=(
-  scripts/cost-split.py scripts/gemini_review.py scripts/pr_label_nlp.py scripts/workflow_runners.py scripts/docs_lint.py
+  scripts/gemini_review.py scripts/pr_label_nlp.py scripts/workflow_runners.py scripts/docs_lint.py
   scripts/skills_vendor.py scripts/release.py scripts/wiring.py
   scripts/lib/req_merge.py scripts/lib/uses_merge.py scripts/lib/mip_index_merge.py
   scripts/lib/tasks_issues.py plugins/marola-devkit/skills/voice-note-ingest/scripts/transcribe.py

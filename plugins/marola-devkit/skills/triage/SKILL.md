@@ -33,7 +33,7 @@ Ask what the change is, not how big it feels:
 tier 1 and differ only in surface, so "it is broken" does not on its own pick `bug_report.yml`:
 that form requires a **Backend** (`Local (Ollama)` or not-applicable) and asks for the `just run`
 or Telegram message that triggers it. A broken shell script, hook or workflow has neither, and
-belongs in `task.yml` with the breakage described under **What**. #451 (`cost-fill.sh` passing a
+belongs in `task.yml` with the breakage described under **What**. #451 (the trailer-filling script passing a
 `git cherry-pick` flag its git does not have) is the worked example.
 
 Read the form in `.github/ISSUE_TEMPLATE/` before drafting: the field labels are the literal

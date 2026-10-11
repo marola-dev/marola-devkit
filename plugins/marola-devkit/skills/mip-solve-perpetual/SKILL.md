@@ -59,7 +59,7 @@ expect it to run. Stage everything so the typed command works first try instead.
 **Rules, no exceptions:**
 - One task = one branch = one PR via `stack` (never bundle two tasks in one commit).
 - Before every commit: `just build && just test && just quality` must be green.
-- Every commit gets `Tested:`/`Cost:` trailers per `AGENTS.md`, plus the Co-Authored-By line.
+- Every commit gets the `Tested:` trailer per `AGENTS.md`, plus the Co-Authored-By line.
 - Push and open the PR with `just pr`. **Never** run `gh pr merge` or `gh pr close`, under any
   circumstances, even if a PR looks trivially safe: merging is the human's to do, on waking up.
 - Never provision or deploy a paid cloud resource. The cost/deployment safety gate stays
@@ -121,11 +121,9 @@ against, not a myth to dismiss.
    `GH_POST_MORTEM.md` per the gh-fallback rule), `/model sonnet` (or whatever the default was)
    and default effort. Don't carry the escalation into the next task "just in case."
 4. **Budget-gate the Fable escalation explicitly.** This is the fix for the reactive-only
-   design: before switching, estimate this task's likely cost at Fable rates (use the measured
-   `Cost:` trailers already on this MIP's earlier task commits, e.g. `git log --grep "^Cost:" -F
-   --all -- docs/MIPs/MIP-$ARGUMENTS.tasks.md`'s sibling branches, or `python3
-   cost-split --estimate`, as a per-task baseline, then scale by Fable's list price
-   vs. the default model's from the `claude-api` skill reference) and check it against the
+   design: before switching, estimate this task's likely usage at Fable rates (judge it from how
+   much of the window this MIP's earlier tasks took, then scale by Fable's list price vs. the
+   default model's from the `claude-api` skill reference) and check it against the
    **projected remaining headroom** computed in the usage guard below for whichever window is
    more constraining. If Fable's estimated burn would push that window's projected end-of-window
    usage past its wind-down threshold, **stay on the default model even if slower**: a stranded
@@ -138,15 +136,14 @@ against, not a myth to dismiss.
 **Usage guard: real math before every task, not a single flat threshold:**
 - Primary, run before *every* task (not just once): read the current `used_percentage` and
   `resets_at` for both windows (`/heavy-usage:usage --json` if wired; otherwise fall back to
-  `cost-split --estimate`'s running session total against a dollar budget
-  stated when this run was started, and treat the 5-hour/weekly window math below as unavailable
+  the session's running total (`/cost`) against a dollar budget stated when this run was started, and treat the 5-hour/weekly window math below as unavailable
   until `/usage setup` is run). For whichever window is more constraining, compute:
   - `elapsed_frac = (window_seconds - (resets_at - now)) / window_seconds` (5h = 18000s, weekly =
     604800s),
   - `projected_end_pct = used_pct / elapsed_frac` (linear extrapolation from current burn; this
     is the same formula `heavy-usage` itself uses internally; verify against its installed
     `scripts/usage-lib.js` if the numbers look off, since a plugin update can change it).
-  - Add this task's estimated cost (rule 4's baseline) to `used_pct` before projecting, so the
+  - Add this task's estimated cost (rule 4's estimate) to `used_pct` before projecting, so the
     check answers "can *this* task finish inside budget," not just "was the window fine a moment
     ago."
 - Decision, per window, most conservative wins:
@@ -163,8 +160,8 @@ against, not a myth to dismiss.
 
 **Checkpointing contract: required before the loop is allowed to stop for a usage reason:**
 The current task must land in exactly one of two states, never a third:
-1. **Done**: `just build && just test && just quality` green, committed with `Tested:`/`Cost:`
-   trailers, pushed, and `gh pr create` either run or, if `gh` has no session auth, its exact
+1. **Done**: `just build && just test && just quality` green, committed with its `Tested:`
+   trailer, pushed, and `gh pr create` either run or, if `gh` has no session auth, its exact
    command appended to `GH_POST_MORTEM.md` at the repo root (gitignored; create it if absent) so
    a human can replay it. This satisfies the task's `/goal` row either way.
 2. **Abandoned this run**: working tree returned to clean (stash or discard only what this task's

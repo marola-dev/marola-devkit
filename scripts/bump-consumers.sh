@@ -136,7 +136,6 @@ bump() {
   git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
     commit -qam "chore: marola-devkit $tag" \
     -m "Tested: release.py --consumer moved the pins${lock:+, nix flake update marola-devkit the lock}${regen:+, wiring at $tag regenerated $repos_md}; this repo's CI gates the rest
-Cost: n/a (automation)
 Co-Authored-By: Claude <noreply@anthropic.com>"
   git push -q -f origin "$branch"
   local pr

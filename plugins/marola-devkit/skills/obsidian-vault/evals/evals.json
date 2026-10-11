@@ -16,13 +16,12 @@
     {
       "id": 1,
       "prompt": "save this session — we moved the jail's gh token lookup to the host so just uprd works inside jail-claude",
-      "expected_output": "Writes <vault>/marola/context/YYYY-MM-DD-<branch>.md with frontmatter and the Goal/Done/Current state/Next steps/Open questions/Don't retry/Key files sections; Current state names the files modified, the test commands with results, and a measured or 'not measured' cost.",
+      "expected_output": "Writes <vault>/marola/context/YYYY-MM-DD-<branch>.md with frontmatter and the Goal/Done/Current state/Next steps/Open questions/Don't retry/Key files sections; Current state names the files modified, and the test commands with results.",
       "files": [],
       "assertions": [
         {"id": "filename", "description": "File is under marola/context/ named with today's date and the branch as topic"},
         {"id": "sections", "description": "All seven sections from Goal to Key files are present"},
-        {"id": "compaction_trio", "description": "Current state lists files modified, test commands run with their result, and cost"},
-        {"id": "no_invented_cost", "description": "Cost is a measured figure or the words 'not measured'"},
+        {"id": "compaction_trio", "description": "Current state lists files modified and test commands run with their result"},
         {"id": "resume_line", "description": "Has a claude --resume line naming the session"},
         {"id": "topic_relevant", "description": "Mentions GH_TOKEN or jail-claude and a justfile path as a key file"}
       ]

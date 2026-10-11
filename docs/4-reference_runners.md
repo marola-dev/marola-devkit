@@ -48,8 +48,8 @@ to open the PR. With no argument it picks the easiest actionable Draft MIP and s
 - **No `gh` login is not a stop.** It still pushes, and appends each task's exact
   `gh pr create` command to `GH_POST_MORTEM.md` (gitignored, append-only) for a human to replay.
 - **Usage guard, before every task.** From the 5-hour and weekly `used_percentage`/`resets_at`
-  (via the `heavy-usage` plugin's status line; else `cost-split --estimate` against a stated
-  budget), it projects end-of-window use linearly, adds the next task's estimated cost, and
+  (via the `heavy-usage` plugin's status line; else the session's running total against a
+  stated budget), it projects end-of-window use linearly, adds the next task's estimated cost, and
   proceeds below 75%/85%, finishes the current PR and stops below 90%/95%, and stops at once
   above. `heavy-usage`'s own wind-down line wins when it is more conservative, but it is a prompt,
   not a block, and its data goes stale when no status line renders.
