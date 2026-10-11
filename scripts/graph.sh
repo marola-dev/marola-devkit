@@ -60,9 +60,10 @@ EOF
   hasnot "no *_API_KEY reaches graphify" "$(grep '^ENV ' "$log" || true)" "_API_KEY="
   hasnot "no ANTHROPIC_* reaches graphify" "$(grep '^ENV ' "$log" || true)" "ENV ANTHROPIC_"
   hasnot "no OPENAI_* reaches graphify" "$(grep '^ENV ' "$log" || true)" "ENV OPENAI_"
-  check "only §5.2's five variables (bash adds PWD, SHLVL, _)" \
+  check "only §5.2's five variables and PYTHONHASHSEED (bash adds PWD, SHLVL, _)" \
     "$(grep '^ENV ' "$log" | sed 's/^ENV //; s/=.*//' | grep -vxE 'PWD|SHLVL|_|OLDPWD' | sort -u | tr '\n' ' ')" \
-    "GRAPHIFY_NO_AUTO_REFRESH GRAPHIFY_OUT HOME OLLAMA_BASE_URL PATH "
+    "GRAPHIFY_NO_AUTO_REFRESH GRAPHIFY_OUT HOME OLLAMA_BASE_URL PATH PYTHONHASHSEED "
+  check "PYTHONHASHSEED=0 on every call" "$(grep -c '^ENV PYTHONHASHSEED=0$' "$log")" "3"
   check "OLLAMA_BASE_URL points nowhere" "$(grep -c '^ENV OLLAMA_BASE_URL=http://127.0.0.1:9$' "$log")" "3"
   check "build runs extract --code-only --no-label, then cluster-only --no-label twice on the cached graph" \
     "$(grep '^ARGV' "$log" | tr '\n' '|')" \
@@ -146,9 +147,12 @@ EOF
 
 # Every graphify call: no key, no backend, no network where a user namespace is allowed.
 # PATH and HOME (the cache dir) go through; --code-only and --no-label are the real guarantee.
+# Trap: without PYTHONHASHSEED, extract/cluster-only re-exec sys.executable to pin it, and that
+# loses nixpkgs' wrapper: 0.9.66 runs the bash wrapper as Python (SyntaxError), 0.9.74 cannot
+# import graphify. Setting it first skips the re-exec.
 run() {
   local -a cmd=(env -i PATH="$PATH" HOME="$OUT" GRAPHIFY_OUT="$OUT" GRAPHIFY_NO_AUTO_REFRESH=1
-    OLLAMA_BASE_URL=http://127.0.0.1:9 graphify "$@")
+    OLLAMA_BASE_URL=http://127.0.0.1:9 PYTHONHASHSEED=0 graphify "$@")
   if [ -z "${NETNS:-}" ]; then
     NETNS=no
     if command -v unshare >/dev/null && unshare -rn true 2>/dev/null; then NETNS=yes
