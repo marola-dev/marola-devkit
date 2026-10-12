@@ -62,6 +62,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - id: bot
         uses: ./.github/actions/bot-token
         with:
@@ -78,13 +80,32 @@ jobs:
           set -euo pipefail
           repos="$(gh api installation/repositories --jq '[.repositories[].full_name] | join(",")')"
           [ "$repos" = marola-dev/marola-devkit ] || { echo "::error::the token reaches $repos"; exit 1; }
+          # Prints "<code> <message>"; callers compare the code, errors show the whole line.
+          probe() {
+            local body code
+            body="$(mktemp)"
+            code="$(curl -s -o "$body" -w '%{http_code}' -X POST -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$1" -d '{}')"
+            echo "$code $(jq -r '.message // empty' "$body" 2>/dev/null)"
+          }
           # An invalid body: 403 means no permission, 422 would mean the permission was granted.
-          probe() { curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$1" -d '{}'; }
-          [ "$(probe marola-dev/marola-devkit/git/refs)" = 422 ] || { echo "::error::contents write was not granted"; exit 1; }
-          [ "$(probe marola-dev/marola-devkit/pulls)" = 403 ] || { echo "::error::pull_requests was granted"; exit 1; }
-          # A repo outside the token reads as 404 to an installation token, 403 where it is visible.
-          case "$(probe marola-dev/marola-site/git/refs)" in 403|404) ;; *) echo "::error::the token can write marola-site"; exit 1;; esac
+          refs="$(probe marola-dev/marola-devkit/git/refs)"; echo "devkit git/refs: $refs"
+          [ "${refs%% *}" = 422 ] || { echo "::error::contents write was not granted: $refs"; exit 1; }
+          pulls="$(probe marola-dev/marola-devkit/pulls)"; echo "devkit pulls: $pulls"
+          [ "${pulls%% *}" = 403 ] || { echo "::error::pull_requests was granted: $pulls"; exit 1; }
+          # Informational: run 38305859769 got neither 403 nor 404 here (code not recorded), so an API
+          # probe on another public repo proves nothing; the dry-run push below does.
+          site="$(probe marola-dev/marola-site/git/refs)"; echo "site git/refs: $site"
+          case "${site%% *}" in 2??) echo "::error::the token wrote to marola-site: $site"; exit 1;; esac
+          ref="refs/heads/bot-token-probe-${{ github.run_id }}"
+          git push --dry-run "https://x-access-token:${GH_TOKEN}@github.com/marola-dev/marola-devkit.git" "HEAD:$ref" >push-devkit.log 2>&1 \
+            || { echo "::error::dry-run push to marola-devkit failed"; tail -n 5 push-devkit.log; exit 1; }
+          echo "dry-run push to marola-devkit: ok"
+          if git push --dry-run "https://x-access-token:${GH_TOKEN}@github.com/marola-dev/marola-site.git" "HEAD:$ref" >push-site.log 2>&1; then
+            echo "::error::dry-run push to marola-site succeeded"; tail -n 5 push-site.log; exit 1
+          fi
+          grep -Eq '403|denied' push-site.log || { echo "::error::push to marola-site failed, but not with 403/denied"; tail -n 5 push-site.log; exit 1; }
+          echo "dry-run push to marola-site: refused ($(tail -n 1 push-site.log))"
           [[ "$(git config --global user.email)" =~ ^[0-9]+\+${SLUG}\[bot\]@users\.noreply\.github\.com$ ]] || { echo "::error::git email is $(git config --global user.email)"; exit 1; }
           [ "$(git config --global user.email)" = "$EMAIL" ]
           [ "$(git config --global user.name)" = "${SLUG}[bot]" ]
