@@ -11,7 +11,7 @@ sh_tests=(
   scripts/runner-preflight.sh scripts/temps.sh scripts/bump-consumers.sh scripts/ruleset-sync.sh scripts/api-docs-push.sh
   scripts/graph.sh
   plugins/marola-devkit/hooks/format.sh plugins/marola-devkit/hooks/stop-gate.sh
-  plugins/marola-devkit/hooks/session-start.sh
+  plugins/marola-devkit/hooks/session-start.sh skills/routing/scripts/session-check.sh
 )
 py_tests=(
   scripts/gemini_review.py scripts/pr_label_nlp.py scripts/workflow_runners.py scripts/docs_lint.py
