@@ -383,6 +383,12 @@ JSON
   out="$(run_script apply acme/consumer-repo)" && rc=0 || rc=$?
   has "apply_adds_it_to_a_consumer" "$(cat "$tmp/stub/log")" "$merge"
 
+  echo "-- consumer_own_extra_outranks_consumers --"
+  jq '.["acme/consumer-repo"] = [{actor_id: 8, actor_type: "Integration", bypass_mode: "always", reason: "synthetic: the repo overrides the shared mode"}]' "$extras" > "$tmp/own-extras.json"
+  live_consumer "[$base_admin,${merge/pull_request/always}]"
+  out="$(run_script --extras "$tmp/own-extras.json" check acme/consumer-repo)" && rc=0 || rc=$?
+  check "consumer_own_extra_outranks_consumers: own mode matches" "$rc" "0"
+
   echo "-- non_consumer_never_gets_it --"
   out="$(run_script check acme/ok-repo)" && rc=0 || rc=$?
   check "non_consumer_never_gets_it: exit 0" "$rc" "0"
