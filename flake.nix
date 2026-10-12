@@ -59,6 +59,7 @@
           docs-lint = "scripts/docs_lint.py";
           skills-vendor = "scripts/skills_vendor.py";
           wiring = "scripts/wiring.py";
+          route = "skills/routing/scripts/route.py";
         };
 
         # The whole tree is installed with its layout intact under share/marola-devkit: the scripts
@@ -74,7 +75,7 @@
             runHook preInstall
             share=$out/share/marola-devkit
             mkdir -p $share $out/bin
-            cp -r scripts agents plugins .githooks .github devkit.just $share/
+            cp -r scripts skills agents plugins .githooks .github devkit.just $share/
             mkdir -p $share/.claude
             cp .claude/statusline.sh $share/.claude/statusline.sh
             ${lib.concatStrings (lib.mapAttrsToList (name: path: ''
