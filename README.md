@@ -242,7 +242,7 @@ jobs:
 ```
 
 It needs the org's `marola-pr-bot` App installed on the repo, the `gemini` team with Read on
-it, and the org's `GEMINI_API_KEY`, `PR_BOT_KEY` and `PR_BOT_APP_ID` (the `GEMINI_APP_*` names still work). One Gemini API
+it, and the org's `GEMINI_API_KEY`, `PR_BOT_KEY` and `PR_BOT_APP_ID`. One Gemini API
 call per review keeps it on the free tier, about 20 reviews a day per model; `vars.GEMINI_MODEL`
 picks another model. This repo calls it from `gemini.yml`, with `bash tests/self-tests.sh` as
 the check. Details: [docs/4-reference_workflows.md](docs/4-reference_workflows.md#gemini-review).

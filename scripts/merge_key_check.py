@@ -70,6 +70,14 @@ def problems(root: Path) -> list[str]:
             # A listed local callee is scanned itself, so the key does not leave the audited set.
             if uses and not (LOCAL_WF.match(uses) and uses[2:] in allow):
                 out.append(f"{rel}: job {name}: reusable workflow call runs beside {KEY}")
+            elif uses:
+                # Under another name the callee never names the key, so it would go unscanned.
+                passed = job.get("secrets")
+                for k, v in (passed if isinstance(passed, dict) else {}).items():
+                    if HAS_KEY.search(str(v)) and k.lower() != KEY.lower():
+                        out.append(
+                            f"{rel}: job {name}: passes {KEY} to {uses} under another name ({k})"
+                        )
             for field in ("container", "services"):
                 if job.get(field):
                     out.append(f"{rel}: job {name}: `{field}` runs images beside {KEY}")
@@ -132,7 +140,7 @@ def self_test() -> None:
     assert len(got) == 1 and "reusable workflow" in got[0], f"reusable_call_fails: {got}"
     local = ".github/workflows/bump.yml"
     callee = "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.MERGE_BOT_KEY }}\n"
-    lcall = "\n  call:\n    uses: ./.github/workflows/bump.yml\n    secrets:\n      k: ${{ secrets.MERGE_BOT_KEY }}\n"
+    lcall = "\n  call:\n    uses: ./.github/workflows/bump.yml\n    secrets:\n      MERGE_BOT_KEY: ${{ secrets.MERGE_BOT_KEY }}\n"
     got = case({wf: clean + lcall, local: callee, ALLOWLIST: f"{wf}\n{local}\n"})
     assert got == [], f"listed_local_reusable_passes: {got}"
     got = case({wf: clean + lcall, local: callee, ALLOWLIST: wf})
@@ -145,6 +153,10 @@ def self_test() -> None:
         }
     )
     assert len(got) == 1 and local in got[0] and "`npm`" in got[0], f"listed_callee_scanned: {got}"
+    renamed = lcall.replace("      MERGE_BOT_KEY:", "      k:")
+    hidden = "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci && echo ${{ secrets.k }}\n"
+    got = case({wf: clean + renamed, local: hidden, ALLOWLIST: f"{wf}\n{local}\n"})
+    assert any("under another name (k)" in p for p in got), f"renamed_key_fails: {got}"
     inherit = "\n  call:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets: inherit\n"
     got = case({wf: clean + inherit, ALLOWLIST: wf})
     assert any("inherit" in p for p in got), f"secrets_inherit_fails: {got}"

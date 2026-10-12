@@ -56,7 +56,7 @@ runs:
     - id: mint
       uses: actions/create-github-app-token@v3
       with:
-        client-id: ${{ inputs.app-id }}
+        app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
         owner: marola-dev
         repositories: ${{ steps.guard.outputs.repositories }}

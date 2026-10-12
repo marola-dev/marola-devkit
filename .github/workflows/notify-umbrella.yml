@@ -92,7 +92,7 @@ jobs:
         if: env.HAS_PR_BOT_KEY == 'true'
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.PR_BOT_APP_ID }}
+          app-id: ${{ vars.PR_BOT_APP_ID }}
           private-key: ${{ secrets.pr_bot_key }}
           owner: ${{ steps.um.outputs.owner }}
           repositories: ${{ steps.um.outputs.name }}
