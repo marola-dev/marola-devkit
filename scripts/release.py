@@ -27,7 +27,7 @@ VERSION_FILES = {
 # A pin is a v-tag in one of these contexts; actions/checkout@v7 and history in CHANGELOG are not.
 # \s* because some repos spread settings.json's marketplace entry over lines (#65).
 PIN = re.compile(
-    rf"(marola-devkit/v|marola-devkit/\.github/workflows/[\w.-]+@v|devkit-ref: v"
+    rf"(marola-devkit/v|marola-devkit/\.github/(?:workflows|actions)/[\w.-]+@v|devkit-ref: v"
     rf'|marola-devkit",\s*"ref": "v|\*\*Status:\*\* this is v)({SEMVER})()'
 )
 PIN_GLOBS = ["README.md", "docs/**/*.md", ".github/workflows/*.yml"]
@@ -180,14 +180,18 @@ def self_test():
             ),
             ".github/workflows/notify-umbrella.yml": "#   uses: marola-dev/marola-devkit/.github/workflows/n.yml@v0.5.1\n",
             "CHANGELOG.md": "# Changelog\n\nIntro.\n\n## v0.5.1 — 2026-10-07\n\n- old\n",
+            ".github/workflows/ci.yml": "      - uses: marola-dev/marola-devkit/.github/actions/bot-token@v0.5.1\n",
         }
         for rel, text in files.items():
             (root / rel).parent.mkdir(parents=True, exist_ok=True)
             (root / rel).write_text(text)
-        assert len(found(root)) == 8, found(root)
+        assert len(found(root)) == 9, found(root)
         assert any("0.4.0" in m for m in mismatches(root, "0.5.1")), "a stale pin went unnoticed"
         bump(root, "0.6.0")
         assert not mismatches(root, "0.6.0"), mismatches(root, "0.6.0")
+        assert "bot-token@v0.6.0" in (root / ".github/workflows/ci.yml").read_text(), (
+            "an action pin did not move"
+        )
         assert "actions/checkout@v7.0.0" in (root / "README.md").read_text(), (
             "a third-party pin moved"
         )
