@@ -5,11 +5,13 @@
 #
 #   ruleset-sync check [owner/repo ...]   # default: the caller's repo (gh repo view)
 #   ruleset-sync apply <owner/repo ...>   # create when missing, update in place when drifted
-#   ruleset-sync [--manifest FILE] [--extras FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
+#   ruleset-sync [--manifest FILE] [--extras FILE] [--consumers FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
 #   ruleset-sync --self-test
 #
 # A repo keyed in .github/rulesets/bypass-extras.json expects the manifest's bypass list with its
 # extras merged by (actor_type, actor_id): a match overrides bypass_mode, anything else is added.
+# The key "@consumers" applies to every repo in .github/consumers.txt (--consumers FILE), before
+# that repo's own extras: the merge bot's bypass on every devkit consumer (MIP-0086 §5.7).
 # check prints ok/missing/drifted per repo (stderr) and a unified diff for a drifted one
 # (stdout); it exits non-zero if any repo is missing or drifted. apply prints what it did
 # (stderr) and the gh call it ran or, under --dry-run, would have run (stdout) instead. Never
@@ -19,8 +21,9 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest_default="$root/.github/rulesets/main-rule.json"
 extras_default="$root/.github/rulesets/bypass-extras.json"
+consumers_default="$root/.github/consumers.txt"
 
-usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # normalize_ruleset <stdin JSON> -> stdout: the manifest's own shape (pretty, sorted keys), so a
 # live `gh api .../rulesets/<id>` response compares byte-for-byte against the manifest. The
@@ -34,11 +37,18 @@ normalize_ruleset() {
   '
 }
 
+# extras_of <repo> -> stdout: <repo>'s extras as one JSON list, the "@consumers" ones first.
+extras_of() {
+  local c=false
+  if awk -v r="$1" '!/^[[:space:]]*(#|$)/ && $1 == r { f = 1 } END { exit !f }' "$consumers"; then c=true; fi
+  jq -c --arg r "$1" --argjson c "$c" '(if $c then .["@consumers"] // [] else [] end) + (.[$r] // [])' "$extras"
+}
+
 # expected_ruleset <repo> -> stdout: the manifest with <repo>'s extras merged in, reasons dropped
 # (GitHub doesn't store them, so left in they would be drift on every check).
 expected_ruleset() {
-  jq --arg r "$1" --slurpfile x "$extras" '
-    .bypass_actors = reduce (($x[0][$r] // [])[] | del(.reason)) as $e (.bypass_actors // [];
+  jq --argjson x "$(extras_of "$1")" '
+    .bypass_actors = reduce ($x[] | del(.reason)) as $e (.bypass_actors // [];
       if any(.[]; .actor_type == $e.actor_type and .actor_id == $e.actor_id)
       then map(if .actor_type == $e.actor_type and .actor_id == $e.actor_id then .bypass_mode = $e.bypass_mode else . end)
       else . + [$e] end)
@@ -48,7 +58,7 @@ expected_ruleset() {
 # want_for <repo>: sets $want (the file apply sends), $want_norm and $want_label for <repo>. A repo
 # with no extras sends the manifest itself, byte for byte.
 want_for() {
-  if jq -e --arg r "$1" '(.[$r] // []) | length > 0' "$extras" >/dev/null; then
+  if [ "$(extras_of "$1" | jq length)" -gt 0 ]; then
     want="$work/${1//\//_}.json"
     expected_ruleset "$1" > "$want"
     want_norm="$(normalize_ruleset < "$want")"
@@ -204,6 +214,9 @@ JSON
   local extras="$tmp/bypass-extras.json"
   cat > "$extras" <<'JSON'
 {
+  "@consumers": [
+    { "actor_id": 8, "actor_type": "Integration", "bypass_mode": "pull_request", "reason": "synthetic: the merge bot" }
+  ],
   "acme/extras-repo": [
     { "actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "pull_request", "reason": "synthetic: overrides the base actor's mode" },
     { "actor_id": 7, "actor_type": "Integration", "bypass_mode": "pull_request", "reason": "synthetic: an actor the base lacks" }
@@ -211,8 +224,10 @@ JSON
 }
 JSON
 
+  printf '# c\nacme/consumer-repo\n' > "$tmp/consumers.txt"
+
   local script="${BASH_SOURCE[0]}"
-  run_script() { PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --extras "$extras" "$@" 2>&1; }
+  run_script() { PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --extras "$extras" --consumers "$tmp/consumers.txt" "$@" 2>&1; }
 
   echo "-- an identical ruleset, alongside an unrelated one on the same repo --"
   jq '.id = 1' "$manifest" > "$tmp/stub/detail.acme_ok-repo.1.json"
@@ -351,6 +366,27 @@ JSON
     check "extras_entry_needs_reason ($f): makes no call" "$(cat "$tmp/stub/log")" ""
   done
 
+  local merge='{"actor_id":8,"actor_type":"Integration","bypass_mode":"pull_request"}'
+  local base_admin='{"actor_id":null,"actor_type":"OrganizationAdmin","bypass_mode":"always"}'
+  jq -n '[{id:6,name:"main-rule"}]' > "$tmp/stub/list.acme_consumer-repo.json"
+  live_consumer() { jq --argjson b "$1" '.id = 6 | .bypass_actors = $b' "$manifest" > "$tmp/stub/detail.acme_consumer-repo.6.json"; }
+
+  echo "-- consumer_gets_the_consumers_extra --"
+  live_consumer "[$base_admin,$merge]"
+  out="$(run_script check acme/consumer-repo)" && rc=0 || rc=$?
+  check "consumer_gets_the_consumers_extra: exit 0" "$rc" "0"
+  live_consumer "[$base_admin]"
+  out="$(run_script check acme/consumer-repo)" && rc=0 || rc=$?
+  check "consumer_drifted_without_it: exit 1" "$rc" "1"
+  has "consumer_drifted_without_it: diff names it" "$out" '-      "actor_id": 8'
+  : > "$tmp/stub/log"
+  out="$(run_script apply acme/consumer-repo)" && rc=0 || rc=$?
+  has "apply_adds_it_to_a_consumer" "$(cat "$tmp/stub/log")" "$merge"
+
+  echo "-- non_consumer_never_gets_it --"
+  out="$(run_script check acme/ok-repo)" && rc=0 || rc=$?
+  check "non_consumer_never_gets_it: exit 0" "$rc" "0"
+
   if [ "$fails" -eq 0 ]; then echo "ruleset-sync self-test: ok"; return 0; fi
   echo "ruleset-sync self-test: $fails failure(s)" >&2; return 1
 }
@@ -359,6 +395,7 @@ JSON
 
 manifest="$manifest_default"
 extras="$extras_default"
+consumers="$consumers_default"
 all_org=""
 include_forks=false
 cmd=""
@@ -368,6 +405,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --manifest) manifest="${2:?--manifest needs a file}"; shift 2 ;;
     --extras) extras="${2:?--extras needs a file}"; shift 2 ;;
+    --consumers) consumers="${2:?--consumers needs a file}"; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --all-org) all_org="${2:?--all-org needs an org}"; shift 2 ;;
     --include-forks) include_forks=true; shift ;;
@@ -387,6 +425,7 @@ ruleset_name="$(jq -r .name "$manifest")"
 manifest_norm="$(normalize_ruleset < "$manifest")"
 
 [ -f "$extras" ] || { echo "ruleset-sync: extras not found: $extras" >&2; exit 1; }
+[ -f "$consumers" ] || { echo "ruleset-sync: consumers not found: $consumers" >&2; exit 1; }
 # A reason is what makes an extra reviewable: an exception to the shared bypass list nobody can
 # explain is the one this file exists to stop.
 bad_extras="$(jq -r '
