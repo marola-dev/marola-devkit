@@ -1,5 +1,5 @@
 # bot-token — a marola-pr-bot or marola-merge-bot token for named repos, with git committing as that
-# bot (MIP-0086 §5.4). A composite action cannot read secrets: the caller passes the App's id and key.
+# bot for the rest of the job (MIP-0086 §5.4). A composite action cannot read secrets: the caller passes the App's id and key.
 name: bot-token
 description: Mint a GitHub App installation token for named marola-dev repos and make git commit as the App's bot user.
 
@@ -32,12 +32,26 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: refuse an empty repositories list
+    # The action's own parser would turn "\r\n" into [] and mint for every installed repo, so the list
+    # is cleaned here and the cleaned list is what the mint step gets. v3 skips empty permission-*
+    # inputs, and with none set the token holds every permission the App has.
+    - id: guard
       shell: bash
       env:
         REPOS: ${{ inputs.repositories }}
+        PERMS: ${{ inputs.permission-contents }}${{ inputs.permission-pull-requests }}${{ inputs.permission-workflows }}${{ inputs.permission-checks }}${{ inputs.permission-statuses }}${{ inputs.permission-issues }}
       run: |
-        [ -n "$(tr -d ' ,\n\t' <<<"$REPOS")" ] || { echo "::error::bot-token: repositories is empty; name every repo the token needs"; exit 1; }
+        set -euo pipefail
+        [ -n "${PERMS//[[:space:]]/}" ] || { echo "::error::bot-token: no permission-* input set; the token would hold every permission the App has"; exit 1; }
+        cleaned=""
+        while IFS= read -r repo; do
+          repo="${repo//[[:space:]]/}"
+          [ -n "$repo" ] || continue
+          [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::bot-token: '$repo' is not a bare repo name in marola-dev"; exit 1; }
+          cleaned+="${cleaned:+,}$repo"
+        done < <(tr ',' '\n' <<<"$REPOS")
+        [ -n "$cleaned" ] || { echo "::error::bot-token: repositories is empty; name every repo the token needs"; exit 1; }
+        echo "repositories=$cleaned" >>"$GITHUB_OUTPUT"
 
     - id: mint
       uses: actions/create-github-app-token@v3
@@ -45,7 +59,7 @@ runs:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
         owner: marola-dev
-        repositories: ${{ inputs.repositories }}
+        repositories: ${{ steps.guard.outputs.repositories }}
         permission-contents: ${{ inputs.permission-contents }}
         permission-pull-requests: ${{ inputs.permission-pull-requests }}
         permission-workflows: ${{ inputs.permission-workflows }}
@@ -53,6 +67,7 @@ runs:
         permission-statuses: ${{ inputs.permission-statuses }}
         permission-issues: ${{ inputs.permission-issues }}
 
+    # GIT_CONFIG_GLOBAL, not `git config --global`, which would outlive the job on a self-hosted runner.
     # The commit email needs the bot user's id, which is not the App id (create-github-app-token's README).
     - id: who
       shell: bash
@@ -63,6 +78,9 @@ runs:
         set -euo pipefail
         uid="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
         name="${SLUG}[bot]" email="${uid}+${SLUG}[bot]@users.noreply.github.com"
-        git config --global user.name "$name"
-        git config --global user.email "$email"
+        cfg="$RUNNER_TEMP/bot-token.gitconfig"
+        if [ -f ~/.gitconfig ]; then cp ~/.gitconfig "$cfg"; else : >"$cfg"; fi
+        git config --file "$cfg" user.name "$name"
+        git config --file "$cfg" user.email "$email"
+        echo "GIT_CONFIG_GLOBAL=$cfg" >>"$GITHUB_ENV"
         { echo "name=$name"; echo "email=$email"; } >>"$GITHUB_OUTPUT"
