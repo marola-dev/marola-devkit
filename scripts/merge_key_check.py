@@ -21,6 +21,7 @@ USES_OK = re.compile(
     r"^(actions/checkout|actions/create-github-app-token|actions/download-artifact"
     r"|marola-dev/marola-devkit/\.github/actions/bot-token|\./\.github/actions/bot-token)(@|$)"
 )
+LOCAL_WF = re.compile(r"^\./\.github/workflows/[^/@]+$")
 # Secret names are case-insensitive when referenced, so every presence test is too.
 HAS_KEY = re.compile(KEY, re.I)
 SHELL_OK = re.compile(r"^(bash|sh)(\s|$)")
@@ -52,26 +53,22 @@ def problems(root: Path) -> list[str]:
         rel = wf.relative_to(root).as_posix()
         text = wf.read_text()
         doc = yaml.safe_load(text) or {}
-        if not HAS_KEY.search(text) or rel not in allow:
-            if HAS_KEY.search(text):
-                out.append(f"{rel}: names {KEY} but is not in {ALLOWLIST}")
-            if (root / ALLOWLIST).is_file():
-                out += [
-                    f"{rel}: job {n}: `secrets: inherit` hands {KEY} to the callee"
-                    for n, j in (doc.get("jobs") or {}).items()
-                    if j.get("secrets") == "inherit"
-                ]
-            continue
-        if HAS_KEY.search(yaml.safe_dump(doc.get("env") or {})):
-            out.append(f"{rel}: workflow-level env hands {KEY} to every job")
-        out += default_shell(rel, "workflow", doc)
+        keyed = bool(HAS_KEY.search(text)) and rel in allow
+        if HAS_KEY.search(text) and not keyed:
+            out.append(f"{rel}: names {KEY} but is not in {ALLOWLIST}")
+        if keyed:
+            if HAS_KEY.search(yaml.safe_dump(doc.get("env") or {})):
+                out.append(f"{rel}: workflow-level env hands {KEY} to every job")
+            out += default_shell(rel, "workflow", doc)
         for name, job in (doc.get("jobs") or {}).items():
-            if job.get("secrets") == "inherit":
+            if (root / ALLOWLIST).is_file() and job.get("secrets") == "inherit":
                 out.append(f"{rel}: job {name}: `secrets: inherit` hands {KEY} to the callee")
-            if not HAS_KEY.search(yaml.safe_dump(job)):
+            if not keyed or not HAS_KEY.search(yaml.safe_dump(job)):
                 continue
             out += default_shell(rel, f"job {name}", job)
-            if job.get("uses"):
+            uses = job.get("uses")
+            # A listed local callee is scanned itself, so the key does not leave the audited set.
+            if uses and not (LOCAL_WF.match(uses) and uses[2:] in allow):
                 out.append(f"{rel}: job {name}: reusable workflow call runs beside {KEY}")
             for field in ("container", "services"):
                 if job.get(field):
@@ -133,6 +130,21 @@ def self_test() -> None:
     call = "\n  call:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets:\n      k: ${{ secrets.MERGE_BOT_KEY }}\n"
     got = case({wf: clean + call, ALLOWLIST: wf})
     assert len(got) == 1 and "reusable workflow" in got[0], f"reusable_call_fails: {got}"
+    local = ".github/workflows/bump.yml"
+    callee = "jobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo ${{ secrets.MERGE_BOT_KEY }}\n"
+    lcall = "\n  call:\n    uses: ./.github/workflows/bump.yml\n    secrets:\n      k: ${{ secrets.MERGE_BOT_KEY }}\n"
+    got = case({wf: clean + lcall, local: callee, ALLOWLIST: f"{wf}\n{local}\n"})
+    assert got == [], f"listed_local_reusable_passes: {got}"
+    got = case({wf: clean + lcall, local: callee, ALLOWLIST: wf})
+    assert any("reusable workflow" in p for p in got), f"unlisted_local_reusable_fails: {got}"
+    got = case(
+        {
+            wf: clean + lcall,
+            local: callee + "      - run: npm ci\n",
+            ALLOWLIST: f"{wf}\n{local}\n",
+        }
+    )
+    assert len(got) == 1 and local in got[0] and "`npm`" in got[0], f"listed_callee_scanned: {got}"
     inherit = "\n  call:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets: inherit\n"
     got = case({wf: clean + inherit, ALLOWLIST: wf})
     assert any("inherit" in p for p in got), f"secrets_inherit_fails: {got}"
