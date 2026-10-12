@@ -36,6 +36,13 @@ def allowed(root: Path) -> set[str]:
     return {ln for ln in lines if ln and not ln.startswith("#")}
 
 
+def default_shell(rel: str, where: str, node: dict) -> list[str]:
+    sh = ((node.get("defaults") or {}).get("run") or {}).get("shell")
+    if sh and not SHELL_OK.match(sh):
+        return [f"{rel}: {where}: defaults.run.shell `{sh}` runs beside {KEY}"]
+    return []
+
+
 def problems(root: Path) -> list[str]:
     allow = allowed(root)
     out = [
@@ -44,19 +51,26 @@ def problems(root: Path) -> list[str]:
     for wf in sorted((root / ".github" / "workflows").glob("*.y*ml")):
         rel = wf.relative_to(root).as_posix()
         text = wf.read_text()
-        if not HAS_KEY.search(text):
-            continue
-        if rel not in allow:
-            out.append(f"{rel}: names {KEY} but is not in {ALLOWLIST}")
-            continue
         doc = yaml.safe_load(text) or {}
+        if not HAS_KEY.search(text) or rel not in allow:
+            if HAS_KEY.search(text):
+                out.append(f"{rel}: names {KEY} but is not in {ALLOWLIST}")
+            if (root / ALLOWLIST).is_file():
+                out += [
+                    f"{rel}: job {n}: `secrets: inherit` hands {KEY} to the callee"
+                    for n, j in (doc.get("jobs") or {}).items()
+                    if j.get("secrets") == "inherit"
+                ]
+            continue
         if HAS_KEY.search(yaml.safe_dump(doc.get("env") or {})):
             out.append(f"{rel}: workflow-level env hands {KEY} to every job")
+        out += default_shell(rel, "workflow", doc)
         for name, job in (doc.get("jobs") or {}).items():
             if job.get("secrets") == "inherit":
                 out.append(f"{rel}: job {name}: `secrets: inherit` hands {KEY} to the callee")
             if not HAS_KEY.search(yaml.safe_dump(job)):
                 continue
+            out += default_shell(rel, f"job {name}", job)
             if job.get("uses"):
                 out.append(f"{rel}: job {name}: reusable workflow call runs beside {KEY}")
             for field in ("container", "services"):
@@ -140,6 +154,27 @@ def self_test() -> None:
     assert case({wf: clean + "        shell: bash -e {0}\n", ALLOWLIST: wf}) == [], (
         "bash_shell_passes"
     )
+    got = case({wf: "env:\n  K: ${{ secrets.merge_bot_key }}\n" + clean, ALLOWLIST: wf})
+    assert any("workflow-level" in p for p in got), f"lowercase_workflow_env_fails: {got}"
+    nixsh = "nix develop --command bash {0}"
+    got = case({wf: f"defaults:\n  run:\n    shell: {nixsh}\n" + clean, ALLOWLIST: wf})
+    assert any("defaults" in p for p in got), f"workflow_default_shell_fails: {got}"
+    got = case(
+        {
+            wf: clean.replace(
+                "    steps:", f"    defaults:\n      run:\n        shell: {nixsh}\n    steps:"
+            ),
+            ALLOWLIST: wf,
+        }
+    )
+    assert any("defaults" in p for p in got), f"job_default_shell_fails: {got}"
+    other = ".github/workflows/other.yml"
+    plain = "jobs:\n  c:\n    uses: o/r/.github/workflows/x.yml@v1\n    secrets: inherit\n"
+    got = case({wf: clean, other: plain, ALLOWLIST: wf})
+    assert len(got) == 1 and other in got[0] and "inherit" in got[0], (
+        f"unlisted_inherit_fails: {got}"
+    )
+    assert case({other: plain}) == [], "inherit_without_allowlist_passes"
     assert not RUN_BAD.search("set -euo pipefail\nnixpkgs=1 scripts/x.sh /nix/store/y"), (
         "no_false_positive"
     )
