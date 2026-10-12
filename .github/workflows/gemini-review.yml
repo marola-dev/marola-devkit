@@ -6,8 +6,9 @@
 # model, which an agent loop spent on a single PR. The fix is applied from that same answer, only
 # where its `original` text still matches, and never under .github/.
 #
-# Identity is the org App behind vars.GEMINI_APP_ID / secrets.GEMINI_APP_PRIVATE_KEY, not
-# GITHUB_TOKEN: a push made with GITHUB_TOKEN starts no CI on the PR.
+# Identity is `marola-pr-bot` (vars.PR_BOT_APP_ID / secrets.PR_BOT_KEY, MIP-0086), falling back to
+# the GEMINI_* names until they are deleted, not GITHUB_TOKEN: a push made with GITHUB_TOKEN starts
+# no CI on the PR.
 #
 # Callers trigger on pull_request_target, so a fork PR gets the secrets too (only a maintainer can
 # request the team). A fork's head is checked out as text into .pr-head and never run; it gets a
@@ -51,7 +52,9 @@ on:
       GEMINI_API_KEY:
         required: true
       GEMINI_APP_PRIVATE_KEY:
-        required: true
+        required: false
+      PR_BOT_KEY:
+        required: false
 
 concurrency:
   group: gemini-review-${{ github.event.pull_request.number }}
@@ -72,8 +75,8 @@ jobs:
         id: app
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.GEMINI_APP_ID }}
-          private-key: ${{ secrets.GEMINI_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_BOT_APP_ID || vars.GEMINI_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY || secrets.GEMINI_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
 
