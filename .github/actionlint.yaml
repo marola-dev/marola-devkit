@@ -2,3 +2,10 @@
 self-hosted-runner:
   labels:
     - marola-sea
+
+# actionlint 1.7.12 bundles create-github-app-token v3 metadata from before `client-id` existed.
+paths:
+  .github/workflows/notify-umbrella.yml:
+    ignore:
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'

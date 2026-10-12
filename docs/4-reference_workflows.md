@@ -357,7 +357,9 @@ jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
     uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.9.0
-    secrets: inherit
+    secrets:   # not `inherit`: merge-key-check rejects it in a repo that holds the merge key
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PR_BOT_KEY: ${{ secrets.PR_BOT_KEY }}
     with:
       devkit-ref: v0.9.0
       check-command: ""          # e.g. node scripts/site_check.js
@@ -423,7 +425,9 @@ newline-separated list of repo names; an empty list fails the step, because the 
 otherwise cover every repo the App is installed on, and so does a call with no `permission-*` input
 set (`permission-contents`, `-pull-requests`, `-workflows`, `-checks`, `-statuses`, `-issues`).
 Outputs: `token`, `app-slug`, `installation-id`, `user-name` and `user-email`. The git identity is
-job-scoped, through `GIT_CONFIG_GLOBAL` rather than `git config --global`. `release.py --consumer`
+job-scoped, through `GIT_CONFIG_GLOBAL` rather than `git config --global`. A job that pushes to
+the repo it checked out needs `actions/checkout` with `persist-credentials: false`; otherwise
+checkout's `GITHUB_TOKEN` extraheader is used for the push and no CI starts. `release.py --consumer`
 moves its `@v…` pin with the other devkit pins.
 
 ## devkit-ci (not reusable)

@@ -233,7 +233,9 @@ jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
     uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.9.0
-    secrets: inherit
+    secrets:   # not `inherit`: merge-key-check rejects it in a repo that holds the merge key
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PR_BOT_KEY: ${{ secrets.PR_BOT_KEY }}
     with:
       devkit-ref: v0.9.0
       check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
