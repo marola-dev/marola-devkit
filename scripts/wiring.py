@@ -7,6 +7,8 @@ wiring [--root DIR] [--devkit DIR] [--name NAME] [FILE]
     print the block, or rewrite it between FILE's wiring markers; a devkit git checkout with tags
     lets each reusable-workflow call be read at its own @ref, else it is fetched from GitHub
     (a tag is cached under ~/.cache/marola-wiring)
+wiring --json
+    the same facts as JSON, for the routing bundle (MIP-0084 §5.3)
 wiring --check [FILE]
     fail on a stale block in FILE, an orphan dispatch, or an artifact nobody reads that
     <root>/wiring.allow does not list as `<artifact>: <reason>`
@@ -456,6 +458,14 @@ def render(w: Wiring) -> str:
     return "\n".join(out) + "\n"
 
 
+def to_json(w: Wiring) -> str:
+    arts = {k: {**a, "repos": sorted(a["repos"])} for k, a in w.artifacts.items()}
+    keys = ("dispatch", "bumps", "deploys", "devkit", "calls")
+    return json.dumps(
+        {"artifacts": arts, **{k: getattr(w, k) for k in keys}}, indent=1, sort_keys=True
+    )
+
+
 def write_block(path: Path, block: str) -> None:
     text = path.read_text(encoding="utf-8")
     head, sep, rest = text.partition(START)
@@ -618,6 +628,7 @@ def self_test() -> int:
         with contextlib.redirect_stderr(err):
             w = scan(root)
         block = render(w)
+        as_json = json.loads(to_json(w))
         shutil.rmtree(root / ".devkit" / ".git")  # a Nix store path
         raw = f"https://raw.githubusercontent.com/{ORG}/%s/%s/.github/workflows/%s"
         served[raw % ("marola-devkit", "v0.3.1", "notify-umbrella.yml")] = FIXTURE[
@@ -672,6 +683,14 @@ def self_test() -> int:
         v for k, v, _ in effects(array, "r", {}, lambda *a: (None, ""), root) if k == "send"
     )
     cases.append(("dispatch_array_send", sent == ["submodule-docs-updated", "submodule-updated"]))
+    cases.append(
+        (
+            "json_carries_the_block",
+            sorted(as_json["artifacts"]) == sorted(w.artifacts)
+            and sorted(as_json["dispatch"]) == sorted(w.dispatch)
+            and all(isinstance(a["repos"], list) for a in as_json["artifacts"].values()),
+        )
+    )
     cases.append(("release_files_shell_forms", release_files(shell) == ["$f", "dist/a.tgz"]))
     cases.append(("missing_callee_warns", "gemini-review.yml@v0.5.0 not found" in err.getvalue()))
     cases.append(("uncloned_callee_warns", "marola-infra/x.yml@v1 not found" in err.getvalue()))
@@ -735,11 +754,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--devkit", type=Path, help="default: <root>/.devkit, else this script's repo")
     ap.add_argument("--name", default="marola", help="the umbrella's repo name")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--json", action="store_true")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
         return self_test()
     w = scan(args.root, args.name, args.devkit)
+    if args.json:
+        print(to_json(w))
+        return 0
     block = render(w)
     if args.check:
         problems = check(w, block, args.file, read(args.root / "wiring.allow"))

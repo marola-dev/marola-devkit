@@ -156,3 +156,7 @@ temps *args:
 # The code graph, offline and outside the checkout (MIP-0076 §5.2): build, query, path, explain.
 graph *args:
     graph {{ args }}
+
+# The same graph and the wiring from the umbrella's routing-bundle branch, no build (MIP-0084 §5.2).
+route *args:
+    route {{ args }}
