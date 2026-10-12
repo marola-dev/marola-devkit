@@ -1,0 +1,60 @@
+# bot-token-test — the live test of .github/actions/bot-token (MIP-0086 §7). It needs PR_BOT_KEY,
+# so it skips fork PRs, which receive no secrets.
+name: bot-token test
+
+on:
+  pull_request:
+    paths: [".github/actions/bot-token/**", ".github/workflows/bot-token-test.yml"]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refuses-empty-list:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - id: bot
+        continue-on-error: true
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: ""
+      - name: the empty list was refused
+        env:
+          OUTCOME: ${{ steps.bot.outcome }}
+        run: '[ "$OUTCOME" = failure ] || { echo "::error::bot-token minted with no repositories"; exit 1; }'
+
+  mints-scoped:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: marola-devkit
+          permission-contents: read
+      - name: one repo, no pull-request write, git commits as the bot
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          SLUG: ${{ steps.bot.outputs.app-slug }}
+          EMAIL: ${{ steps.bot.outputs.user-email }}
+        run: |
+          set -euo pipefail
+          repos="$(gh api installation/repositories --jq '[.repositories[].full_name] | join(",")')"
+          [ "$repos" = marola-dev/marola-devkit ] || { echo "::error::the token reaches $repos"; exit 1; }
+          # An invalid body: 403 means no permission, 422 would mean the permission was granted.
+          probe() { curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$1" -d '{}'; }
+          [ "$(probe marola-dev/marola-devkit/pulls)" = 403 ] || { echo "::error::pull_requests was granted"; exit 1; }
+          [ "$(probe marola-dev/marola-site/git/refs)" != 422 ] || { echo "::error::the token can write marola-site"; exit 1; }
+          [[ "$(git config --global user.email)" =~ ^[0-9]+\+${SLUG}\[bot\]@users\.noreply\.github\.com$ ]] || { echo "::error::git email is $(git config --global user.email)"; exit 1; }
+          [ "$(git config --global user.email)" = "$EMAIL" ]
+          [ "$(git config --global user.name)" = "${SLUG}[bot]" ]
