@@ -215,7 +215,7 @@ version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming
 
 **Gemini review on request** — on a PR, request the reviewer `marola-dev/gemini` (sidebar →
 Reviewers, or `gh pr edit <N> --add-reviewer marola-dev/gemini`). A few minutes later
-`marola-gemini-bot` posts one review: a short summary and at most 10 inline comments tagged
+`marola-pr-bot` posts one review: a short summary and at most 10 inline comments tagged
 `[high]`/`[medium]`/`[low]`, with a suggestion block where the fix is exact. It then pushes one
 `fix: apply Gemini review findings` commit with the fixes whose original text still matches,
 after the repo's `check-command` passes, and comments what it fixed and what it left. Request the
@@ -239,8 +239,8 @@ jobs:
       check-command: ""   # a fast gate that needs no Nix, e.g. node scripts/site_check.js
 ```
 
-It needs the org's `marola-gemini-bot` App installed on the repo, the `gemini` team with Read on
-it, and the org's `GEMINI_API_KEY`, `GEMINI_APP_PRIVATE_KEY` and `GEMINI_APP_ID`. One Gemini API
+It needs the org's `marola-pr-bot` App installed on the repo, the `gemini` team with Read on
+it, and the org's `GEMINI_API_KEY`, `PR_BOT_KEY` and `PR_BOT_APP_ID` (the `GEMINI_APP_*` names still work). One Gemini API
 call per review keeps it on the free tier, about 20 reviews a day per model; `vars.GEMINI_MODEL`
 picks another model. This repo calls it from `gemini.yml`, with `bash tests/self-tests.sh` as
 the check. Details: [docs/4-reference_workflows.md](docs/4-reference_workflows.md#gemini-review).

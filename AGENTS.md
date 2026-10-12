@@ -83,7 +83,7 @@ An agent starts work only on an issue carrying `agent-ready`, in this repo (MIP-
 
 Commits carry `Tested:` and `Co-Authored-By: Claude <noreply@anthropic.com>`, nothing else.
 `.claude/settings.json` sets the attribution; `pr-flow` (`just pr`) fills a missing `Tested:`.
-The one exception is `gemini-review`'s fix commit, written by Gemini as `marola-gemini-bot`: its
+The one exception is `gemini-review`'s fix commit, written by Gemini as `marola-pr-bot`: its
 second trailer is `Co-Authored-By: Gemini <noreply@google.com>`.
 
 ## Phase discipline (hard rule)

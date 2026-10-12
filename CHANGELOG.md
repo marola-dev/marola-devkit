@@ -19,6 +19,11 @@ marketplace `ref` at once.
 - `gemini-review.yml` has no `cost-trailer` input any more; a caller that passes it must remove it.
 - `gemini-review.yml` falls back to `gemini-3.6-flash`; Google deprecated `gemini-3.5-flash` and
   redirects it there (#106). An org or repo `GEMINI_MODEL` variable still wins.
+- `.github/actions/bot-token` mints a `marola-pr-bot` or `marola-merge-bot` token for named repos
+  (MIP-0086 §5.4); `release.py --consumer` moves its pin. `merge-key-check` runs in `just quality`
+  (§5.6). `notify-umbrella` takes `pr_bot_key` (the `token` PAT is still read as fallback);
+  `gemini-review` reads `PR_BOT_*` with `GEMINI_*` as fallback, and `GEMINI_APP_PRIVATE_KEY` is no
+  longer required (#79).
 
 ## v0.8.3 — 2026-10-10
 
