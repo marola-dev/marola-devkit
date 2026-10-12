@@ -21,6 +21,7 @@ quality:
     actionlint
     bash tests/self-tests.sh
     scripts/agents-check.sh
+    python3 scripts/merge_key_check.py .
     python3 scripts/docs_lint.py
     python3 scripts/skills_vendor.py check --lock plugins/marola-devkit/skills/skills.lock
     python3 scripts/release.py --check

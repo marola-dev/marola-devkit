@@ -47,6 +47,7 @@
           deps-stack = "scripts/deps-stack.sh";
           deps-merge = "scripts/deps-merge.sh";
           ruleset-sync = "scripts/ruleset-sync.sh";
+          merge-key-check = "scripts/merge_key_check.py";
           api-docs-push = "scripts/api-docs-push.sh";
           gha-runner = "scripts/gha-runner.sh";
           setup-runners = "scripts/setup-runners.sh";
