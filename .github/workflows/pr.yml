@@ -10,27 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    if: github.event.action != 'closed'
-    uses: ./.github/workflows/python-ci.yml
-    with:
-      # wiring.py imports yaml; the flake's python has it, a bare setup-python does not.
-      self-test-commands: |
-        pip install "pyyaml==6.0.3"
-        bash tests/self-tests.sh
-
-  static:
-    if: github.event.action != 'closed'
-    uses: ./.github/workflows/static-ci.yml
-    with:
-      shellcheck-files: scripts/*.sh scripts/lib/*.sh .githooks/* plugins/marola-devkit/hooks/*.sh
-
-  agents:
-    if: github.event.action != 'closed'
-    uses: ./.github/workflows/agents-check.yml
-    with:
-      devkit-ref: ${{ github.event.pull_request.head.sha }}
-
   body:
     if: github.event.action != 'closed'
     uses: ./.github/workflows/pr-body.yml
