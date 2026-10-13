@@ -88,15 +88,10 @@ jobs:
               -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$1" -d '{}')"
             echo "$code $(jq -r '.message // empty' "$body" 2>/dev/null)"
           }
-          # An invalid body: 403 means no permission, 422 would mean the permission was granted.
-          refs="$(probe marola-dev/marola-devkit/git/refs)"; echo "devkit git/refs: $refs"
-          [ "${refs%% *}" = 422 ] || { echo "::error::contents write was not granted: $refs"; exit 1; }
+          # pulls checks permission before the body: 403 means pull_requests was not granted. git/refs
+          # does not (run 38306845732 got 422 for `{}` on marola-site too), so pushes prove contents.
           pulls="$(probe marola-dev/marola-devkit/pulls)"; echo "devkit pulls: $pulls"
           [ "${pulls%% *}" = 403 ] || { echo "::error::pull_requests was granted: $pulls"; exit 1; }
-          # Informational: run 38305859769 got neither 403 nor 404 here (code not recorded), so an API
-          # probe on another public repo proves nothing; the dry-run push below does.
-          site="$(probe marola-dev/marola-site/git/refs)"; echo "site git/refs: $site"
-          case "${site%% *}" in 2??) echo "::error::the token wrote to marola-site: $site"; exit 1;; esac
           ref="refs/heads/bot-token-probe-${{ github.run_id }}"
           git push --dry-run "https://x-access-token:${GH_TOKEN}@github.com/marola-dev/marola-devkit.git" "HEAD:$ref" >push-devkit.log 2>&1 \
             || { echo "::error::dry-run push to marola-devkit failed"; tail -n 5 push-devkit.log; exit 1; }
