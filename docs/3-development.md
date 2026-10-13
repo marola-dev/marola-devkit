@@ -40,8 +40,8 @@ at the real repo, and `git -C <tmp> config` once rewrote this repo's `.git/confi
   `flake.lock` is current for `flake.nix`, runs `nix flake check` (the package build and the
   self-tests derivation), then `just quality`, `tests/self-tests.sh` and `agents-check` inside the
   dev shell, and `claude plugin validate . --strict` with a pinned Claude Code release.
-- **`pr.yml`** calls five of the reusable workflows on this repo's own pull requests
-  (`python-ci`, `static-ci`, `agents-check`, `pr-body`, `ci-short-circuit`), at the PR's head, so
+- **`devkit-ci.yml`** runs `python-ci`, `static-ci` and `agents-check` under `ci-ok`, and
+  **`pr.yml`** keeps the `pr-body` and `ci-short-circuit` calls, all at the PR's head, so
   a change to one of them runs in a real caller before a tag. `labels.yml` calls `labels-sync` by
   hand (`workflow_dispatch`). `scala-ci`, `notify-umbrella` and `api-docs` have no caller here.
 
