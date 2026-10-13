@@ -1,0 +1,106 @@
+# bot-token-test — the live test of .github/actions/bot-token (MIP-0086 §7). It needs PR_BOT_KEY,
+# so it skips fork PRs, which receive no secrets.
+name: bot-token test
+
+on:
+  pull_request:
+    paths: [".github/actions/bot-token/**", ".github/workflows/bot-token-test.yml"]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refuses-unsafe-input:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - id: empty
+        continue-on-error: true
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: ""
+          permission-contents: read
+      - id: blank
+        continue-on-error: true
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: "\r\n"
+          permission-contents: read
+      - id: qualified
+        continue-on-error: true
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: marola-dev/marola-devkit
+          permission-contents: read
+      - id: noperm
+        continue-on-error: true
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: marola-devkit
+      - name: every one was refused
+        env:
+          OUTCOMES: ${{ steps.empty.outcome }} ${{ steps.blank.outcome }} ${{ steps.qualified.outcome }} ${{ steps.noperm.outcome }}
+        run: '[ "$OUTCOMES" = "failure failure failure failure" ] || { echo "::error::bot-token accepted unsafe input: $OUTCOMES"; exit 1; }'
+
+  mints-scoped:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: marola-devkit
+          permission-contents: write
+      - name: one repo, contents only, git commits as the bot
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          SLUG: ${{ steps.bot.outputs.app-slug }}
+          EMAIL: ${{ steps.bot.outputs.user-email }}
+        run: |
+          set -euo pipefail
+          repos="$(gh api installation/repositories --jq '[.repositories[].full_name] | join(",")')"
+          [ "$repos" = marola-dev/marola-devkit ] || { echo "::error::the token reaches $repos"; exit 1; }
+          # Prints "<code> <message>"; callers compare the code, errors show the whole line.
+          probe() {
+            local body code
+            body="$(mktemp)"
+            code="$(curl -s -o "$body" -w '%{http_code}' -X POST -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$1" -d '{}')"
+            echo "$code $(jq -r '.message // empty' "$body" 2>/dev/null)"
+          }
+          # pulls checks permission before the body: 403 means pull_requests was not granted. git/refs
+          # does not (run 38306845732 got 422 for `{}` on marola-site too), so pushes prove contents.
+          pulls="$(probe marola-dev/marola-devkit/pulls)"; echo "devkit pulls: $pulls"
+          [ "${pulls%% *}" = 403 ] || { echo "::error::pull_requests was granted: $pulls"; exit 1; }
+          ref="refs/heads/bot-token-probe-${{ github.run_id }}"
+          git push --dry-run "https://x-access-token:${GH_TOKEN}@github.com/marola-dev/marola-devkit.git" "HEAD:$ref" >push-devkit.log 2>&1 \
+            || { echo "::error::dry-run push to marola-devkit failed"; tail -n 5 push-devkit.log; exit 1; }
+          echo "dry-run push to marola-devkit: ok"
+          if git push --dry-run "https://x-access-token:${GH_TOKEN}@github.com/marola-dev/marola-site.git" "HEAD:$ref" >push-site.log 2>&1; then
+            echo "::error::dry-run push to marola-site succeeded"; tail -n 5 push-site.log; exit 1
+          fi
+          grep -Eq '403|denied' push-site.log || { echo "::error::push to marola-site failed, but not with 403/denied"; tail -n 5 push-site.log; exit 1; }
+          echo "dry-run push to marola-site: refused ($(tail -n 1 push-site.log))"
+          [[ "$(git config --global user.email)" =~ ^[0-9]+\+${SLUG}\[bot\]@users\.noreply\.github\.com$ ]] || { echo "::error::git email is $(git config --global user.email)"; exit 1; }
+          [ "$(git config --global user.email)" = "$EMAIL" ]
+          [ "$(git config --global user.name)" = "${SLUG}[bot]" ]

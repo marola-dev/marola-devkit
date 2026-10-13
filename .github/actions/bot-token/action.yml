@@ -1,0 +1,86 @@
+# bot-token — a marola-pr-bot or marola-merge-bot token for named repos, with git committing as that
+# bot for the rest of the job (MIP-0086 §5.4). A composite action cannot read secrets: the caller passes the App's id and key.
+name: bot-token
+description: Mint a GitHub App installation token for named marola-dev repos and make git commit as the App's bot user.
+
+inputs:
+  app-id:
+    description: vars.PR_BOT_APP_ID or vars.MERGE_BOT_APP_ID
+    required: true
+  private-key:
+    description: secrets.PR_BOT_KEY or secrets.MERGE_BOT_KEY
+    required: true
+  repositories:
+    description: >-
+      Comma- or newline-separated repo names in marola-dev. Never empty: with owner set and no list,
+      the token would cover every repo the App is installed on.
+    required: true
+  permission-contents: { description: "read | write", required: false, default: "" }
+  permission-pull-requests: { description: "read | write", required: false, default: "" }
+  permission-workflows: { description: "write", required: false, default: "" }
+  permission-checks: { description: "read", required: false, default: "" }
+  permission-statuses: { description: "read", required: false, default: "" }
+  permission-issues: { description: "read | write", required: false, default: "" }
+
+outputs:
+  token: { description: "The installation token, valid for one hour.", value: "${{ steps.mint.outputs.token }}" }
+  app-slug: { description: "The App's slug.", value: "${{ steps.mint.outputs.app-slug }}" }
+  installation-id: { description: "The installation's id.", value: "${{ steps.mint.outputs.installation-id }}" }
+  user-name: { description: "<slug>[bot]", value: "${{ steps.who.outputs.name }}" }
+  user-email: { description: "<user-id>+<slug>[bot]@users.noreply.github.com", value: "${{ steps.who.outputs.email }}" }
+
+runs:
+  using: composite
+  steps:
+    # The action's own parser would turn "\r\n" into [] and mint for every installed repo, so the list
+    # is cleaned here and the cleaned list is what the mint step gets. v3 skips empty permission-*
+    # inputs, and with none set the token holds every permission the App has.
+    - id: guard
+      shell: bash
+      env:
+        REPOS: ${{ inputs.repositories }}
+        PERMS: ${{ inputs.permission-contents }}${{ inputs.permission-pull-requests }}${{ inputs.permission-workflows }}${{ inputs.permission-checks }}${{ inputs.permission-statuses }}${{ inputs.permission-issues }}
+      run: |
+        set -euo pipefail
+        [ -n "${PERMS//[[:space:]]/}" ] || { echo "::error::bot-token: no permission-* input set; the token would hold every permission the App has"; exit 1; }
+        cleaned=""
+        while IFS= read -r repo; do
+          repo="${repo//[[:space:]]/}"
+          [ -n "$repo" ] || continue
+          [[ "$repo" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::bot-token: '$repo' is not a bare repo name in marola-dev"; exit 1; }
+          cleaned+="${cleaned:+,}$repo"
+        done < <(tr ',' '\n' <<<"$REPOS")
+        [ -n "$cleaned" ] || { echo "::error::bot-token: repositories is empty; name every repo the token needs"; exit 1; }
+        echo "repositories=$cleaned" >>"$GITHUB_OUTPUT"
+
+    - id: mint
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: marola-dev
+        repositories: ${{ steps.guard.outputs.repositories }}
+        permission-contents: ${{ inputs.permission-contents }}
+        permission-pull-requests: ${{ inputs.permission-pull-requests }}
+        permission-workflows: ${{ inputs.permission-workflows }}
+        permission-checks: ${{ inputs.permission-checks }}
+        permission-statuses: ${{ inputs.permission-statuses }}
+        permission-issues: ${{ inputs.permission-issues }}
+
+    # GIT_CONFIG_GLOBAL, not `git config --global`, which would outlive the job on a self-hosted runner.
+    # The commit email needs the bot user's id, which is not the App id (create-github-app-token's README).
+    - id: who
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.mint.outputs.token }}
+        SLUG: ${{ steps.mint.outputs.app-slug }}
+      run: |
+        set -euo pipefail
+        uid="$(gh api "users/${SLUG}%5Bbot%5D" --jq .id)"
+        name="${SLUG}[bot]" email="${uid}+${SLUG}[bot]@users.noreply.github.com"
+        cfg="$RUNNER_TEMP/bot-token.gitconfig"
+        if [ -f ~/.gitconfig ]; then cp ~/.gitconfig "$cfg"; else : >"$cfg"; fi
+        git config --file "$cfg" user.name "$name"
+        git config --file "$cfg" user.email "$email"
+        echo "GIT_CONFIG_GLOBAL=$cfg" >>"$GITHUB_ENV"
+        { echo "name=$name"; echo "email=$email"; } >>"$GITHUB_OUTPUT"

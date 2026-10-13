@@ -119,9 +119,10 @@ Never install graphify any other way, pass `--backend`, or run its installers or
 
 ## Secrets and cost
 
-The devkit deploys nothing. Its one secret is `MAROLA_BUMP_PAT`, read by `bump-consumers.yml`
-alone; its reusable workflows take what the caller passes (the `notify-umbrella` token,
-`MAROLA_CROSS_REPO_PAT` in the callers) or the default `GITHUB_TOKEN`.
+The devkit deploys nothing. `bot-token-test` reads the org's `PR_BOT_KEY` and `PR_BOT_APP_ID`;
+`MAROLA_BUMP_PAT` (`bump-consumers.yml`) and `MAROLA_CROSS_REPO_PAT` (the callers) remain until
+MIP-0086 row 11 retires them. Its reusable workflows take what the caller passes or the default
+`GITHUB_TOKEN`.
 `setup-runners` and `gha-runner` touch a self-hosted runner only when a human runs them
 ([runners](4-reference_runners.md)).
 

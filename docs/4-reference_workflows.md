@@ -132,7 +132,7 @@ jobs:
   notify:
     uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.9.0
     secrets:
-      token: ${{ secrets.MAROLA_CROSS_REPO_PAT }}
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 ```
 
 | Input | Default | Notes |
@@ -140,10 +140,12 @@ jobs:
 | `umbrella` | `marola-dev/marola` | MAROLA_UMBRELLA, MIP-0070 §5.6 |
 | `runner` | `ubuntu-latest` | resolved in the *caller's* repo |
 
-**Secret** `token` (optional): every repo passes the org secret `MAROLA_CROSS_REPO_PAT`, a
-fine-grained PAT with Contents: read & write on the umbrella (`repository_dispatch` needs it;
-`GITHUB_TOKEN` cannot reach another repo). Unset is a notice, not a failure — the umbrella's daily
-cron still catches the change.
+**Secret** `pr_bot_key` (optional): every repo passes the org secret `PR_BOT_KEY`, and the workflow
+mints a `marola-pr-bot` token (`vars.PR_BOT_APP_ID`) for the umbrella alone, with Contents write
+(`repository_dispatch` needs it; `GITHUB_TOKEN` cannot reach another repo). **Secret** `token` is
+the deprecated fallback, the old `MAROLA_CROSS_REPO_PAT`, read only when `pr_bot_key` is absent
+(MIP-0086). With neither set it is a notice, not a failure — the umbrella's daily cron still
+catches the change.
 
 A zero `github.event.before` (a branch's first push), a compare API call that doesn't answer 200
 (e.g. `before` unknown to it after a force-push), or a truncated compare (the API caps its file
@@ -355,7 +357,9 @@ jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
     uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.9.0
-    secrets: inherit
+    secrets:   # not `inherit`: merge-key-check rejects it in a repo that holds the merge key
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PR_BOT_KEY: ${{ secrets.PR_BOT_KEY }}
     with:
       devkit-ref: v0.9.0
       check-command: ""          # e.g. node scripts/site_check.js
@@ -370,8 +374,10 @@ jobs:
 | `extra-trailers` | `""` | e.g. marola-site's `MIP: none — Gemini review fix` |
 | `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then `gemini-3.6-flash` |
 
-Secrets: `GEMINI_API_KEY` and `GEMINI_APP_PRIVATE_KEY`; variable `GEMINI_APP_ID`. All three are
-set at the org, scoped to the repos the `marola-gemini-bot` App is installed on. The App needs
+Secrets: `GEMINI_API_KEY` and `PR_BOT_KEY`; variable `PR_BOT_APP_ID`. All three are set at the
+org, scoped to the repos the `marola-pr-bot` App is installed on. `GEMINI_APP_PRIVATE_KEY` and
+`GEMINI_APP_ID` are read when the `PR_BOT_*` names are unset, and no caller needs to pass
+`GEMINI_APP_PRIVATE_KEY` any more (MIP-0086). The App needs
 Contents and Pull requests read/write and no Workflows permission, so GitHub itself refuses a
 push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s, starts the
 PR's CI.
@@ -407,6 +413,22 @@ jobs:
 
 Secret `token`, optional: a PR opened with the default `GITHUB_TOKEN` starts no CI; one opened
 with a PAT or App token does.
+
+## bot-token (composite action)
+
+`uses: marola-dev/marola-devkit/.github/actions/bot-token@v0.9.0` mints an installation token for
+`marola-pr-bot` or `marola-merge-bot` on named `marola-dev` repos, and points git at that bot's
+identity for the rest of the job (MIP-0086 §5.4). A composite action cannot read secrets, so the
+caller passes `app-id` (`vars.PR_BOT_APP_ID` or `vars.MERGE_BOT_APP_ID`) and `private-key`
+(`secrets.PR_BOT_KEY` or `secrets.MERGE_BOT_KEY`). `repositories` is required, a comma- or
+newline-separated list of repo names; an empty list fails the step, because the token would
+otherwise cover every repo the App is installed on, and so does a call with no `permission-*` input
+set (`permission-contents`, `-pull-requests`, `-workflows`, `-checks`, `-statuses`, `-issues`).
+Outputs: `token`, `app-slug`, `installation-id`, `user-name` and `user-email`. The git identity is
+job-scoped, through `GIT_CONFIG_GLOBAL` rather than `git config --global`. A job that pushes to
+the repo it checked out needs `actions/checkout` with `persist-credentials: false`; otherwise
+checkout's `GITHUB_TOKEN` extraheader is used for the push and no CI starts. `release.py --consumer`
+moves its `@v…` pin with the other devkit pins.
 
 ## devkit-ci (not reusable)
 

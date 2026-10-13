@@ -24,6 +24,11 @@ marketplace `ref` at once.
   `marola-merge-bot` (5257042) becomes a pull-request-only bypass actor on every consumer (MIP-0086
   §5.7, #100). `just rulesets-apply` over the consumers after this release also moves org and repo
   admins from `always` to `pull_request` where v0.8.2's rule was never applied.
+- `.github/actions/bot-token` mints a `marola-pr-bot` or `marola-merge-bot` token for named repos
+  (MIP-0086 §5.4); `release.py --consumer` moves its pin. `merge-key-check` runs in `just quality`
+  (§5.6). `notify-umbrella` takes `pr_bot_key` (the `token` PAT is still read as fallback);
+  `gemini-review` reads `PR_BOT_*` with `GEMINI_*` as fallback, and `GEMINI_APP_PRIVATE_KEY` is no
+  longer required (#79).
 
 ## v0.8.3 — 2026-10-10
 
