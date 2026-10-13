@@ -19,6 +19,11 @@ marketplace `ref` at once.
 - `gemini-review.yml` has no `cost-trailer` input any more; a caller that passes it must remove it.
 - `gemini-review.yml` falls back to `gemini-3.6-flash`; Google deprecated `gemini-3.5-flash` and
   redirects it there (#106). An org or repo `GEMINI_MODEL` variable still wins.
+- `ruleset-sync` reads an `@consumers` key in `bypass-extras.json` and applies it to every repo in
+  `.github/consumers.txt` (`--consumers FILE` overrides), before that repo's own extras:
+  `marola-merge-bot` (5257042) becomes a pull-request-only bypass actor on every consumer (MIP-0086
+  §5.7, #100). `just rulesets-apply` over the consumers after this release also moves org and repo
+  admins from `always` to `pull_request` where v0.8.2's rule was never applied.
 - `.github/actions/bot-token` mints a `marola-pr-bot` or `marola-merge-bot` token for named repos
   (MIP-0086 §5.4); `release.py --consumer` moves its pin. `merge-key-check` runs in `just quality`
   (§5.6). `notify-umbrella` takes `pr_bot_key` (the `token` PAT is still read as fallback);
