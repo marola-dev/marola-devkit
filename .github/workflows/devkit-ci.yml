@@ -82,11 +82,32 @@ jobs:
           npm install --no-save @anthropic-ai/claude-code@2.1.285
           ./node_modules/.bin/claude plugin validate . --strict
 
+  python:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/python-ci.yml
+    with:
+      # wiring.py imports yaml; the flake's python has it, a bare setup-python does not.
+      self-test-commands: |
+        pip install "pyyaml==6.0.3"
+        bash tests/self-tests.sh
+
+  static:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/static-ci.yml
+    with:
+      shellcheck-files: scripts/*.sh scripts/lib/*.sh .githooks/* plugins/marola-devkit/hooks/*.sh
+
+  agents:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/agents-check.yml
+    with:
+      devkit-ref: ${{ github.event.pull_request.head.sha }}
+
   # The one check ci-rule requires in every marola repo (marola-dev/marola#813); it must report on
   # every run, so it needs every other job and passes on skipped ones.
   ci-ok:
     if: always()
-    needs: [check]
+    needs: [check, python, static, agents]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
