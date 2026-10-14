@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.11.0 — 2026-10-14
+
+- `bump-consumers` runs as `prepare` (nix, no key) and `publish` (marola-merge-bot, checked-in scripts
+  only), so the bump PRs and their commits come from `marola-merge-bot[bot]`. `release.yml` passes
+  `MERGE_BOT_KEY` and `MAROLA_BUMP_PAT` is no longer read: marola-devkit must hold `MERGE_BOT_APP_ID`
+  and `MERGE_BOT_KEY`. `gemini.yml` passes its secrets explicitly (#80).
+
 ## v0.10.1 — 2026-10-14
 
 - `skills-update` takes an optional secret `pr_bot_key` and opens its PR as `marola-pr-bot`; callers

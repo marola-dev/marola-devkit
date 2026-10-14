@@ -11,7 +11,9 @@ jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
     uses: ./.github/workflows/gemini-review.yml
-    secrets: inherit
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PR_BOT_KEY: ${{ secrets.PR_BOT_KEY }}
     with:
       # The base commit under pull_request_target: a fork's head is never what runs.
       devkit-ref: ${{ github.sha }}
