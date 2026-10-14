@@ -101,6 +101,39 @@ jobs:
           fi
           grep -Eq '403|denied' push-site.log || { echo "::error::push to marola-site failed, but not with 403/denied"; tail -n 5 push-site.log; exit 1; }
           echo "dry-run push to marola-site: refused ($(tail -n 1 push-site.log))"
-          [[ "$(git config --global user.email)" =~ ^[0-9]+\+${SLUG}\[bot\]@users\.noreply\.github\.com$ ]] || { echo "::error::git email is $(git config --global user.email)"; exit 1; }
-          [ "$(git config --global user.email)" = "$EMAIL" ]
-          [ "$(git config --global user.name)" = "${SLUG}[bot]" ]
+          git commit --allow-empty -qm probe
+          [[ "$EMAIL" =~ ^[0-9]+\+${SLUG}\[bot\]@users\.noreply\.github\.com$ ]] || { echo "::error::bot email is $EMAIL"; exit 1; }
+          got="$(git log -1 --format=%an/%ae/%cn/%ce)"
+          want="${SLUG}[bot]/${EMAIL}/${SLUG}[bot]/${EMAIL}"
+          [ "$got" = "$want" ] || { echo "::error::commit identity is $got, want $want"; exit 1; }
+
+  checkout-submodules:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
+          repositories: marola,marola-site,marola-corpus,marola-ml,marola-app,marola-oods,marola-skills,marola-agents,marola-research
+          permission-contents: read
+      - uses: actions/checkout@v7
+        with:
+          repository: marola-dev/marola
+          submodules: true
+          token: ${{ steps.bot.outputs.token }}
+          path: umbrella
+      - name: no credential include persists in the global git config
+        run: |
+          if [ -n "${GIT_CONFIG_GLOBAL:-}" ] || git config --global --get include.path >/dev/null; then
+            echo "::error::a credential include persists in the global git config (#121)"; exit 1
+          fi
+      - name: every submodule fetches
+        run: git -C umbrella submodule foreach --recursive git fetch -q origin

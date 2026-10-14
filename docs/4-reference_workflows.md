@@ -429,7 +429,9 @@ newline-separated list of repo names; an empty list fails the step, because the 
 otherwise cover every repo the App is installed on, and so does a call with no `permission-*` input
 set (`permission-contents`, `-pull-requests`, `-workflows`, `-checks`, `-statuses`, `-issues`).
 Outputs: `token`, `app-slug`, `installation-id`, `user-name` and `user-email`. The git identity is
-job-scoped, through `GIT_CONFIG_GLOBAL` rather than `git config --global`. A job that pushes to
+job-scoped, set through `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables in `GITHUB_ENV`, not git
+config: they outrank a later `git config user.*` in the same job, and `actions/checkout` with
+`submodules: true` keeps working (#121). A job that pushes to
 the repo it checked out needs `actions/checkout` with `persist-credentials: false`; otherwise
 checkout's `GITHUB_TOKEN` extraheader is used for the push and no CI starts. `release.py --consumer`
 moves its `@v…` pin with the other devkit pins.
