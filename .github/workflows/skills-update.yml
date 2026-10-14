@@ -1,7 +1,7 @@
 # skills-update: re-vendor every skill in the caller's skills.lock at its upstream's newest commit
 # at least `min-age` days old, and keep one PR open on `branch` with the diffs as its body
 # (MIP-0080; docs/4-reference_workflows.md#skills-update). Nothing merges on its own.
-# A PR opened with the default GITHUB_TOKEN starts no CI; pass a PAT or App token as `token`.
+# A PR opened with the default GITHUB_TOKEN starts no CI; pass `pr_bot_key` (marola-pr-bot) or a PAT as `token`.
 name: skills-update
 
 on:
@@ -25,8 +25,11 @@ on:
         type: string
         default: chore/skills-update
     secrets:
+      pr_bot_key:
+        description: "marola-pr-bot's private key; mints the token that pushes and opens the PR, so the PR starts CI"
+        required: false
       token:
-        description: "pushes the branch and opens the PR; the default GITHUB_TOKEN otherwise"
+        description: "pushes the branch and opens the PR when pr_bot_key is absent; the default GITHUB_TOKEN otherwise"
         required: false
 
 permissions:
@@ -41,11 +44,35 @@ jobs:
       group: skills-update-${{ inputs.branch }}
       cancel-in-progress: true
     env:
-      GH_TOKEN: ${{ secrets.token || github.token }}
+      HAS_PR_BOT_KEY: ${{ secrets.pr_bot_key != '' }}
     steps:
+      # github.repository, not github.event.repository.name: that is empty on `schedule` events, and
+      # an empty `repositories` mints for every repo the App is installed on.
+      - name: repository name
+        id: repo
+        if: env.HAS_PR_BOT_KEY == 'true'
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          name="${REPO#*/}"
+          [ -n "$name" ] || { echo "::error::empty repository name"; exit 1; }
+          echo "name=$name" >>"$GITHUB_OUTPUT"
+
+      - name: marola-pr-bot token
+        id: app
+        if: env.HAS_PR_BOT_KEY == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.pr_bot_key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.repo.outputs.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.token || github.token }}
+          token: ${{ steps.app.outputs.token || secrets.token || github.token }}
 
       - uses: actions/checkout@v7
         with:
@@ -55,6 +82,7 @@ jobs:
 
       - name: skills-vendor update --all, then push the branch and open or refresh the PR
         env:
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.token || github.token }}
           BRANCH: ${{ inputs.branch }}
           LOCK: ${{ inputs.lock }}
           MIN_AGE: ${{ inputs.min-age }}

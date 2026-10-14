@@ -17,3 +17,5 @@ jobs:
     with:
       devkit-ref: ${{ github.sha }}
       lock: plugins/marola-devkit/skills/skills.lock
+    secrets:
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}

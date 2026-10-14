@@ -402,6 +402,8 @@ jobs:
     uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.10.0
     with:
       devkit-ref: v0.10.0
+    secrets:
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 ```
 
 | Input | Default | Notes |
@@ -411,8 +413,10 @@ jobs:
 | `min-age` | `14` | days an upstream commit must have been public before it is vendored |
 | `branch` | `chore/skills-update` | force-pushed on every run that finds a change |
 
-Secret `token`, optional: a PR opened with the default `GITHUB_TOKEN` starts no CI; one opened
-with a PAT or App token does.
+Secret `pr_bot_key`, optional: `marola-pr-bot`'s private key (`vars.PR_BOT_APP_ID` is its id). The
+workflow mints a token for the caller's repo and pushes and opens the PR with it, so the PR starts
+CI; a PR opened with the default `GITHUB_TOKEN` starts none. Secret `token`, optional: a PAT used
+when `pr_bot_key` is absent. With neither, the job behaves as before.
 
 ## bot-token (composite action)
 
