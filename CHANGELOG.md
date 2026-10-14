@@ -11,6 +11,9 @@ marketplace `ref` at once.
   `main-rule` now needs 1 approval, and `bypass-extras.json` applies to it alone (#112). `just
   rulesets-apply` after this release creates `ci-rule` with no bypass and raises `main-rule` to 1
   approval in each repo, and moves marola-devkit's own admins from `always` to `pull_request`.
+  Apply `ci-rule` only to a repo whose CI already posts a `ci-ok` check from GitHub Actions on every
+  PR (no path filter on the workflow that posts it): it has no bypass actors, so it would block
+  every merge elsewhere. `check` and `apply` now fail on a live response without `bypass_actors`.
 
 ## v0.9.0 — 2026-10-11
 

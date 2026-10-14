@@ -48,6 +48,12 @@ normalize_ruleset() {
   '
 }
 
+# A token without admin rights gets a response with no bypass_actors; normalize_ruleset would read
+# that as [] and hide a hand-added actor, so the field's absence is an error, not "no actors".
+live_has_bypass() {
+  jq -e 'has("bypass_actors")' <<<"$3" >/dev/null || { echo "ruleset-sync $1: $2: the response has no bypass_actors — the token cannot read them" >&2; return 1; }
+}
+
 # extras_of <repo> -> stdout: <repo>'s extras as one JSON list, the "@consumers" ones first.
 extras_of() {
   local c=false
@@ -121,6 +127,7 @@ check_ruleset() {
     return 1
   fi
   payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync check: $repo $name: failed to fetch ruleset $id" >&2; return 1; }
+  live_has_bypass check "$repo $name" "$payload" || return 1
   repo_norm="$(normalize_ruleset <<<"$payload")"
   want_for "$repo" "$3"
   if [ "$repo_norm" = "$want_norm" ]; then
@@ -146,6 +153,7 @@ apply_ruleset() {
     return 1
   fi
   payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync apply: $repo $name: failed to fetch ruleset $id" >&2; return 1; }
+  live_has_bypass apply "$repo $name" "$payload" || return 1
   repo_norm="$(normalize_ruleset <<<"$payload")"
   if [ "$repo_norm" = "$want_norm" ]; then
     echo "ruleset-sync apply: $repo $name: ok, nothing to do" >&2
@@ -476,6 +484,17 @@ JSON
   : > "$tmp/stub/log"
   out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
   has "ci_rule_drifted_on_bypass_actor: PUT sends an empty bypass list" "$(cat "$tmp/stub/log")" '"bypass_actors":[]'
+  live acme/two-repo "$ci" 11
+
+  echo "-- ci_rule_no_bypass_field: a response without bypass_actors (a token without admin) is an error --"
+  jq '.id = 11 | del(.bypass_actors)' "$ci" > "$tmp/stub/detail.acme_two-repo.11.json"
+  out="$(run2 check acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_no_bypass_field: exit 1" "$rc" "1"
+  has "ci_rule_no_bypass_field: says why" "$out" "acme/two-repo ci-rule: the response has no bypass_actors"
+  hasnt "ci_rule_no_bypass_field: not ok" "$out" "acme/two-repo ci-rule: ok"
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_no_bypass_field: apply exit 1" "$rc" "1"
   live acme/two-repo "$ci" 11
 
   echo "-- ci_rule_never_gets_extras: neither @consumers nor a repo's own --"
