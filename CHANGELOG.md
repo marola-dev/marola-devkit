@@ -4,6 +4,11 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.10.1 — 2026-10-14
+
+- `skills-update` takes an optional secret `pr_bot_key` and opens its PR as `marola-pr-bot`; callers
+  pass `pr_bot_key: ${{ secrets.PR_BOT_KEY }}` so the PR starts CI (`ci-rule` needs `ci-ok`) (#116).
+
 ## v0.10.0 — 2026-10-14
 
 - `ruleset-sync` manages every manifest in `.github/rulesets/`, matched by name, and adds
