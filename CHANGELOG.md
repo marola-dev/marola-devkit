@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.11.1 — 2026-10-15
+
+- `bot-token` sets the bot's git identity with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables instead of
+  `GIT_CONFIG_GLOBAL`, which captured `actions/checkout`'s temporary global credential include and made
+  a later submodule fetch send `Authorization` twice (400 Duplicate header) (#121).
+
 ## v0.11.0 — 2026-10-14
 
 - `bump-consumers` runs as `prepare` (nix, no key) and `publish` (marola-merge-bot, checked-in scripts
