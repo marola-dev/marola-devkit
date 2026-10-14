@@ -24,7 +24,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `scripts/` | The tools the flake puts on `PATH`, each with its `lib/` and `fixtures/` beside it |
 | `plugins/marola-devkit/` | The Claude Code plugin: skills, agents, hooks; listed by `.claude-plugin/marketplace.json` |
 | `agents/invariants.md` | The org invariants block every repo's AGENTS.md carries |
-| `.github/` | `labels.yml`, `ISSUE_TEMPLATE/`, the PR template, `rulesets/main-rule.json`, and the reusable workflows |
+| `.github/` | `labels.yml`, `ISSUE_TEMPLATE/`, the PR template, `rulesets/` (`main-rule.json`, `ci-rule.json`), and the reusable workflows |
 | `.githooks/` | The opt-in pre-commit and pre-push hooks |
 | `devkit.just` | The just module consumers import |
 | `flake.nix` | Packages, apps, the base dev shell, and `lib.<system>` for consumers |
@@ -44,7 +44,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `docs-lint` | MIP-0074's stale-content check over `README.md` and `docs/**/*.md` |
 | `skills-vendor` | Pin vendored skills to an upstream commit in `skills.lock` (`check`, `outdated`, `update`, `init`) |
 | `wiring` | MIP-0076's cross-repo wiring tables (artifacts, dispatches, pin bumps, deploys), parsed from an umbrella checkout and its submodules |
-| `ruleset-sync` | Check or apply `.github/rulesets/main-rule.json`'s branch ruleset to a repo, or every repo of an org |
+| `ruleset-sync` | Check or apply the branch rulesets in `.github/rulesets/` (`main-rule`, `ci-rule`) to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
 | `graph` | A pinned graphify, offline and keyless, its graph in the user cache: `build`, `query`, `path`, `explain` |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
@@ -73,7 +73,7 @@ The vendored skills are pinned in `plugins/marola-devkit/skills/skills.lock`
   that read MIPs fall back to the umbrella's `docs/MIPs` through `gh api`; nothing reads another
   repo's tree.
 - **Publishes**, at each `v*` tag: the flake (packages, apps, `lib.<system>`), the plugin
-  marketplace, the reusable workflows, the invariants block, the labels, issue forms and ruleset.
+  marketplace, the reusable workflows, the invariants block, the labels, issue forms and rulesets.
 - **Pinned by:** every marola repo, in three places bumped together: the flake input, every
   workflow `@v…` and `devkit-ref`, and the marketplace `ref` in `.claude/settings.json`.
 
@@ -177,11 +177,13 @@ devkit's copy (`MAROLA_INVARIANTS_BLOCK` is set by the wrapper).
 **Issue forms and labels** — `.github/labels.yml`, `.github/ISSUE_TEMPLATE/` and the PR template
 are the same in every repo, so `agent-ready` means the same thing everywhere (MIP-0070 §5.7).
 
-**Ruleset sync** — `.github/rulesets/main-rule.json` is the one branch ruleset every marola repo
-carries (the org is on GitHub Free, so an org-level ruleset isn't available). `ruleset-sync check
-[owner/repo ...]` compares a repo's live ruleset against it (default: the caller's repo) and exits
-non-zero on a miss or a diff; `ruleset-sync apply <owner/repo ...>` creates or updates it, `--dry-run`
-previews the `gh api` call instead of making it. `--all-org ORG` runs either over every non-archived,
+**Ruleset sync** — every marola repo carries the two branch rulesets in `.github/rulesets/` (the org
+is on GitHub Free, so an org-level ruleset isn't available): `main-rule` (a squash PR with 1
+approval; admins, and on a consumer `marola-merge-bot`, may bypass it on a PR) and `ci-rule`
+(`ci-ok` from GitHub Actions; no bypass actors). `ruleset-sync check [owner/repo ...]` compares a
+repo's live rulesets against them by name (default: the caller's repo) and exits non-zero on a miss
+or a diff; `ruleset-sync apply <owner/repo ...>` creates or updates each, `--dry-run` previews the
+`gh api` calls instead of making them. `--all-org ORG` runs either over every non-archived,
 non-fork repo of an org (`--include-forks` adds forks). `just rulesets-check`/`just rulesets-apply` wrap both.
 
 **Docs lint** — `docs-lint [repo-root]` runs MIP-0074 §7's rules over `README.md` and

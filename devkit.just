@@ -31,11 +31,11 @@ pr-labels-backfill *args:
 labels-sync *args:
     issues labels sync {{ args }}
 
-# Check the repo's branch ruleset against the devkit's manifest.
+# Check the repo's branch rulesets (main-rule, ci-rule) against the devkit's manifests.
 rulesets-check *args:
     ruleset-sync check {{ args }}
 
-# Apply the devkit's ruleset manifest to the repo.
+# Apply the devkit's ruleset manifests to the repo.
 rulesets-apply *args:
     ruleset-sync apply {{ args }}
 

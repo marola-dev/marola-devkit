@@ -4,6 +4,17 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.10.0 — 2026-10-14
+
+- `ruleset-sync` manages every manifest in `.github/rulesets/`, matched by name, and adds
+  `ci-rule`: `ci-ok` from GitHub Actions (integration 15368) required, non-strict, no bypass actors;
+  `main-rule` now needs 1 approval, and `bypass-extras.json` applies to it alone (#112). `just
+  rulesets-apply` after this release creates `ci-rule` with no bypass and raises `main-rule` to 1
+  approval in each repo, and moves marola-devkit's own admins from `always` to `pull_request`.
+  Apply `ci-rule` only to a repo whose CI already posts a `ci-ok` check from GitHub Actions on every
+  PR (no path filter on the workflow that posts it): it has no bypass actors, so it would block
+  every merge elsewhere. `check` and `apply` now fail on a live response without `bypass_actors`.
+
 ## v0.9.0 — 2026-10-11
 
 - The `Cost:` commit trailer is out of scope for marola, and the tooling around it is gone (#103):

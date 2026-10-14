@@ -1,40 +1,57 @@
 #!/usr/bin/env bash
-# ruleset-sync — reconcile a repo's branch ruleset against .github/rulesets/main-rule.json, the
-# same way `issues labels sync` treats .github/labels.yml (MIP-0070: the org is on GitHub Free,
-# so org-level rulesets aren't available and each repo carries its own copy by hand).
+# ruleset-sync — reconcile a repo's branch rulesets against .github/rulesets/*.json (one ruleset
+# per file, matched on GitHub by its name; bypass-extras.json is not one), the same way
+# `issues labels sync` treats .github/labels.yml (MIP-0070: the org is on GitHub Free, so
+# org-level rulesets aren't available and each repo carries its own copy by hand).
 #
 #   ruleset-sync check [owner/repo ...]   # default: the caller's repo (gh repo view)
 #   ruleset-sync apply <owner/repo ...>   # create when missing, update in place when drifted
-#   ruleset-sync [--manifest FILE] [--extras FILE] [--consumers FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
+#   ruleset-sync [--manifest FILE ...] [--extras FILE] [--consumers FILE] [--dry-run] [--all-org ORG [--include-forks]] check|apply ...
 #   ruleset-sync --self-test
 #
-# A repo keyed in .github/rulesets/bypass-extras.json expects the manifest's bypass list with its
-# extras merged by (actor_type, actor_id): a match overrides bypass_mode, anything else is added.
-# The key "@consumers" applies to every repo in .github/consumers.txt (--consumers FILE), before
-# that repo's own extras: the merge bot's bypass on every devkit consumer (MIP-0086 §5.7).
-# check prints ok/missing/drifted per repo (stderr) and a unified diff for a drifted one
-# (stdout); it exits non-zero if any repo is missing or drifted. apply prints what it did
-# (stderr) and the gh call it ran or, under --dry-run, would have run (stdout) instead. Never
-# touches a ruleset whose name isn't the manifest's; no deletion command.
+# --manifest, once or more, replaces the default set. A repo keyed in
+# .github/rulesets/bypass-extras.json expects main-rule's bypass list with its extras merged by
+# (actor_type, actor_id): a match overrides bypass_mode, anything else is added. The key
+# "@consumers" applies to every repo in .github/consumers.txt (--consumers FILE), before that
+# repo's own extras: the merge bot's bypass on every devkit consumer (MIP-0086 §5.7). No other
+# ruleset takes extras. check prints "<repo> <ruleset>: ok|missing|drifted" (stderr) and a unified
+# diff for a drifted one (stdout); it exits non-zero if any is missing or drifted. apply prints
+# what it did (stderr) and the gh call it ran or, under --dry-run, would have run (stdout)
+# instead. Never touches a ruleset whose name isn't a manifest's; no deletion command.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest_default="$root/.github/rulesets/main-rule.json"
-extras_default="$root/.github/rulesets/bypass-extras.json"
+rulesets_dir="$root/.github/rulesets"
+extras_default="$rulesets_dir/bypass-extras.json"
 consumers_default="$root/.github/consumers.txt"
+# bypass-extras.json predates ci-rule, which must have no bypass at all (#112).
+extras_ruleset=main-rule
 
-usage() { sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # normalize_ruleset <stdin JSON> -> stdout: the manifest's own shape (pretty, sorted keys), so a
 # live `gh api .../rulesets/<id>` response compares byte-for-byte against the manifest. The
 # dropped fields are per-repo/per-token, not part of the ruleset's definition; left in,
-# current_user_can_bypass alone would make every real repo "drifted" forever.
+# current_user_can_bypass alone would make every real repo "drifted" forever. GitHub's schema
+# makes do_not_enforce_on_create and a check's integration_id optional, so absent means false and
+# unset.
 normalize_ruleset() {
   jq -S '
     del(.id, .node_id, ._links, .source, .source_type, .created_at, .updated_at, .current_user_can_bypass)
     | .bypass_actors |= (. // [] | sort_by(.actor_type, .actor_id))
-    | .rules |= (. // [] | sort_by(.type))
+    | .rules |= (. // [] | sort_by(.type) | map(
+        if .type == "required_status_checks" then .parameters |= (
+          .do_not_enforce_on_create //= false
+          | .required_status_checks |= (. // [] | map(if .integration_id == null then del(.integration_id) else . end)
+              | sort_by(.context, .integration_id)))
+        else . end))
   '
+}
+
+# A token without admin rights gets a response with no bypass_actors; normalize_ruleset would read
+# that as [] and hide a hand-added actor, so the field's absence is an error, not "no actors".
+live_has_bypass() {
+  jq -e 'has("bypass_actors")' <<<"$3" >/dev/null || { echo "ruleset-sync $1: $2: the response has no bypass_actors — the token cannot read them" >&2; return 1; }
 }
 
 # extras_of <repo> -> stdout: <repo>'s extras as one JSON list, the "@consumers" ones first.
@@ -44,27 +61,26 @@ extras_of() {
   jq -c --arg r "$1" --argjson c "$c" '(if $c then .["@consumers"] // [] else [] end) + (.[$r] // [])' "$extras"
 }
 
-# expected_ruleset <repo> -> stdout: the manifest with <repo>'s extras merged in, reasons dropped
-# (GitHub doesn't store them, so left in they would be drift on every check).
+# expected_ruleset <repo> <manifest> -> stdout: the manifest with <repo>'s extras merged in,
+# reasons dropped (GitHub doesn't store them, so left in they would be drift on every check).
 expected_ruleset() {
   jq --argjson x "$(extras_of "$1")" '
     .bypass_actors = reduce ($x[] | del(.reason)) as $e (.bypass_actors // [];
       if any(.[]; .actor_type == $e.actor_type and .actor_id == $e.actor_id)
       then map(if .actor_type == $e.actor_type and .actor_id == $e.actor_id then .bypass_mode = $e.bypass_mode else . end)
       else . + [$e] end)
-  ' "$manifest"
+  ' "$2"
 }
 
-# want_for <repo>: sets $want (the file apply sends), $want_norm and $want_label for <repo>. A repo
-# with no extras sends the manifest itself, byte for byte.
+# want_for <repo> <i>: sets $want (the file apply sends), $want_norm and $want_label for manifest
+# <i> on <repo>. Without extras apply sends the manifest itself, byte for byte.
 want_for() {
-  if [ "$(extras_of "$1" | jq length)" -gt 0 ]; then
-    want="$work/${1//\//_}.json"
-    expected_ruleset "$1" > "$want"
+  want="${manifests[$2]}"; want_norm="${manifest_norms[$2]}"; want_label="${names[$2]} manifest"
+  if [ "${names[$2]}" = "$extras_ruleset" ] && [ "$(extras_of "$1" | jq length)" -gt 0 ]; then
+    want="$work/${1//\//_}.${names[$2]}.json"
+    expected_ruleset "$1" "${manifests[$2]}" > "$want"
     want_norm="$(normalize_ruleset < "$want")"
-    want_label="manifest+extras"
-  else
-    want="$manifest"; want_norm="$manifest_norm"; want_label="manifest"
+    want_label="${names[$2]} manifest+extras"
   fi
 }
 
@@ -77,16 +93,14 @@ org_repos() {
     --jq ".[] | select(.archived == false and ($2 or .fork == false)) | .full_name"
 }
 
-# ruleset_id <repo> <name> -> that repo's ruleset id matching <name>, or empty if none exists.
+# ruleset_id <repo> <list JSON> <name> -> the id in <list> matching <name>, or empty if none.
 # A non-empty result here is the only thing that lets check/apply ever touch a ruleset — anything
 # else on the repo (a different name) never reaches ruleset_id's caller.
 ruleset_id() {
-  local list
-  list="$(gh api "repos/$1/rulesets" </dev/null)" || return 1
   local ids n
-  ids="$(jq -r --arg n "$2" '.[] | select(.name == $n) | .id' <<<"$list")"
+  ids="$(jq -r --arg n "$3" '.[] | select(.name == $n) | .id' <<<"$2")"
   n="$(grep -c . <<<"$ids" || true)"
-  [ "$n" -le 1 ] || { echo "ruleset-sync: $1 has $n rulesets named $2; resolve by hand" >&2; return 1; }
+  [ "$n" -le 1 ] || { echo "ruleset-sync: $1 has $n rulesets named $3; resolve by hand" >&2; return 1; }
   printf '%s' "$ids"
 }
 
@@ -104,45 +118,48 @@ run() {
   return "$rc"
 }
 
-check_repo() {
-  local repo="$1" id payload repo_norm
-  id="$(ruleset_id "$repo" "$ruleset_name")" || { echo "ruleset-sync check: $repo: failed to list rulesets" >&2; return 1; }
+# check_ruleset <repo> <list JSON> <i> -> 0 when manifest <i> matches <repo>'s live ruleset.
+check_ruleset() {
+  local repo="$1" name="${names[$3]}" id payload repo_norm
+  id="$(ruleset_id "$repo" "$2" "$name")" || return 1
   if [ -z "$id" ]; then
-    echo "ruleset-sync check: $repo: missing" >&2
+    echo "ruleset-sync check: $repo $name: missing" >&2
     return 1
   fi
-  payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync check: $repo: failed to fetch ruleset $id" >&2; return 1; }
+  payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync check: $repo $name: failed to fetch ruleset $id" >&2; return 1; }
+  live_has_bypass check "$repo $name" "$payload" || return 1
   repo_norm="$(normalize_ruleset <<<"$payload")"
-  want_for "$repo"
+  want_for "$repo" "$3"
   if [ "$repo_norm" = "$want_norm" ]; then
-    echo "ruleset-sync check: $repo: ok" >&2
+    echo "ruleset-sync check: $repo $name: ok" >&2
     return 0
   fi
-  echo "ruleset-sync check: $repo: drifted" >&2
-  diff -u --label "$want_label" --label "$repo" <(printf '%s\n' "$want_norm") <(printf '%s\n' "$repo_norm") || true
+  echo "ruleset-sync check: $repo $name: drifted" >&2
+  diff -u --label "$want_label" --label "$repo $name" <(printf '%s\n' "$want_norm") <(printf '%s\n' "$repo_norm") || true
   return 1
 }
 
-# apply_repo <repo> -> 0 on success (whatever it did or didn't do), 1 on failure; sets
-# $apply_outcome to created|updated|ok|failed for the caller's tally, since an exit code alone
-# can't carry "succeeded, and here is which of three things happened" under `set -e`.
-apply_repo() {
-  local repo="$1" id payload repo_norm
+# apply_ruleset <repo> <list JSON> <i> -> 0 on success (whatever it did or didn't do), 1 on
+# failure; sets $apply_outcome to created|updated|ok|failed for the caller's tally, since an exit
+# code alone can't carry "succeeded, and here is which of three things happened" under `set -e`.
+apply_ruleset() {
+  local repo="$1" name="${names[$3]}" id payload repo_norm
   apply_outcome=failed
-  want_for "$repo"
-  id="$(ruleset_id "$repo" "$ruleset_name")" || { echo "ruleset-sync apply: $repo: failed to list rulesets" >&2; return 1; }
+  want_for "$repo" "$3"
+  id="$(ruleset_id "$repo" "$2" "$name")" || return 1
   if [ -z "$id" ]; then
-    echo "ruleset-sync apply: $repo: missing — creating" >&2
+    echo "ruleset-sync apply: $repo $name: missing — creating" >&2
     if run gh api "repos/$repo/rulesets" --method POST --input "$want"; then apply_outcome=created; return 0; fi
     return 1
   fi
-  payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync apply: $repo: failed to fetch ruleset $id" >&2; return 1; }
+  payload="$(gh api "repos/$repo/rulesets/$id" </dev/null)" || { echo "ruleset-sync apply: $repo $name: failed to fetch ruleset $id" >&2; return 1; }
+  live_has_bypass apply "$repo $name" "$payload" || return 1
   repo_norm="$(normalize_ruleset <<<"$payload")"
   if [ "$repo_norm" = "$want_norm" ]; then
-    echo "ruleset-sync apply: $repo: ok, nothing to do" >&2
+    echo "ruleset-sync apply: $repo $name: ok, nothing to do" >&2
     apply_outcome=ok; return 0
   fi
-  echo "ruleset-sync apply: $repo: drifted — updating ruleset $id" >&2
+  echo "ruleset-sync apply: $repo $name: drifted — updating ruleset $id" >&2
   if run gh api "repos/$repo/rulesets/$id" --method PUT --input "$want"; then apply_outcome=updated; return 0; fi
   return 1
 }
@@ -253,14 +270,14 @@ JSON
   echo "-- check over several repos: exit non-zero if any fails, but still reports each --"
   out="$(run_script check acme/ok-repo acme/missing-repo)" && rc=0 || rc=$?
   check "mixed repos: exit 1" "$rc" "1"
-  has "mixed repos: still reports the ok one" "$out" "acme/ok-repo: ok"
+  has "mixed repos: still reports the ok one" "$out" "acme/ok-repo main-rule: ok"
 
   echo "-- check with no repo args defaults to the caller's repo (gh repo view) --"
   jq '.id = 1' "$manifest" > "$tmp/stub/detail.acme_default-repo.1.json"
   jq -n '[{id:1,name:"main-rule"}]' > "$tmp/stub/list.acme_default-repo.json"
   out="$(STUB_NWO=acme/default-repo run_script check)" && rc=0 || rc=$?
   check "default repo: exit 0" "$rc" "0"
-  has "default repo: resolved via gh repo view" "$out" "acme/default-repo: ok"
+  has "default repo: resolved via gh repo view" "$out" "acme/default-repo main-rule: ok"
 
   echo "-- apply on a missing repo: POST with the manifest body --"
   : > "$tmp/stub/log"
@@ -296,7 +313,7 @@ JSON
     > "$tmp/stub/org-repos.acme.json"
   out="$(run_script --all-org acme check)" && rc=0 || rc=$?
   check "all-org: exit 0 (only the non-archived repo checked)" "$rc" "0"
-  has "all-org: checks the non-archived repo" "$out" "acme/ok-repo: ok"
+  has "all-org: checks the non-archived repo" "$out" "acme/ok-repo main-rule: ok"
   hasnt "all-org: skips the archived repo" "$out" "archived-repo"
   hasnt "all-org: skips a fork by default" "$out" "fork-repo"
   out="$(run_script --all-org acme --include-forks check)" && rc=0 || rc=$?
@@ -322,7 +339,7 @@ JSON
   live_extras "[$app,$admin_pr]"
   out="$(run_script check acme/extras-repo)" && rc=0 || rc=$?
   check "check_ok_with_repo_extras: exit 0" "$rc" "0"
-  has "check_ok_with_repo_extras: prints ok" "$out" "acme/extras-repo: ok"
+  has "check_ok_with_repo_extras: prints ok" "$out" "acme/extras-repo main-rule: ok"
 
   echo "-- check_drifted_when_extra_missing: the App gone, or the admin mode reverted --"
   live_extras "[$admin_pr]"
@@ -393,13 +410,144 @@ JSON
   out="$(run_script check acme/ok-repo)" && rc=0 || rc=$?
   check "non_consumer_never_gets_it: exit 0" "$rc" "0"
 
+  local ci="$tmp/ci-rule.json"
+  cat > "$ci" <<'JSON'
+{
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "exclude": [], "include": ["~DEFAULT_BRANCH"] } },
+  "enforcement": "active",
+  "name": "ci-rule",
+  "rules": [{
+    "parameters": {
+      "do_not_enforce_on_create": false,
+      "required_status_checks": [{ "context": "ci-ok", "integration_id": 15368 }],
+      "strict_required_status_checks_policy": false
+    },
+    "type": "required_status_checks"
+  }],
+  "target": "branch"
+}
+JSON
+  run2() { PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --manifest "$ci" --extras "$extras" --consumers "$tmp/consumers.txt" "$@" 2>&1; }
+  live() { jq --argjson id "$3" '.id = $id' "$2" > "$tmp/stub/detail.$(tr / _ <<<"$1").$3.json"; }
+
+  echo "-- two_rulesets_ok: main-rule and ci-rule on one repo, an unrelated one beside them --"
+  jq -n '[{id:1,name:"main-rule"},{id:11,name:"ci-rule"},{id:42,name:"other-rule"}]' > "$tmp/stub/list.acme_two-repo.json"
+  live acme/two-repo "$manifest" 1; live acme/two-repo "$ci" 11
+  out="$(run2 check acme/two-repo)" && rc=0 || rc=$?
+  check "two_rulesets_ok: exit 0" "$rc" "0"
+  has "two_rulesets_ok: main-rule ok" "$out" "acme/two-repo main-rule: ok"
+  has "two_rulesets_ok: ci-rule ok" "$out" "acme/two-repo ci-rule: ok"
+  hasnt "two_rulesets_ok: never fetches the other ruleset" "$out" "/42"
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
+  check "two_rulesets_ok: apply makes no call" "$(cat "$tmp/stub/log")" ""
+
+  echo "-- ci_rule_live_shape: server fields, an omitted do_not_enforce_on_create, checks in another order --"
+  jq '.id = 11 | .node_id = "RRS_x" | .source = "acme/two-repo" | .source_type = "Repository"
+      | .current_user_can_bypass = "never" | ._links = {self: {href: "h"}} | .created_at = "t" | .updated_at = "t"
+      | .rules[0].parameters |= (del(.do_not_enforce_on_create)
+          | .required_status_checks = [{context: "z-other", integration_id: null}] + .required_status_checks)' \
+    "$ci" > "$tmp/stub/detail.acme_two-repo.11.json"
+  jq '.rules[0].parameters.required_status_checks += [{context: "z-other"}]' "$ci" > "$tmp/ci-two-checks.json"
+  out="$(PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --manifest "$manifest" --manifest "$tmp/ci-two-checks.json" --extras "$extras" --consumers "$tmp/consumers.txt" check acme/two-repo 2>&1)" && rc=0 || rc=$?
+  check "ci_rule_live_shape: exit 0" "$rc" "0"
+  has "ci_rule_live_shape: ci-rule ok" "$out" "acme/two-repo ci-rule: ok"
+  live acme/two-repo "$ci" 11
+
+  echo "-- ci_rule_created_when_missing: POST the ci-rule manifest as it is, main-rule untouched --"
+  jq -n '[{id:3,name:"main-rule"},{id:43,name:"other-rule"}]' > "$tmp/stub/list.acme_noci-repo.json"
+  live acme/noci-repo "$manifest" 3
+  out="$(run2 check acme/noci-repo)" && rc=0 || rc=$?
+  check "ci_rule_created_when_missing: check exit 1" "$rc" "1"
+  has "ci_rule_created_when_missing: ci-rule missing" "$out" "acme/noci-repo ci-rule: missing"
+  has "ci_rule_created_when_missing: main-rule still ok" "$out" "acme/noci-repo main-rule: ok"
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/noci-repo)" && rc=0 || rc=$?
+  check "ci_rule_created_when_missing: apply exit 0" "$rc" "0"
+  check "ci_rule_created_when_missing: one POST of the ci-rule manifest, nothing else" "$(cat "$tmp/stub/log")" "POST repos/acme/noci-repo/rulesets $(jq -c . "$ci")"
+  has "ci_rule_created_when_missing: tally" "$out" "1 created, 0 updated, 1 ok, 0 failed"
+
+  echo "-- ci_rule_updated_when_drifted: PUT to ci-rule's id only --"
+  jq '.id = 11 | .rules[0].parameters.strict_required_status_checks_policy = true' "$ci" > "$tmp/stub/detail.acme_two-repo.11.json"
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_updated_when_drifted: exit 0" "$rc" "0"
+  check "ci_rule_updated_when_drifted: one PUT of the ci-rule manifest to id 11" "$(cat "$tmp/stub/log")" "PUT repos/acme/two-repo/rulesets/11 $(jq -c . "$ci")"
+
+  echo "-- ci_rule_drifted_on_bypass_actor: a hand-added actor is drift, and apply removes it --"
+  jq --argjson a "$base_admin" '.id = 11 | .bypass_actors = [$a]' "$ci" > "$tmp/stub/detail.acme_two-repo.11.json"
+  out="$(run2 check acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_drifted_on_bypass_actor: exit 1" "$rc" "1"
+  has "ci_rule_drifted_on_bypass_actor: ci-rule drifted" "$out" "acme/two-repo ci-rule: drifted"
+  has "ci_rule_drifted_on_bypass_actor: diff names it" "$out" '+      "actor_type": "OrganizationAdmin"'
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
+  has "ci_rule_drifted_on_bypass_actor: PUT sends an empty bypass list" "$(cat "$tmp/stub/log")" '"bypass_actors":[]'
+  live acme/two-repo "$ci" 11
+
+  echo "-- ci_rule_no_bypass_field: a response without bypass_actors (a token without admin) is an error --"
+  jq '.id = 11 | del(.bypass_actors)' "$ci" > "$tmp/stub/detail.acme_two-repo.11.json"
+  out="$(run2 check acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_no_bypass_field: exit 1" "$rc" "1"
+  has "ci_rule_no_bypass_field: says why" "$out" "acme/two-repo ci-rule: the response has no bypass_actors"
+  hasnt "ci_rule_no_bypass_field: not ok" "$out" "acme/two-repo ci-rule: ok"
+  : > "$tmp/stub/log"
+  out="$(run2 apply acme/two-repo)" && rc=0 || rc=$?
+  check "ci_rule_no_bypass_field: apply exit 1" "$rc" "1"
+  live acme/two-repo "$ci" 11
+
+  echo "-- ci_rule_never_gets_extras: neither @consumers nor a repo's own --"
+  for r in consumer-repo extras-repo; do
+    jq -n '[]' > "$tmp/stub/list.acme_$r.json"
+    : > "$tmp/stub/log"
+    out="$(run2 apply "acme/$r")" && rc=0 || rc=$?
+    has "ci_rule_never_gets_extras ($r): POSTs ci-rule as it is" "$(cat "$tmp/stub/log")" "POST repos/acme/$r/rulesets $(jq -c . "$ci")"
+    has "ci_rule_never_gets_extras ($r): main-rule still gets its extras" "$(cat "$tmp/stub/log")" '"actor_type":"Integration"'
+  done
+  jq -n '[{id:6,name:"main-rule"},{id:16,name:"ci-rule"}]' > "$tmp/stub/list.acme_consumer-repo.json"
+  live_consumer "[$base_admin,$merge]"; live acme/consumer-repo "$ci" 16
+  out="$(run2 check acme/consumer-repo)" && rc=0 || rc=$?
+  check "ci_rule_never_gets_extras: a consumer with an actor-free ci-rule is ok" "$rc" "0"
+
+  echo "-- two_rulesets_dry_run: prints both calls, writes nothing --"
+  : > "$tmp/stub/log"
+  out="$(run2 --dry-run apply acme/missing-repo)" && rc=0 || rc=$?
+  check "two_rulesets_dry_run: exit 0" "$rc" "0"
+  check "two_rulesets_dry_run: makes no call" "$(cat "$tmp/stub/log")" ""
+  has "two_rulesets_dry_run: prints the main-rule POST" "$out" "--input $manifest"
+  has "two_rulesets_dry_run: prints the ci-rule POST" "$out" "--input $ci"
+  has "two_rulesets_dry_run: says nothing was written" "$out" "nothing was written"
+
+  echo "-- duplicate_manifest_names: two manifests named alike is refused --"
+  out="$(run_script --manifest "$manifest" check acme/ok-repo)" && rc=0 || rc=$?
+  check "duplicate_manifest_names: exit 1" "$rc" "1"
+  has "duplicate_manifest_names: says so" "$out" "main-rule"
+
+  echo "-- default_manifests: every .github/rulesets/*.json but bypass-extras.json --"
+  out="$(PATH="$tmp/bin:$PATH" STUB_DIR="$tmp/stub" STUB_LOG="$tmp/stub/log" bash "$script" --consumers "$tmp/consumers.txt" --dry-run apply acme/missing-repo 2>&1)" && rc=0 || rc=$?
+  check "default_manifests: exit 0" "$rc" "0"
+  has "default_manifests: main-rule" "$out" "acme/missing-repo main-rule: missing"
+  has "default_manifests: ci-rule" "$out" "acme/missing-repo ci-rule: missing"
+  hasnt "default_manifests: not bypass-extras" "$out" "bypass-extras"
+
+  echo "-- repo_manifests: what #112 asks of the real files --"
+  local rs; rs="$(dirname "$script")/../.github/rulesets"
+  check "repo_manifests: main-rule wants 1 approval" "$(jq '.rules[] | select(.type == "pull_request") | .parameters.required_approving_review_count' "$rs/main-rule.json")" "1"
+  check "repo_manifests: main-rule bypass unchanged" "$(jq -c '.bypass_actors' "$rs/main-rule.json")" \
+    '[{"actor_id":null,"actor_type":"OrganizationAdmin","bypass_mode":"pull_request"},{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"pull_request"}]'
+  check "repo_manifests: ci-rule has an explicit empty bypass list" "$(jq -c '.bypass_actors' "$rs/ci-rule.json")" "[]"
+  check "repo_manifests: ci-rule wants ci-ok from GitHub Actions, non-strict" \
+    "$(jq -c '[.rules[] | {type, checks: .parameters.required_status_checks, strict: .parameters.strict_required_status_checks_policy}]' "$rs/ci-rule.json")" \
+    '[{"type":"required_status_checks","checks":[{"context":"ci-ok","integration_id":15368}],"strict":false}]'
+
   if [ "$fails" -eq 0 ]; then echo "ruleset-sync self-test: ok"; return 0; fi
   echo "ruleset-sync self-test: $fails failure(s)" >&2; return 1
 }
 
 # --- argument parsing ---
 
-manifest="$manifest_default"
+manifests=()
 extras="$extras_default"
 consumers="$consumers_default"
 all_org=""
@@ -409,7 +557,7 @@ repos=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --manifest) manifest="${2:?--manifest needs a file}"; shift 2 ;;
+    --manifest) manifests+=("${2:?--manifest needs a file}"); shift 2 ;;
     --extras) extras="${2:?--extras needs a file}"; shift 2 ;;
     --consumers) consumers="${2:?--consumers needs a file}"; shift 2 ;;
     --dry-run) dry=1; shift ;;
@@ -426,9 +574,22 @@ done
 [ -n "$cmd" ] || { echo "ruleset-sync: expects check or apply" >&2; usage >&2; exit 1; }
 [ -z "$all_org" ] || [ "${#repos[@]}" -eq 0 ] || { echo "ruleset-sync: --all-org and explicit repos are mutually exclusive" >&2; exit 1; }
 
-[ -f "$manifest" ] || { echo "ruleset-sync: manifest not found: $manifest" >&2; exit 1; }
-ruleset_name="$(jq -r .name "$manifest")"
-manifest_norm="$(normalize_ruleset < "$manifest")"
+if [ "${#manifests[@]}" -eq 0 ]; then
+  for f in "$rulesets_dir"/*.json; do
+    [ "$f" = "$extras_default" ] || manifests+=("$f")
+  done
+fi
+[ "${#manifests[@]}" -gt 0 ] || { echo "ruleset-sync: no manifest in $rulesets_dir" >&2; exit 1; }
+names=(); manifest_norms=()
+for f in "${manifests[@]}"; do
+  [ -f "$f" ] || { echo "ruleset-sync: manifest not found: $f" >&2; exit 1; }
+  n="$(jq -r '.name // empty' "$f")"
+  [ -n "$n" ] || { echo "ruleset-sync: $f has no name" >&2; exit 1; }
+  for seen in "${names[@]}"; do
+    [ "$seen" != "$n" ] || { echo "ruleset-sync: two manifests are named $n" >&2; exit 1; }
+  done
+  names+=("$n"); manifest_norms+=("$(normalize_ruleset < "$f")")
+done
 
 [ -f "$extras" ] || { echo "ruleset-sync: extras not found: $extras" >&2; exit 1; }
 [ -f "$consumers" ] || { echo "ruleset-sync: consumers not found: $consumers" >&2; exit 1; }
@@ -455,27 +616,31 @@ if [ "${#repos[@]}" -eq 0 ]; then
 fi
 
 overall_rc=0
+ok=0; bad=0; created=0; updated=0; failed=0
+for repo in "${repos[@]}"; do
+  # One list per repo, every manifest matched against it.
+  if ! list="$(gh api "repos/$repo/rulesets" </dev/null)"; then
+    echo "ruleset-sync $cmd: $repo: failed to list rulesets" >&2
+    overall_rc=1; bad=$((bad + ${#names[@]})); failed=$((failed + ${#names[@]})); continue
+  fi
+  for i in "${!names[@]}"; do
+    case "$cmd" in
+      check)
+        if check_ruleset "$repo" "$list" "$i"; then ok=$((ok + 1)); else bad=$((bad + 1)); overall_rc=1; fi ;;
+      apply)
+        if apply_ruleset "$repo" "$list" "$i"; then :; else overall_rc=1; fi
+        case "$apply_outcome" in
+          created) created=$((created + 1)) ;;
+          updated) updated=$((updated + 1)) ;;
+          ok) ok=$((ok + 1)) ;;
+          *) failed=$((failed + 1)) ;;
+        esac ;;
+    esac
+  done
+done
 case "$cmd" in
-  check)
-    ok=0; bad=0
-    for repo in "${repos[@]}"; do
-      if check_repo "$repo"; then ok=$((ok + 1)); else bad=$((bad + 1)); overall_rc=1; fi
-    done
-    echo "ruleset-sync check: $ok ok, $bad missing or drifted ($((ok + bad)) repos checked)" >&2
-    ;;
-  apply)
-    created=0; updated=0; ok=0; failed=0
-    for repo in "${repos[@]}"; do
-      if apply_repo "$repo"; then :; else overall_rc=1; fi
-      case "$apply_outcome" in
-        created) created=$((created + 1)) ;;
-        updated) updated=$((updated + 1)) ;;
-        ok) ok=$((ok + 1)) ;;
-        *) failed=$((failed + 1)) ;;
-      esac
-    done
-    echo "ruleset-sync apply: $created created, $updated updated, $ok ok, $failed failed ($((created + updated + ok + failed)) repos)$(dry_tag)" >&2
-    ;;
+  check) echo "ruleset-sync check: $ok ok, $bad missing or drifted ($((ok + bad)) rulesets in ${#repos[@]} repos)" >&2 ;;
+  apply) echo "ruleset-sync apply: $created created, $updated updated, $ok ok, $failed failed ($((created + updated + ok + failed)) rulesets in ${#repos[@]} repos)$(dry_tag)" >&2 ;;
 esac
 
 exit "$overall_rc"
