@@ -1,10 +1,8 @@
 # One pin-bump PR per consumer after a release (scripts/bump-consumers.sh). release.yml calls it
-# once the release is published; dispatch it by hand to retry or to bump to an older tag.
-# It reads MAROLA_BUMP_PAT (Contents, Pull requests and Workflows write on every repo in
-# .github/consumers.txt), an org secret only marola-devkit may read: a PR opened with GITHUB_TOKEN
-# would start no CI in the consumer, and could not reach it anyway. Not MAROLA_CROSS_REPO_PAT: ten
-# workflows across the org receive that one, and with Workflows write any of them could push a
-# branch whose new workflow runs with that repo's secrets (marola-dev/marola-devkit#63).
+# once the release is published; dispatch it by hand to retry or to bump to an older tag. prepare
+# runs nix with no key; publish holds marola-merge-bot's key and runs only checked-in scripts
+# (MIP-0086 §5.6, merge-key-check). The bot's token starts CI in each consumer, which a
+# GITHUB_TOKEN-opened PR would not.
 name: bump consumers
 
 on:
@@ -12,7 +10,7 @@ on:
     inputs:
       version: { type: string, required: true }
     secrets:
-      MAROLA_BUMP_PAT: { required: true }
+      MERGE_BOT_KEY: { required: true }
   workflow_dispatch:
     inputs:
       version: { description: "X.Y.Z, an existing tag without the v", required: true }
@@ -24,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  bump:
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -33,6 +31,41 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - env:
-          GH_TOKEN: ${{ secrets.MAROLA_BUMP_PAT }}
           VERSION: ${{ inputs.version }}
-        run: scripts/bump-consumers.sh "$VERSION"
+        run: scripts/bump-consumers.sh prepare "$VERSION" "$RUNNER_TEMP/bump"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: devkit-bump
+          path: ${{ runner.temp }}/bump/
+          retention-days: 1
+
+  publish:
+    needs: prepare
+    # One consumer failing in prepare must not stop the others' PRs; the run stays red.
+    if: ${{ !cancelled() && needs.prepare.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: devkit-bump
+          path: ${{ runner.temp }}/bump
+      - id: repos
+        run: echo "list=$(scripts/bump-consumers.sh names)" >>"$GITHUB_OUTPUT"
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.MERGE_BOT_APP_ID }}
+          private-key: ${{ secrets.MERGE_BOT_KEY }}
+          repositories: ${{ steps.repos.outputs.list }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          VERSION: ${{ inputs.version }}
+        run: scripts/bump-consumers.sh publish "$VERSION" "$RUNNER_TEMP/bump"
