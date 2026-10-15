@@ -187,7 +187,8 @@ or a diff; `ruleset-sync apply <owner/repo ...>` creates or updates each, `--dry
 non-fork repo of an org (`--include-forks` adds forks). `just rulesets-check`/`just rulesets-apply` wrap both.
 
 **Docs lint** — `docs-lint [repo-root]` runs MIP-0074 §7's rules over `README.md` and
-`docs/**/*.md`, skipping dated records (`docs/MIPs/**`, `docs/benchmarks/**`, `SPLIT.md`); a repo
+`docs/**/*.md`, skipping dated records (`docs/MIPs/**`, `docs/benchmarks/**`, `SPLIT.md`), and checks each
+`docs/adr/*.md` for the umbrella's ADR shape (rule `f`); a repo
 adds it to its quality recipe once its README is the landing.
 
 **The umbrella** — tools that read MIPs or `.tasks.md` look in the repo, then `../` (an umbrella

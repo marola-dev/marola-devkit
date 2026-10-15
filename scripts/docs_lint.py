@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–e).
+"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–f).
 
 docs-lint [repo-root]
 docs-lint --self-test
@@ -137,6 +137,37 @@ def lint_file(text: str, rel: Path, known: set[str], owned: set[str], umbrella: 
 KEPT_RECORDS = {("docs", "MIPs"), ("docs", "benchmarks")}
 
 
+# The umbrella's prepare-docs fails its build on these (doc_links.py `adr_index`); check them before merge.
+# Trap: the umbrella skips ADRs matched by its mkdocs `exclude_docs`; this checks every one.
+ADR_FILE = re.compile(r"(\d{4})-[^/]+\.md")
+ADR_STATUS = re.compile(r"^\|\s*\*\*Status\*\*\s*\|\s*(.*?)\s*\|\s*$", re.M)
+
+
+def adr_findings(root: Path) -> list[tuple[str, int, str, str]]:
+    adr = root / "docs" / "adr"
+    out = []
+
+    def add(name: str, msg: str) -> None:
+        out.append((f"docs/adr/{name}", 1, "f", msg))
+
+    for name in ("index.md", "README.md"):
+        if (adr / name).exists():
+            add(name, "hand-written; prepare-docs generates adr/index.md")
+    for f in sorted(adr.glob("*.md")):
+        if f.name in ("index.md", "README.md"):
+            continue
+        m = ADR_FILE.fullmatch(f.name)
+        if not m:
+            add(f.name, "not NNNN-<slug>.md")
+            continue
+        text = f.read_text(encoding="utf-8")
+        if not re.search(rf"^# ADR-{m.group(1)}:[ \t]*\S", text, re.M):
+            add(f.name, f'no "# ADR-{m.group(1)}: <decision>" heading')
+        if not ADR_STATUS.search(text):
+            add(f.name, "no | **Status** | row")
+    return out
+
+
 def lint(root: Path) -> list[tuple[str, int, str, str]]:
     findings = []
     if (root / "docs" / "index.md").is_file():
@@ -152,9 +183,10 @@ def lint(root: Path) -> list[tuple[str, int, str, str]]:
         text = f.read_text(encoding="utf-8")
         for n, rule, msg in lint_file(text, rel, known, owned, umbrella):
             findings.append((rel.as_posix(), n, rule, msg))
-    return findings
+    return findings + adr_findings(root)
 
 
+ADR_OK = "# ADR-0001: Use X\n\n| | |\n|---|---|\n| **Status** | Accepted |\n"
 CASES = [
     (
         "recipe_defined_ok",
@@ -210,17 +242,42 @@ CASES = [
         {"docs/x.md": "[ok](../README.md) and [up](../../marola-app/README.md)\n", "README.md": ""},
         {"e"},
     ),
+    ("adr_good_ok", {"docs/adr/0001-x.md": ADR_OK}, set()),
+    (
+        "adr_space_heading_fails",
+        {"docs/adr/0001-x.md": ADR_OK.replace("ADR-0001", "ADR 0001")},
+        {"f"},
+    ),
+    (
+        "adr_wrong_number_fails",
+        {"docs/adr/0001-x.md": ADR_OK.replace("ADR-0001", "ADR-0002")},
+        {"f"},
+    ),
+    (
+        "adr_empty_decision_fails",
+        {"docs/adr/0001-x.md": ADR_OK.replace("ADR-0001: Use X", "ADR-0001:  ")},
+        {"f"},
+    ),
+    ("adr_bad_file_name_fails", {"docs/adr/1-x.md": ADR_OK}, {"f"}),
+    ("adr_no_status_fails", {"docs/adr/0001-x.md": "# ADR-0001: Use X\n\nBody.\n"}, {"f"}),
+    ("adr_readme_fails", {"docs/adr/0001-x.md": ADR_OK, "docs/adr/README.md": "# ADRs\n"}, {"f"}),
+    ("adr_index_fails", {"docs/adr/0001-x.md": ADR_OK, "docs/adr/index.md": "# ADRs\n"}, {"f"}),
+    ("adr_nested_ignored_ok", {"docs/adr/old/notes.md": "# Notes\n"}, set()),
 ]
 UMBRELLA_TEXT = "See docs/1-Using-marola/RUN-LOCALLY.md and docs/2-Building-marola/REPOS.md.\n"
 GITMODULES = '[submodule "marola-app"]\n\tpath = marola-app\n\turl = https://github.com/marola-dev/marola-app.git\n'
 
 
-def _rules(files: dict[str, str]) -> set[str]:
+def _findings(files: dict[str, str]) -> list[tuple[str, int, str, str]]:
     with tempfile.TemporaryDirectory() as tmp:
         for rel, text in files.items():
             (Path(tmp) / rel).parent.mkdir(parents=True, exist_ok=True)
             (Path(tmp) / rel).write_text(text, encoding="utf-8")
-        return {rule for _, _, rule, _ in lint(Path(tmp))}
+        return lint(Path(tmp))
+
+
+def _rules(files: dict[str, str]) -> set[str]:
+    return {rule for _, _, rule, _ in _findings(files)}
 
 
 def self_test() -> int:
@@ -240,6 +297,17 @@ def self_test() -> int:
     umbrella = _rules({".gitmodules": GITMODULES, "README.md": UMBRELLA_TEXT})
     elsewhere = _rules({"README.md": UMBRELLA_TEXT})
     ok("umbrella_owns_its_numbered_dirs_ok", (umbrella, elsewhere), (set(), {"c"}))
+
+    ok(
+        "adr_heading_messages_match_umbrella",
+        {m for _, _, _, m in _findings({"docs/adr/0001-x.md": "# ADR 0001: x\n"})},
+        {'no "# ADR-0001: <decision>" heading', "no | **Status** | row"},
+    )
+    ok(
+        "adr_file_messages_match_umbrella",
+        {m for _, _, _, m in _findings({"docs/adr/1-x.md": ADR_OK, "docs/adr/README.md": ""})},
+        {"not NNNN-<slug>.md", "hand-written; prepare-docs generates adr/index.md"},
+    )
 
     if fails:
         print(f"docs-lint self-test: {fails} failure(s)", file=sys.stderr)

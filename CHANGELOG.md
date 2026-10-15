@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.12.0 — 2026-10-15
+
+- `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
+  an `# ADR-NNNN: <decision>` heading with the file's number, a `| **Status** |` row, and no hand-written
+  `index.md` or `README.md`. A consumer bump can newly fail its gate (#124).
+
 ## v0.11.1 — 2026-10-15
 
 - `bot-token` sets the bot's git identity with `GIT_AUTHOR_*`/`GIT_COMMITTER_*` variables instead of
