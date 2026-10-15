@@ -9,6 +9,8 @@ marketplace `ref` at once.
 - `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
   an `# ADR-NNNN: <decision>` heading with the file's number, a `| **Status** |` row, and no hand-written
   `index.md` or `README.md`. A consumer bump can newly fail its gate (#124).
+- `docs-lint` rule `g` fails an image link (`![…](…)`, an HTML `src=`, or a target ending in an image suffix)
+  that stays in the repo and resolves outside `docs/`, as the umbrella's docs build does (#126).
 
 ## v0.11.1 — 2026-10-15
 

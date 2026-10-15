@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–f).
+"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–g).
 
 docs-lint [repo-root]
 docs-lint --self-test
@@ -35,8 +35,9 @@ SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 LINK_TARGETS = [
     re.compile(r"!?\[[^\]]*\]\(\s*<?([^)\s>]+)"),
     re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?([^\s>]+)"),
-    re.compile(r"""\b(?:href|src)\s*=\s*["']([^"']+)["']"""),
+    re.compile(r"""(?<![\w-])(?:href|src)\s*=\s*["']([^"']+)["']""", re.I),
 ]
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif", ".ico"}
 RECIPE = re.compile(r"^@?([A-Za-z_][\w-]*)[^:\n]*:(?!=)", re.M)
 ALIAS = re.compile(r"^alias\s+([\w-]+)\s*:=", re.M)
 
@@ -129,8 +130,20 @@ def lint_file(text: str, rel: Path, known: set[str], owned: set[str], umbrella: 
                         or re.match(r"[a-zA-Z][\w+.-]*:", target)
                     ):
                         continue
-                    if os.path.normpath(rel.parent / target).startswith(".."):
+                    resolved = os.path.normpath(rel.parent / target)
+                    if resolved.startswith(".."):
                         out.append((start + k, "e", f"{m.group(1)} leaves the repo"))
+                        continue
+                    # The umbrella publishes README.md and docs/ only (doc_links.py `rewrite`).
+                    # Trap: in the umbrella, <submodule>/docs/ images pass its build but fail here.
+                    image = (
+                        m.group(0).startswith("!")
+                        or m.group(0).lower().startswith("src")
+                        or Path(resolved).suffix.lower() in IMAGE_SUFFIXES
+                    )
+                    if image and resolved != "docs" and not resolved.startswith("docs/"):
+                        msg = f"{m.group(1)}: an image outside docs/; move it under docs/"
+                        out.append((start + k, "g", msg))
     return out
 
 
@@ -242,6 +255,24 @@ CASES = [
         {"docs/x.md": "[ok](../README.md) and [up](../../marola-app/README.md)\n", "README.md": ""},
         {"e"},
     ),
+    ("image_md_outside_docs_fails", {"README.md": "![a](drawings/x.svg)\n"}, {"g"}),
+    ("image_src_outside_docs_fails", {"README.md": '<img src="drawings/x.svg">\n'}, {"g"}),
+    ("image_suffix_outside_docs_fails", {"README.md": "[a](assets/x.png)\n"}, {"g"}),
+    ("image_refdef_suffix_outside_docs_fails", {"README.md": "[a]: assets/x.PNG\n"}, {"g"}),
+    ("image_query_outside_docs_fails", {"README.md": "![a](drawings/x.svg?raw=1#f)\n"}, {"g"}),
+    ("image_under_docs_from_readme_ok", {"README.md": "![a](docs/img/x.svg)\n"}, set()),
+    ("image_under_docs_ok", {"docs/page.md": "![a](img/x.svg)\n"}, set()),
+    ("image_url_ok", {"README.md": "![a](https://example.com/x.svg)\n"}, set()),
+    ("image_in_fence_ok", {"README.md": "```md\n![a](drawings/x.svg)\n```\n"}, set()),
+    ("image_in_code_span_ok", {"README.md": "Write `![a](drawings/x.svg)` to embed.\n"}, set()),
+    ("link_to_non_image_outside_docs_ok", {"README.md": "[a](LICENSE)\n"}, set()),
+    ("image_upper_src_outside_docs_fails", {"README.md": '<IMG SRC="drawings/x">\n'}, {"g"}),
+    (
+        "image_data_src_ignored_ok",
+        {"README.md": '<img data-src="drawings/x" src="docs/img/x.png">\n'},
+        set(),
+    ),
+    ("image_leaving_repo_is_e_only", {"docs/x.md": "![a](../../x.png)\n"}, {"e"}),
     ("adr_good_ok", {"docs/adr/0001-x.md": ADR_OK}, set()),
     (
         "adr_space_heading_fails",
@@ -307,6 +338,12 @@ def self_test() -> int:
         "adr_file_messages_match_umbrella",
         {m for _, _, _, m in _findings({"docs/adr/1-x.md": ADR_OK, "docs/adr/README.md": ""})},
         {"not NNNN-<slug>.md", "hand-written; prepare-docs generates adr/index.md"},
+    )
+
+    ok(
+        "image_message_matches_umbrella",
+        {m for _, _, _, m in _findings({"README.md": "![a](drawings/x.svg)\n"})},
+        {"drawings/x.svg: an image outside docs/; move it under docs/"},
     )
 
     if fails:
