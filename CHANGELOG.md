@@ -13,6 +13,8 @@ marketplace `ref` at once.
   `GEMINI_APP_ID` variable fallbacks and reads only `PR_BOT_KEY` and `PR_BOT_APP_ID` (MIP-0086, #132).
 - The `mip` and `voice-to-feature` skills point at the umbrella's local-first integration pattern
   instead of marola-app's retired ARCHITECTURE §5 (#21).
+- marola-skills joins `.github/consumers.txt`, so `bump-consumers` opens its bump PR and `ruleset-sync`
+  gives it the merge bot's bypass (#133).
 - Skills, `mip-reviewer`, `deps-stack` and the story issue template cite the umbrella's
   `docs.marola.dev/3-Ways-of-working/` pages and the devkit's tools page instead of the retired
   paths into the umbrella's renamed section 3 (#22).

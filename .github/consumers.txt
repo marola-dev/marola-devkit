@@ -7,3 +7,4 @@ marola-dev/marola-site
 marola-dev/marola-ml
 marola-dev/marola-corpus
 marola-dev/marola-oods
+marola-dev/marola-skills
