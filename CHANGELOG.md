@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.14.0 — 2026-10-17
 
 - `ci-short-circuit` no longer cancels its own run, which left a merged PR with a red
   `cancel / cancel` check about one time in three (#154).
