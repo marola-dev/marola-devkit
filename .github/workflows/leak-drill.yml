@@ -1,0 +1,37 @@
+# Does suspending marola-merge-bot's installation stop a token already minted? (MIP-0086 §5.9,
+# marola-dev/marola-devkit#101.) Dispatch it, suspend the installation while it polls, and
+# unsuspend before the ten minutes pass; the log shows where ok turns to refused.
+name: leak drill
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.MERGE_BOT_APP_ID }}
+          private-key: ${{ secrets.MERGE_BOT_KEY }}
+          repositories: marola
+          permission-contents: read
+      - name: poll with the token for ten minutes
+        env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+        run: |
+          # marola is public, so a plain repo read could succeed without the token being accepted;
+          # this endpoint answers only to an accepted installation token.
+          for _ in $(seq 1 40); do
+            if out=$(gh api installation/repositories --jq '.total_count' 2>&1); then
+              echo "$(date -u +%T) ok $out"
+            else
+              echo "$(date -u +%T) refused $(echo "$out" | tail -n 1)"
+            fi
+            sleep 15
+          done
