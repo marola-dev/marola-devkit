@@ -6,6 +6,8 @@ marketplace `ref` at once.
 
 ## Unreleased
 
+- `ci-short-circuit` no longer cancels its own run, which left a merged PR with a red
+  `cancel / cancel` check about one time in three (#154).
 - `bump-merge` (hourly `bump-merge.yml`, as marola-merge-bot) merges the newest release's bump PRs
   after a 24 h soak, the umbrella first and the other consumers once the umbrella's `main` is green
   on the new tag; a major, a `hold` label, a red check or a change outside the devkit pins
