@@ -15,6 +15,9 @@ marketplace `ref` at once.
   human's act (#37).
 - `labels.yml` gains `hold`, the label pointer-sync-merge and bump-merge leave a PR alone for, so
   `labels-sync` creates it in every repo and a pruning sync no longer deletes it from marola (#130).
+- `mip-solve-perpetual` works only task issues labelled `agent-ready` and auto-picks from
+  `just issue-queue`, never from a Draft MIP; `Bash(git *)` narrows to the subcommands it uses, with
+  `git push --force` and `git reset --hard` disallowed (#36).
 
 ## v0.12.0 — 2026-10-15
 

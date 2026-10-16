@@ -2,8 +2,8 @@
 name: mip-solve-perpetual
 description: Overnight/unattended MIP-tasks runner. Works through one or more MIP*.tasks.md files, one task at a time, opening a Draft PR per task, throttling model/effort to stretch usage, and stopping cleanly on a usage limit or a real blocker. Only ever invoked explicitly — never auto-triggered.
 disable-model-invocation: true
-allowed-tools: Bash(just build*) Bash(just test*) Bash(just quality*) Bash(just pr*) Bash(stack *) Bash(git *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh pr view *) Bash(gh project *) Bash(gh auth status*) Read Grep Glob
-disallowed-tools: Bash(gh pr merge*) Bash(gh pr close*)
+allowed-tools: Bash(just build*) Bash(just test*) Bash(just quality*) Bash(just pr*) Bash(stack *) Bash(git status*) Bash(git log *) Bash(git diff*) Bash(git fetch *) Bash(git switch *) Bash(git add *) Bash(git commit *) Bash(git stash*) Bash(git rebase *) Bash(git merge-base *) Bash(git push -u origin *) Bash(git push --force-with-lease *) Bash(just issue-queue*) Bash(gh issue view *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh pr view *) Bash(gh project *) Bash(gh auth status*) Read Grep Glob
+disallowed-tools: Bash(gh pr merge*) Bash(gh pr close*) Bash(git push --force *) Bash(git push -f *) Bash(git reset --hard*)
 ---
 
 # /mip-solve-perpetual
@@ -24,10 +24,8 @@ stop and add it before using this command unattended.
 explicit mode, not a fallback to guess quietly, so state the pick out loud before doing
 anything else, and again in every PR body this run produces (e.g. "auto-picked MIP-0017: S
 effort, 'cheap win', no earlier-phase gap"). Selection, in order:
-1. Read `docs/MIPs/README.md`'s index. Candidates are every row with `Status` = `Draft` (not
-   `Implemented`/`Rejected`/`Superseded`, and not a MIP already fully merged whose README row is
-   simply stale; check `git log --oneline main | grep -i "MIP-NNNN"` if a Draft row looks
-   suspicious, per this doc's own "evidence-based status" convention).
+1. Run `just issue-queue`. Candidates are the MIPs with a task issue labelled `agent-ready`;
+   a MIP's status, Draft or otherwise, never makes it a candidate on its own.
 2. Drop any candidate blocked by `AGENTS.md`'s phase discipline: a Phase 2+ MIP is not
    actionable before Phase 1 (the Telegram bot) ships; a Phase 0 (dev-tooling) MIP is always fair
    game regardless of product phase.
@@ -47,6 +45,9 @@ GOAL_COMPLETE: <summary> or GOAL_FAILED: <reason>, grep-able, so a morning check
 
 /loop every 15m until: goal met · Work through the first file starting at the first unmerged
 task, then the next file, one task at a time.
+
+Work a task only when its row's issue carries `agent-ready` (`gh issue view <n>`), with or
+without arguments; otherwise log it as blocked (not ready) and move on.
 
 **What that loop can and cannot do (verified 2026-09-06):** it keeps *this human-started turn*
 going; it cannot start the skill. A `/mip-solve-perpetual …` delivered by a cron/wakeup arrives
@@ -141,8 +142,7 @@ against, not a myth to dismiss.
   - `elapsed_frac = (window_seconds - (resets_at - now)) / window_seconds` (5h = 18000s, weekly =
     604800s),
   - `projected_end_pct = used_pct / elapsed_frac` (linear extrapolation from current burn; this
-    is the same formula `heavy-usage` itself uses internally; verify against its installed
-    `scripts/usage-lib.js` if the numbers look off, since a plugin update can change it).
+    is the same formula `heavy-usage` itself uses internally).
   - Add this task's estimated cost (rule 4's estimate) to `used_pct` before projecting, so the
     check answers "can *this* task finish inside budget," not just "was the window fine a moment
     ago."
