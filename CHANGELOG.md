@@ -11,6 +11,8 @@ marketplace `ref` at once.
 - Skills, `mip-reviewer`, `deps-stack` and the story issue template cite the umbrella's
   `docs.marola.dev/3-Ways-of-working/` pages and the devkit's tools page instead of the retired
   paths into the umbrella's renamed section 3 (#22).
+- `voice-to-feature` no longer pre-approves `gh issue *`: it never files an issue, and filing is a
+  human's act (#37).
 
 ## v0.12.0 — 2026-10-15
 
