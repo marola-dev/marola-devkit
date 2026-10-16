@@ -11,11 +11,24 @@
 #   scripts/bump-consumers.sh prepare X.Y.Z DIR
 #   scripts/bump-consumers.sh publish X.Y.Z DIR
 #   scripts/bump-consumers.sh names      # the consumers as repo names, comma-separated (bot-token's input)
+#   scripts/bump-consumers.sh repos      # the consumers as owner/repo lines (BUMP_CONSUMERS_FILE overrides the list)
+#   scripts/bump-consumers.sh tag-rev X.Y.Z   # the commit vX.Y.Z points at in BUMP_DEVKIT_URL; exit 1 if none
 #   scripts/bump-consumers.sh --self-test
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-repos() { grep -Ev '^[[:space:]]*(#|$)' "${1:-$root/.github/consumers.txt}"; }
+repos() { grep -Ev '^[[:space:]]*(#|$)' "${1:-${BUMP_CONSUMERS_FILE:-$root/.github/consumers.txt}}"; }
+
+# tag_rev vX.Y.Z: the commit the devkit tag points at. Exact ref names: ls-remote patterns match a
+# ref's tail, so refs/heads/x/refs/tags/vX would answer too. bump-merge.sh judges against the same one.
+tag_rev() {
+  local tag="$1" refs rev
+  refs="$(git ls-remote "${BUMP_DEVKIT_URL:-https://github.com/marola-dev/marola-devkit}" "refs/tags/$tag" "refs/tags/$tag^{}")" || return 1
+  rev="$(awk -v r="refs/tags/$tag^{}" '$2 == r { print $1; exit }' <<<"$refs")"
+  [ -n "$rev" ] || rev="$(awk -v r="refs/tags/$tag" '$2 == r { print $1; exit }' <<<"$refs")"
+  [ -n "$rev" ] || return 1
+  printf '%s\n' "$rev"
+}
 
 if [ "${1:-}" = --self-test ]; then
   bad="$(repos | grep -Ev '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || true)"
@@ -244,9 +257,11 @@ PY
   exit 0
 fi
 
-usage() { echo "bump-consumers: usage: bump-consumers.sh prepare|publish X.Y.Z DIR | names" >&2; exit 1; }
+usage() { echo "bump-consumers: usage: bump-consumers.sh prepare|publish X.Y.Z DIR | names | repos | tag-rev X.Y.Z" >&2; exit 1; }
 
 if [ "${1:-}" = names ]; then repos | sed 's#^marola-dev/##' | paste -sd, -; exit; fi
+if [ "${1:-}" = repos ]; then repos; exit; fi
+if [ "${1:-}" = tag-rev ]; then tag_rev "v${2#v}"; exit; fi
 
 one=""
 if [ "${1:-}" = --one ]; then mode="${2:-}" version="${3:-}" one="${4:-}" dir="${5:-}"
@@ -305,7 +320,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 }
 
 publish_one() {
-  local repo="$1" slug="${1//\//_}" d="$work/${1//\//_}" base lock="" pr before rev refs msg head_ref
+  local repo="$1" slug="${1//\//_}" d="$work/${1//\//_}" base lock="" pr before rev msg head_ref
   if [ ! -f "$dir/$slug.patch" ]; then
     echo "bump-consumers: $repo has nothing to publish" >&2
     return 0
@@ -321,11 +336,7 @@ publish_one() {
   before="$(git rev-parse HEAD)"
   git am -q --keep-cr "$dir/$slug.patch"
   # The patch is the keyless job's output, so it is data here: nothing is pushed that is not a devkit bump.
-  refs="$(git ls-remote "${BUMP_DEVKIT_URL:-https://github.com/marola-dev/marola-devkit}" "refs/tags/$tag" "refs/tags/$tag^{}")"
-  # Exact ref names: ls-remote patterns match a ref's tail, so refs/heads/x/refs/tags/vX would answer too.
-  rev="$(awk -v r="refs/tags/$tag^{}" '$2 == r { print $1; exit }' <<<"$refs")"
-  [ -n "$rev" ] || rev="$(awk -v r="refs/tags/$tag" '$2 == r { print $1; exit }' <<<"$refs")"
-  [ -n "$rev" ] || { echo "bump-consumers: $repo: refused, tag: $tag not found" >&2; return 1; }
+  rev="$(tag_rev "$tag")" || { echo "bump-consumers: $repo: refused, tag: $tag not found" >&2; return 1; }
   msg="$(python3 "$root/scripts/bump_check.py" . "$before" HEAD "$version" "$rev" 2>&1 >/dev/null)" || {
     echo "bump-consumers: $repo: refused, $msg" >&2
     return 1

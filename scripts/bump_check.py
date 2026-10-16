@@ -195,6 +195,9 @@ def main(argv):
     except (RuntimeError, OSError, subprocess.CalledProcessError) as e:
         print(f"bump_check: {e}", file=sys.stderr)
         return 2
+    except Exception as e:  # exit 1 means a rule refused the patch, never a crash
+        print(f"bump-check: error: {type(e).__name__}: {e}".replace("\n", " "), file=sys.stderr)
+        return 2
     if msg:
         print(msg.replace("\n", " "), file=sys.stderr)
         return 1

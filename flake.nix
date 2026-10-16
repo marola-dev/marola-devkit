@@ -46,6 +46,7 @@
           docs-mip-stack = "scripts/docs-mip-stack.sh";
           deps-stack = "scripts/deps-stack.sh";
           deps-merge = "scripts/deps-merge.sh";
+          bump-merge = "scripts/bump-merge.sh";
           ruleset-sync = "scripts/ruleset-sync.sh";
           merge-key-check = "scripts/merge_key_check.py";
           api-docs-push = "scripts/api-docs-push.sh";

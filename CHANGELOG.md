@@ -6,6 +6,10 @@ marketplace `ref` at once.
 
 ## Unreleased
 
+- `bump-merge` (hourly `bump-merge.yml`, as marola-merge-bot) merges the newest release's bump PRs
+  after a 24 h soak, the umbrella first and the other consumers once the umbrella's `main` is green
+  on the new tag; a major, a `hold` label, a red check or a change outside the devkit pins
+  (`bump_check.py`) leaves the PR for a person, and org variable `AUTO_MERGE=false` stops it (#77).
 - `bump-consumers publish` checks each patch's content before it pushes (`scripts/bump_check.py`):
   outside `flake.lock` and REPOS.md's wiring block the patched tree must equal
   `release.py --consumer` on the same base, `flake.lock` may change only the `marola-devkit` node
