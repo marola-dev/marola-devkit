@@ -304,9 +304,9 @@ and again (see the public-repo note above) for the devkit checkout. No secrets.
 
 ## ci-short-circuit
 
-Cancels a closed PR's in-flight runs across every workflow, by head SHA (the pre-split
-`ci-short-circuit-pr-close.yml`). No devkit checkout — only `gh api`/`gh run cancel` against the
-caller's own repo.
+Cancels a closed PR's in-flight runs across every workflow, by head SHA, except its own (the
+pre-split `ci-short-circuit-pr-close.yml`). No devkit checkout — only `gh api`/`gh run cancel`
+against the caller's own repo.
 
 ```yaml
 name: ci short-circuit on PR close
