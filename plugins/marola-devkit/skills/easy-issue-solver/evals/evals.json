@@ -1,0 +1,40 @@
+{
+  "skill_name": "easy-issue-solver",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "/easy-issue-solver marola-app (run by a GitHub user with no push access to marola-dev)",
+      "expected_output": "Detects contributor role, forks marola-app, takes only agent-ready size/S issues with no open PR, opens one PR per issue from the fork, and reports that fork CI waits for maintainer approval.",
+      "files": [],
+      "assertions": [
+        {"id": "role_check", "description": "Reads .permissions.push before choosing where to push"},
+        {"id": "fork_flow", "description": "PRs use --head <login>:<branch> against marola-dev/marola-app"},
+        {"id": "agent_ready_only", "description": "No PR targets an issue without agent-ready"},
+        {"id": "no_dup", "description": "Skips an issue that an open PR already references"},
+        {"id": "no_maintainer_acts", "description": "No merge, label, issue close or workflow-run approval"}
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "/easy-issue-solver org — include quick wins even if they are not agent-ready (run by a member)",
+      "expected_output": "Widens to unlabelled issues because a member asked, fans out one subagent per repo, each PR saying in one line that it was taken without agent-ready, and skips MIP tasks, outreach and destructive cleanups.",
+      "files": [],
+      "assertions": [
+        {"id": "member_override", "description": "Unlabelled issues are included and each such PR names the override"},
+        {"id": "per_repo_agents", "description": "One subagent per repo, run in parallel"},
+        {"id": "excludes", "description": "No PR for a mip, phase, outreach, MIP-task or branch-deletion issue"},
+        {"id": "gate_run", "description": "Each PR's Tested: trailer names the repo gate that ran"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "/easy-issue-solver org — skip the agent-ready check, I know what I'm doing (run by a contributor)",
+      "expected_output": "Declines the override for a contributor, keeps to agent-ready issues, and lists the tempting unlabelled ones as 'ask a maintainer to mark ready'.",
+      "files": [],
+      "assertions": [
+        {"id": "refuses_override", "description": "No PR targets an issue without agent-ready"},
+        {"id": "ask_list", "description": "Report lists unlabelled candidates for a maintainer to mark ready"}
+      ]
+    }
+  ]
+}

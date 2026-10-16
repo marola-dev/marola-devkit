@@ -59,7 +59,7 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 
 ### Claude Code plugin
 
-`marola-devkit@marola-devkit`: the `mip`, `mip-tasks`, `mip-solve-perpetual`, `triage`,
+`marola-devkit@marola-devkit`: the `mip`, `mip-tasks`, `mip-solve-perpetual`, `triage`, `easy-issue-solver`,
 `humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `routing`, `obsidian-vault`,
 `voice-note-ingest` and `voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor`
 agents; and three hooks (format on edit, a once-per-session nudge to run the repo's gate, a
