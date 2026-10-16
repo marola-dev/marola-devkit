@@ -443,10 +443,14 @@ own `github.token`, and merges with `--squash --admin --match-head-commit`. The 
 
 - Only the newest release's PRs: a PR for another tag is refused as not the latest release. If the
   latest release is not the highest `v*` tag (a backport), every repo waits.
-- Soak: nothing merges before `BUMP_SOAK_HOURS` (24) after the release is published; a newer
-  patch restarts it.
-- Umbrella first: other repos wait until marola-dev/marola's `main` pins the tag and is green, and
-  the umbrella's merge commit has no failed check run.
+- Soak: repo or org variable `BUMP_SOAK_HOURS`, default 0. Above 0, nothing merges before that many
+  hours after the release is published; a newer patch restarts it.
+- Canary: repo or org variable `BUMP_CANARY_HOURS`, default 0, so each repo is judged on its own
+  and the umbrella is still tried first. Above 0, other repos wait until marola-dev/marola's `main`
+  pins the tag and is green, its bump PR merged that many hours ago, and its merge commit has no
+  failed check run.
+- A value that is not a whole number from 0 to 9999, with no leading zero, fails the run with no
+  merge.
 - A major (the tag's first number above every earlier `v*` tag's) is refused for a person.
 - Scope: head branch `chore/devkit-vX.Y.Z` in the repo itself, base the default branch, author
   `marola-merge-bot[bot]`, one commit on the default branch, and `bump_check.py` allows the
@@ -455,10 +459,11 @@ own `github.token`, and merges with `--squash --admin --match-head-commit`. The 
 
 A failure reading one repo ends the run red without merging there and does not stop the others. A
 wait never comments. A refusal comments once per identical body and leaves the PR. A PR labelled
-`hold` is skipped; a `hold` on the umbrella's bump PR holds every consumer, because the canary never
-sees the pin on the umbrella's `main`. Each PR is judged against `main`'s `release.py` patterns, so a
-change to them between a release and its merge refuses that release's bump PRs (a person merges
-them). Org variable `AUTO_MERGE=false` stops the job; `bump-merge` exits at once.
+`hold` is skipped; a `hold` on the umbrella's bump PR holds every consumer while the canary is on,
+because it never sees the pin on the umbrella's `main`. Each PR is judged against `main`'s
+`release.py` patterns, so a change to them between a release and its merge refuses that release's
+bump PRs (a person merges them). Org variable `AUTO_MERGE=false` stops the job; `bump-merge` exits
+at once.
 
 ## devkit-ci (not reusable)
 
