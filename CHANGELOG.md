@@ -4,6 +4,14 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `bump-consumers publish` checks each patch's content before it pushes (`scripts/bump_check.py`):
+  outside `flake.lock` and REPOS.md's wiring block the patched tree must equal
+  `release.py --consumer` on the same base, `flake.lock` may change only the `marola-devkit` node
+  (still marola-dev/marola-devkit, at the tag's commit), and REPOS.md only inside its wiring block.
+  A refused repo gets one error line and is not pushed; the others still publish (#129).
+
 ## v0.13.0 — 2026-10-16
 
 - **Breaking** for a caller that passes `token:` to `notify-umbrella` or `GEMINI_APP_PRIVATE_KEY:` to
