@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.13.0 — 2026-10-16
 
 - **Breaking** for a caller that passes `token:` to `notify-umbrella` or `GEMINI_APP_PRIVATE_KEY:` to
   `gemini-review`: both secrets are no longer declared, so the caller's workflow fails at the bump.
