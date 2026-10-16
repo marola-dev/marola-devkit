@@ -99,6 +99,9 @@ deps-stack *args:
 deps-merge *args:
     deps-merge {{ args }}
 
+bump-merge *args:
+    bump-merge {{ args }}
+
 # Order a MIP's open PRs.
 mip-stack *args:
     mip-stack {{ args }}

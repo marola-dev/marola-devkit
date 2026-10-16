@@ -433,6 +433,33 @@ the repo it checked out needs `actions/checkout` with `persist-credentials: fals
 checkout's `GITHUB_TOKEN` extraheader is used for the push and no CI starts. `release.py --consumer`
 moves its `@v…` pin with the other devkit pins.
 
+## bump-merge (not reusable)
+
+`bump-merge.yml` runs `scripts/bump-merge.sh` from `main` at minute 20 of every hour and on
+`workflow_dispatch` (boolean input `dry-run`: print each decision and command, change nothing). It
+mints a `marola-merge-bot` token for the `consumers.txt` repos (`contents` and `pull-requests`
+write, `workflows` write, `checks` and `statuses` read), reads the devkit's release with the job's
+own `github.token`, and merges with `--squash --admin --match-head-commit`. The rules, one each:
+
+- Only the newest release's PRs: a PR for another tag is refused as not the latest release. If the
+  latest release is not the highest `v*` tag (a backport), every repo waits.
+- Soak: nothing merges before `BUMP_SOAK_HOURS` (24) after the release is published; a newer
+  patch restarts it.
+- Umbrella first: other repos wait until marola-dev/marola's `main` pins the tag and is green, and
+  the umbrella's merge commit has no failed check run.
+- A major (the tag's first number above every earlier `v*` tag's) is refused for a person.
+- Scope: head branch `chore/devkit-vX.Y.Z` in the repo itself, base the default branch, author
+  `marola-merge-bot[bot]`, one commit on the default branch, and `bump_check.py` allows the
+  content.
+- Every check on the head is green, with `ci-ok` from GitHub Actions; pending waits.
+
+A failure reading one repo ends the run red without merging there and does not stop the others. A
+wait never comments. A refusal comments once per identical body and leaves the PR. A PR labelled
+`hold` is skipped; a `hold` on the umbrella's bump PR holds every consumer, because the canary never
+sees the pin on the umbrella's `main`. Each PR is judged against `main`'s `release.py` patterns, so a
+change to them between a release and its merge refuses that release's bump PRs (a person merges
+them). Org variable `AUTO_MERGE=false` stops the job; `bump-merge` exits at once.
+
 ## devkit-ci (not reusable)
 
 This repo's own CI: installs Nix, creates or verifies `flake.lock`, runs `nix flake check`, then

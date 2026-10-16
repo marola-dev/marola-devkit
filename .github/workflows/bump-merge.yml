@@ -1,0 +1,56 @@
+# Merges the devkit's pin-bump PRs in every consumer (scripts/bump-merge.sh, #77) as marola-merge-bot,
+# main-rule's pull-request-only bypass actor, so no review is needed. The key is minted into a token
+# and the job runs only checked-in scripts (MIP-0086 §5.6, merge-key-check). Org variable
+# AUTO_MERGE=false stops it; a `hold` label stops one PR.
+name: bump merge
+
+on:
+  schedule:
+    - cron: "20 * * * *" # off :00 (CI-CD.md); soaks and the umbrella-first order make hourly enough
+  workflow_dispatch:
+    inputs:
+      dry-run: { description: "Print the decisions and the commands; change nothing", type: boolean, default: false }
+
+permissions: {}
+
+concurrency:
+  group: bump-merge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: vars.AUTO_MERGE != 'false' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # main's script, never a PR's.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: repos
+        run: echo "list=$(scripts/bump-consumers.sh names)" >>"$GITHUB_OUTPUT"
+      - id: bot
+        uses: ./.github/actions/bot-token
+        with:
+          app-id: ${{ vars.MERGE_BOT_APP_ID }}
+          private-key: ${{ secrets.MERGE_BOT_KEY }}
+          repositories: ${{ steps.repos.outputs.list }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+          permission-checks: read
+          permission-statuses: read
+      - env:
+          GH_TOKEN: ${{ steps.bot.outputs.token }}
+          # The App token sees the consumers only; the devkit's own release is read with this one.
+          GH_READ_TOKEN: ${{ github.token }}
+          AUTO_MERGE: ${{ vars.AUTO_MERGE }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          gh auth setup-git
+          args=()
+          [ "$DRY_RUN" != true ] || args+=(--dry-run)
+          scripts/bump-merge.sh "${args[@]}"
