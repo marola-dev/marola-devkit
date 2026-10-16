@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `mip-solve-perpetual` works only task issues labelled `agent-ready` and auto-picks from
+  `just issue-queue`, never from a Draft MIP; `Bash(git *)` narrows to the subcommands it uses, with
+  `git push --force` and `git reset --hard` disallowed (#36).
+
 ## v0.12.0 — 2026-10-15
 
 - `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
