@@ -4,6 +4,11 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `labels.yml` gains `hold`, the label pointer-sync-merge and bump-merge leave a PR alone for, so
+  `labels-sync` creates it in every repo and a pruning sync no longer deletes it from marola (#130).
+
 ## v0.12.0 — 2026-10-15
 
 - `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
