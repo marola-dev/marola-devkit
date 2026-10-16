@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `ponytail-review` and `ponytail-audit` re-vendored at DietrichGebert/ponytail@2a1fe84: both now review
+  quality broadly (correctness, safety, load, tests, speed) as well as over-engineering, number their
+  findings, tag a `reuse:` of an existing helper, and grep the tree before calling code unused (#40).
+
 ## v0.12.0 — 2026-10-15
 
 - `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
