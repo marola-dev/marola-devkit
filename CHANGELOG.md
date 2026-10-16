@@ -13,6 +13,8 @@ marketplace `ref` at once.
   paths into the umbrella's renamed section 3 (#22).
 - `voice-to-feature` no longer pre-approves `gh issue *`: it never files an issue, and filing is a
   human's act (#37).
+- `labels.yml` gains `hold`, the label pointer-sync-merge and bump-merge leave a PR alone for, so
+  `labels-sync` creates it in every repo and a pruning sync no longer deletes it from marola (#130).
 
 ## v0.12.0 — 2026-10-15
 
