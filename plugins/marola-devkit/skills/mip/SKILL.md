@@ -27,8 +27,8 @@ those directly, and note them in `docs/4-Research-and-plans/FUTURE-WORK.md` if r
    `docs/MIPs/MIP-NNNN-*.md`. File:
    `docs/MIPs/MIP-NNNN-<kebab-slug>.md`.
 2. **Read before writing.** Always: `AGENTS.md`, the system ARCHITECTURE's
-   [local-first integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern)
-   (until that page lands in the umbrella, marola-app's ARCHITECTURE §5), `docs/PHASES.md` (phases), `docs/4-Research-and-plans/FUTURE-WORK.md` (is this already sketched? link the section),
+   [local-first integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern),
+   `docs/PHASES.md` (phases), `docs/4-Research-and-plans/FUTURE-WORK.md` (is this already sketched? link the section),
    and the source files the proposal would touch. Read existing MIPs in `docs/MIPs/` for tone.
 3. **Verify every external claim.** Before naming a data source, library, or API: fetch its page,
    confirm the format, the update frequency, the licence/terms, and whether a key is needed. Record
