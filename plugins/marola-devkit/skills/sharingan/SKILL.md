@@ -40,7 +40,7 @@ agent's own guesses stacked on top ("menos com menos dá menos"), and a whole mo
    - **marola's own homes** — MIPs (decisions: an ADR here *is* a MIP), `AGENTS.md` and
      `.claude/rules/` (practices), `docs/MIPs/MIP-NNNN.tasks.md` and the GitHub project (tasks),
      `docs/*.md`, the justfile.
-   - **Existing skills** — `.claude/skills/`, `docs/3-Working-on-the-repo/AGENT-SKILLS.md`, installed plugins.
+   - **Existing skills** — `.claude/skills/`, [AGENT-SKILLS](https://docs.marola.dev/3-Ways-of-working/AGENT-SKILLS/), installed plugins.
 
    Every row "point" or "drop" → stop and tell the user no skill is the right port.
 
@@ -68,7 +68,7 @@ agent's own guesses stacked on top ("menos com menos dá menos"), and a whole mo
    what "done" means here. None upstream: an output case per main mode, plus ~6 should-trigger /
    ~6 should-not queries where the negatives are near misses for neighbour skills.
    Output cases in `evals/evals.json`, trigger queries in `evals/trigger-evals.json`, both in
-   skill-creator's formats (`docs/3-Working-on-the-repo/AGENT-SKILLS.md` §2.3).
+   skill-creator's formats ([AGENT-SKILLS](https://docs.marola.dev/3-Ways-of-working/AGENT-SKILLS/) §2.2).
 
 7. **Verify, then report what happened.**
    - `python3 "$(find ~/.claude/plugins -path '*skill-creator/scripts/quick_validate.py' | head -1)" .claude/skills/<name>`,
@@ -76,7 +76,7 @@ agent's own guesses stacked on top ("menos com menos dá menos"), and a whole mo
      `disable-model-invocation` warnings are expected; anything else is a real error.
    - One eval case run by a subagent with the skill; the same case without it as a baseline when
      cheap (`writing-skills`). Report what the agent did, not what the skill says it should do.
-   - A row in `docs/3-Working-on-the-repo/AGENT-SKILLS.md` §1 carrying the provenance; the
+   - A row in [AGENT-SKILLS](https://docs.marola.dev/3-Ways-of-working/AGENT-SKILLS/) §1 carrying the provenance; the
      consuming repo's quality gate (`quality-other` in a repo that splits `quality` that way,
      `just quality` here).
    - Commit per `AGENTS.md`; a PR only when asked (`just pr`).

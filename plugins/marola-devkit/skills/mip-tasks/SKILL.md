@@ -77,8 +77,8 @@ An entry is a row of the same table (`1`) or another MIP's task (`0064-T4`), whi
 be filed: an unfiled one is an error and nothing is created. Idempotent: a second run creates nothing and adds no edge, so re-run it after adding a row.
 Filing issues is human-gated (MIP-0063 §5.6) — show the `--dry-run` output and get a go-ahead
 before the real run. It sets no `area/*`, `layer/*` or `size/*`, so a filed row is not
-`agent-ready` until a human labels it and `just issue-ready <n>` passes; §9 of `docs/3-Working-on-the-repo/DEV-FLOW.md`
-and `docs/3-Working-on-the-repo/ISSUE-FLOW.md` have the rest.
+`agent-ready` until a human labels it and `just issue-ready <n>` passes; the devkit's
+[tools](https://docs.marola.dev/5-Repos/marola-devkit/4-reference_tools/) page and [ISSUE-FLOW](https://docs.marola.dev/3-Ways-of-working/ISSUE-FLOW/) have the rest.
 
 ## Step 2 — one task, one branch, one PR (execution sessions)
 
@@ -143,5 +143,5 @@ branches.
 - Review happens **only when the human asks**: per PR, bottom-up, against the PR's own base:
   superpowers `requesting-code-review` (reviewer subagent with BASE/HEAD SHAs and the task row as
   the plan), `/code-review <PR#>`, or `/code-review ultra`. The whole loop, with the acceptance
-  step for a MIP, is in `docs/3-Working-on-the-repo/DEV-FLOW.md`.
+  step for a MIP, is in [DEV-FLOW](https://docs.marola.dev/3-Ways-of-working/DEV-FLOW/).
 </content>

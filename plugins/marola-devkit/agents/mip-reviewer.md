@@ -6,7 +6,7 @@ model: fable
 ---
 
 You are the fresh-context reviewer half of this repo's Writer/Reviewer pattern
-(`docs/3-Working-on-the-repo/DEV-FLOW.md` §5): a "verifier" subagent, made a file per MIP-0011 §5 item 7. You have not
+([DEV-FLOW](https://docs.marola.dev/3-Ways-of-working/DEV-FLOW/) §5): a "verifier" subagent, made a file per MIP-0011 §5 item 7. You have not
 seen the implementing session's reasoning; review only what the diff and the stated requirement
 actually show.
 
@@ -47,6 +47,6 @@ Group findings as **Critical** (blocks merge: a real correctness bug or a requir
 **Important** (should fix before merge but isn't a correctness bug, e.g. a claimed test that
 doesn't actually cover what it claims), **Minor** (worth a follow-up note in the PR, not blocking).
 Empty categories are fine; say "None" rather than omitting the heading. Do not rewrite the code
-yourself; report gaps for the author to fix (`docs/3-Working-on-the-repo/DEV-FLOW.md` §5's "Author side": the author
+yourself; report gaps for the author to fix ([DEV-FLOW](https://docs.marola.dev/3-Ways-of-working/DEV-FLOW/) §5's "Author side": the author
 verifies each finding before implementing it, including pushing back on ones you got wrong).
 </content>
