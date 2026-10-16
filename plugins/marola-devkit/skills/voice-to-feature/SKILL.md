@@ -2,7 +2,7 @@
 name: voice-to-feature
 description: Presentation/demo pipeline — turn a recorded voice note directly into a scaffolded feature branch and a Draft PR, in one pass. Transcribe, draft a MIP, scaffold the implementation shape, open a Draft PR, stop. Use only when the user explicitly asks to demo turning a voice memo into a feature end-to-end, or invokes /voice-to-feature. NOT the normal marola dev flow — see the mip skill for that.
 disable-model-invocation: true
-allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py *) Bash(git *) Bash(just *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh project *) Bash(gh issue *)
+allowed-tools: Bash(python3 ${CLAUDE_PLUGIN_ROOT}/skills/voice-note-ingest/scripts/transcribe.py *) Bash(git *) Bash(just *) Bash(gh pr create *) Bash(gh pr edit *) Bash(gh project *)
 disallowed-tools: Bash(gh pr merge*) Bash(gh pr close*)
 ---
 
@@ -39,7 +39,8 @@ a human.** Say this to the room, don't just build it quietly.
    repo owner's, per that skill's default.
 
 2. **Draft the MIP.** Use the `mip` skill's template and process in full: number, slug, the
-   required reading (`AGENTS.md`, `ARCHITECTURE.md` §5, `docs/PHASES.md`, `FUTURE-WORK.md`), verify every
+   required reading (`AGENTS.md`, the umbrella's [local-first integration pattern](https://github.com/marola-dev/marola/blob/main/docs/2-Building-marola/ARCHITECTURE.md#local-first-integration-pattern)
+   and marola-app's [Integrations](https://docs.marola.dev/5-Repos/marola-app/1-design_integrations/), `docs/PHASES.md`, `FUTURE-WORK.md`), verify every
    external claim before naming it. Status starts `Draft`. If the voice note doesn't describe a
    real feature (it's a status update, a question, small talk), say so and stop here: this
    pipeline is for feature ideas, not everything that gets recorded.

@@ -4,6 +4,23 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- The `mip` and `voice-to-feature` skills point at the umbrella's local-first integration pattern
+  instead of marola-app's retired ARCHITECTURE §5 (#21).
+- Skills, `mip-reviewer`, `deps-stack` and the story issue template cite the umbrella's
+  `docs.marola.dev/3-Ways-of-working/` pages and the devkit's tools page instead of the retired
+  paths into the umbrella's renamed section 3 (#22).
+- `voice-to-feature` no longer pre-approves `gh issue *`: it never files an issue, and filing is a
+  human's act (#37).
+- `labels.yml` gains `hold`, the label pointer-sync-merge and bump-merge leave a PR alone for, so
+  `labels-sync` creates it in every repo and a pruning sync no longer deletes it from marola (#130).
+- `mip-solve-perpetual` works only task issues labelled `agent-ready` and auto-picks from
+  `just issue-queue`, never from a Draft MIP; `Bash(git *)` narrows to the subcommands it uses, with
+  `git push --force` and `git reset --hard` disallowed (#36).
+- New human-only skill `easy-issue-solver`: one gated PR per quick-win issue across marola-dev repos,
+  one subagent per repo; contributors work from a fork and only on `agent-ready` issues (#139).
+
 ## v0.12.0 — 2026-10-15
 
 - `docs-lint` rule `f` checks the ADR shape the umbrella's docs build requires: `docs/adr/NNNN-<slug>.md`,
