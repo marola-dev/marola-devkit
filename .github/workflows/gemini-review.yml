@@ -51,8 +51,6 @@ on:
     secrets:
       GEMINI_API_KEY:
         required: true
-      GEMINI_APP_PRIVATE_KEY:
-        required: false
       PR_BOT_KEY:
         required: false
 
@@ -75,8 +73,8 @@ jobs:
         id: app
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ vars.PR_BOT_APP_ID || vars.GEMINI_APP_ID }}
-          private-key: ${{ secrets.PR_BOT_KEY || secrets.GEMINI_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_BOT_KEY }}
           permission-contents: write
           permission-pull-requests: write
 

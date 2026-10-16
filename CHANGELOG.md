@@ -6,6 +6,11 @@ marketplace `ref` at once.
 
 ## Unreleased
 
+- **Breaking** for a caller that passes `token:` to `notify-umbrella` or `GEMINI_APP_PRIVATE_KEY:` to
+  `gemini-review`: both secrets are no longer declared, so the caller's workflow fails at the bump.
+  `notify-umbrella` drops the `token` (old PAT) fallback and reads only `pr_bot_key: ${{ secrets.PR_BOT_KEY }}`
+  (absent is still a notice, never a failure). `gemini-review` drops the `GEMINI_APP_PRIVATE_KEY` secret and
+  `GEMINI_APP_ID` variable fallbacks and reads only `PR_BOT_KEY` and `PR_BOT_APP_ID` (MIP-0086, #132).
 - The `mip` and `voice-to-feature` skills point at the umbrella's local-first integration pattern
   instead of marola-app's retired ARCHITECTURE §5 (#21).
 - Skills, `mip-reviewer`, `deps-stack` and the story issue template cite the umbrella's

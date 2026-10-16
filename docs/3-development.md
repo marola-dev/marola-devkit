@@ -118,10 +118,8 @@ Never install graphify any other way, pass `--backend`, or run its installers or
 ## Secrets and cost
 
 The devkit deploys nothing. `bot-token-test` reads the org's `PR_BOT_KEY` and `PR_BOT_APP_ID`;
-`bump-consumers.yml` reads the repo's `MERGE_BOT_KEY` and `MERGE_BOT_APP_ID`;
-`MAROLA_CROSS_REPO_PAT` (the callers) remains until
-MIP-0086 row 11 retires it. Its reusable workflows take what the caller passes or the default
-`GITHUB_TOKEN`.
+`bump-consumers.yml` reads the repo's `MERGE_BOT_KEY` and `MERGE_BOT_APP_ID`. Its reusable
+workflows take what the caller passes or the default `GITHUB_TOKEN`.
 `setup-runners` and `gha-runner` touch a self-hosted runner only when a human runs them
 ([runners](4-reference_runners.md)).
 
