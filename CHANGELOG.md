@@ -18,6 +18,8 @@ marketplace `ref` at once.
 - `mip-solve-perpetual` works only task issues labelled `agent-ready` and auto-picks from
   `just issue-queue`, never from a Draft MIP; `Bash(git *)` narrows to the subcommands it uses, with
   `git push --force` and `git reset --hard` disallowed (#36).
+- New human-only skill `easy-issue-solver`: one gated PR per quick-win issue across marola-dev repos,
+  one subagent per repo; contributors work from a fork and only on `agent-ready` issues (#139).
 
 ## v0.12.0 — 2026-10-15
 
