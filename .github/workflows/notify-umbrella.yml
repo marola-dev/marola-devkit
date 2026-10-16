@@ -18,8 +18,7 @@
 #         pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 #
 # pr_bot_key: marola-pr-bot's key (MIP-0086), minted here into a token for the umbrella only, with
-# Contents write, which repository_dispatch needs. `token` is the old PAT, read only when
-# pr_bot_key is absent, until every caller moves (MIP-0086 row 16). Neither set is a notice, never a
+# Contents write, which repository_dispatch needs. Without pr_bot_key it is a notice, never a
 # failure: the umbrella's own daily cron still picks the change up.
 name: notify-umbrella
 
@@ -37,9 +36,6 @@ on:
     secrets:
       pr_bot_key:
         description: "secrets.PR_BOT_KEY"
-        required: false
-      token:
-        description: "Deprecated: the old PAT, read only when pr_bot_key is absent."
         required: false
 
 permissions: {}
@@ -100,7 +96,7 @@ jobs:
 
       - name: repository_dispatch -> ${{ inputs.umbrella }}
         env:
-          TOKEN: ${{ steps.app.outputs.token || secrets.token }}
+          TOKEN: ${{ steps.app.outputs.token }}
           UMBRELLA: ${{ inputs.umbrella }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
@@ -108,7 +104,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$TOKEN" ]; then
-            echo "::notice::no umbrella-dispatch token set in $REPO — skipping; the umbrella's daily cron still picks this up"
+            echo "::notice::no pr_bot_key passed in $REPO — skipping; the umbrella's daily cron still picks this up"
             exit 0
           fi
           events=(submodule-updated)

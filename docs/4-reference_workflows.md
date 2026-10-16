@@ -24,8 +24,7 @@ called file's (checked on marola-devkit#2's first run:
 
 These six also check the devkit out with the default `GITHUB_TOKEN`, no token input of their
 own — that only works because `marola-devkit` is a public repo (MIP-0070 makes it public). A
-private devkit would need a cross-repo PAT input on each of them, the same shape as
-`notify-umbrella`'s `token` secret.
+private devkit would need a cross-repo token input on each of them.
 
 ## scala-ci
 
@@ -142,10 +141,9 @@ jobs:
 
 **Secret** `pr_bot_key` (optional): every repo passes the org secret `PR_BOT_KEY`, and the workflow
 mints a `marola-pr-bot` token (`vars.PR_BOT_APP_ID`) for the umbrella alone, with Contents write
-(`repository_dispatch` needs it; `GITHUB_TOKEN` cannot reach another repo). **Secret** `token` is
-the deprecated fallback, the old `MAROLA_CROSS_REPO_PAT`, read only when `pr_bot_key` is absent
-(MIP-0086). With neither set it is a notice, not a failure — the umbrella's daily cron still
-catches the change.
+(`repository_dispatch` needs it; `GITHUB_TOKEN` cannot reach another repo). Without it the run
+is a notice, not a failure — the umbrella's daily cron still catches the change. A caller that
+still passes `token:` fails, because the secret is no longer declared.
 
 A zero `github.event.before` (a branch's first push), a compare API call that doesn't answer 200
 (e.g. `before` unknown to it after a force-push), or a truncated compare (the API caps its file
@@ -375,9 +373,8 @@ jobs:
 | `gemini-model` | `""` | falls back to `vars.GEMINI_MODEL`, then `gemini-3.6-flash` |
 
 Secrets: `GEMINI_API_KEY` and `PR_BOT_KEY`; variable `PR_BOT_APP_ID`. All three are set at the
-org, scoped to the repos the `marola-pr-bot` App is installed on. `GEMINI_APP_PRIVATE_KEY` and
-`GEMINI_APP_ID` are read when the `PR_BOT_*` names are unset, and no caller needs to pass
-`GEMINI_APP_PRIVATE_KEY` any more (MIP-0086). The App needs
+org, scoped to the repos the `marola-pr-bot` App is installed on. A caller that still passes
+`GEMINI_APP_PRIVATE_KEY` fails, because the secret is no longer declared (MIP-0086). The App needs
 Contents and Pull requests read/write and no Workflows permission, so GitHub itself refuses a
 push from it that edits a workflow; a push with its token, unlike `GITHUB_TOKEN`'s, starts the
 PR's CI.
