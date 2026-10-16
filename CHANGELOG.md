@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `bump-merge` soak and canary become variables, both 0 by default: bump PRs merge at the first run
+  where each is green. Repo or org variables `BUMP_SOAK_HOURS` (a wait after the release) and
+  `BUMP_CANARY_HOURS` (other repos wait for the umbrella's merged bump PR, that many hours old, and
+  green `main`) turn them back on (#156).
+
 ## v0.14.0 — 2026-10-17
 
 - `ci-short-circuit` no longer cancels its own run, which left a merged PR with a red

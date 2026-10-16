@@ -5,15 +5,16 @@
 #   scripts/bump-merge.sh --self-test                 # a fake gh on PATH and git fixtures, no network
 #
 # Only the newest devkit release (releases/latest) is eligible; a bump PR for another tag is refused as
-# not the latest release, and if that release is not the highest v* tag (a backport) nothing is judged.
-# A PR waits quietly for BUMP_SOAK_HOURS (24) after the release, and every consumer but
-# marola-dev/marola waits until the umbrella's main pins the tag and is green. It is refused, with one
+# not the latest release, and if that release is not the highest v* tag (a backport) nothing is judged. A
+# PR waits quietly for BUMP_SOAK_HOURS (default 0) after the release. With BUMP_CANARY_HOURS above 0
+# (default 0), every consumer but marola-dev/marola also waits until the umbrella's main pins the tag and
+# is green and its bump PR merged that many hours ago. Both take 0 to 9999. It is refused, with one
 # comment per identical body, for a major (the tag's first number above every earlier v* tag's), a head
-# branch other than chore/devkit-vX.Y.Z in the repo itself, an author other than marola-merge-bot[bot],
-# a PR that is not one commit on the default branch, a change bump_check.py refuses, a moved head or a
-# red check. A `hold` label skips a PR; pending checks wait. AUTO_MERGE=false merges nothing. The merge
-# is pinned to the head the checks and the content check read (--match-head-commit). Each consumer is
-# judged in its own process: one failing ends the run red, never merges that repo, and spares the rest.
+# branch other than chore/devkit-vX.Y.Z in the repo itself, an author other than marola-merge-bot[bot], a
+# PR that is not one commit on the default branch, a change bump_check.py refuses, a moved head or a red
+# check. A `hold` label skips a PR; pending checks wait. AUTO_MERGE=false merges nothing. The merge is
+# pinned to the head the checks and the content check read (--match-head-commit). Each consumer is judged
+# in its own process: one failing ends the run red, never merges that repo, and spares the rest.
 set -euo pipefail
 
 SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -50,12 +51,13 @@ checks_state() {
   fi
 }
 
-# canary_why: empty once the umbrella is green on $tag, else why not. Judged once per consumer process.
+# canary_why: empty once the umbrella is green on $tag for canary_hours, else why not. Judged once per
+# consumer process, and only with BUMP_CANARY_HOURS above 0.
 canary_why="" canary_done=0
 canary_check() {
   [ "$canary_done" -eq 0 ] || return 0
   canary_done=1
-  local def sha merged flake runs bad
+  local def sha merged flake runs bad pr_json merged_at merged_epoch
   def="$(api "repos/$CANARY" | jq -er .default_branch)"
   # One commit for the pin and the checks: main moves between three reads of a branch name.
   sha="$(api "repos/$CANARY/commits/$def" | jq -er .sha)"
@@ -69,9 +71,17 @@ canary_check() {
     canary_why="the umbrella's $def is not green yet (${CS%% *})"
     return 0
   fi
-  merged="$(api --paginate "repos/$CANARY/pulls?state=closed&head=${CANARY%%/*}:chore/devkit-$tag&per_page=100" |
-    jq -rs '[.[][] | select(.merged_at != null)][0].merge_commit_sha // empty')"
-  [ -n "$merged" ] || return 0
+  pr_json="$(api --paginate "repos/$CANARY/pulls?state=closed&head=${CANARY%%/*}:chore/devkit-$tag&per_page=100" |
+    jq -sc '[.[][] | select(.merged_at != null)][0] // empty')"
+  if [ -z "$pr_json" ]; then
+    canary_why="the umbrella's bump PR for $tag is not merged yet"
+    return 0
+  fi
+  # jq -e on each field: a merged PR without either one is an unreadable umbrella, not a pass.
+  merged="$(jq -er .merge_commit_sha <<<"$pr_json")"
+  merged_at="$(jq -er .merged_at <<<"$pr_json")"
+  merged_epoch="$(date -d "$merged_at" +%s)"
+  [[ -n "$merged_at" && "$merged_epoch" =~ ^[0-9]+$ ]] || { echo "::error::bad merged_at '$merged_at' on the umbrella's bump PR" >&2; return 1; }
   # Read first: in an `if` condition errexit is off, and a failed read would pass as "no failure".
   runs="$(api --paginate "repos/$CANARY/commits/$merged/check-runs?per_page=100" | jq -sc '[.[].check_runs[]]')"
   # Cancelled is fine: main's CI cancels the runs of the commit before it. Any other finished
@@ -79,6 +89,11 @@ canary_check() {
   bad="$(jq -r 'any(.[]; .status == "completed" and (.conclusion | IN("success", "skipped", "neutral", "cancelled") | not))' <<<"$runs")"
   if [ "$bad" != false ]; then
     canary_why="a check run on the umbrella's merge commit of $tag failed"
+    return 0
+  fi
+  # Arithmetic, not `[ -lt ]`: an error there reads as false, and false must wait.
+  if ! ((now >= merged_epoch + canary_hours * 3600)); then
+    canary_why="the umbrella's bump PR merged less than $canary_hours h ago"
   fi
 }
 
@@ -139,7 +154,7 @@ judge() {
     wait_for "soak until $(date -u -d "@$soak_end" +%FT%TZ)"
     return 0
   fi
-  if [ "$repo" != "$CANARY" ]; then
+  if [ "$repo" != "$CANARY" ] && [ "$canary_hours" -gt 0 ]; then
     canary_check
     if [ -n "$canary_why" ]; then wait_for "$canary_why"; return 0; fi
   fi
@@ -238,9 +253,14 @@ run() {
   published="$(jq -er .published_at <<<"$rel")"
   [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::the latest devkit release, $tag, is not vX.Y.Z" >&2; return 1; }
   published_at="$(date -d "$published" +%s)"
-  soak_hours="${BUMP_SOAK_HOURS:-24}"
-  [[ "$published_at" =~ ^[0-9]+$ && "$soak_hours" =~ ^[0-9]+$ ]] ||
-    { echo "::error::bad release time '$published' or BUMP_SOAK_HOURS '$soak_hours'" >&2; return 1; }
+  soak_hours="${BUMP_SOAK_HOURS:-0}"
+  canary_hours="${BUMP_CANARY_HOURS:-0}"
+  [[ "$published_at" =~ ^[0-9]+$ ]] || { echo "::error::bad release time '$published'" >&2; return 1; }
+  # 0 to 9999, no leading zero: more digits overflow `* 3600` or `-gt`, and `08` is bad octal.
+  [[ "$soak_hours" =~ ^(0|[1-9][0-9]{0,3})$ ]] ||
+    { echo "::error::bad BUMP_SOAK_HOURS '$soak_hours'" >&2; return 1; }
+  [[ "$canary_hours" =~ ^(0|[1-9][0-9]{0,3})$ ]] ||
+    { echo "::error::bad BUMP_CANARY_HOURS '$canary_hours'" >&2; return 1; }
   soak_end=$((published_at + soak_hours * 3600))
   rev="$("$root/scripts/bump-consumers.sh" tag-rev "$tag")" || { echo "::error::no tag $tag in the devkit" >&2; return 1; }
   num="${tag#v}"
@@ -259,7 +279,7 @@ run() {
     return 0
   fi
 
-  # The canary first: whatever it merges this run is seen by the others on the next one.
+  # The canary first (it matters while BUMP_CANARY_HOURS is above 0): the others see its merge next run.
   list_text="$("$root/scripts/bump-consumers.sh" repos)" || { echo "::error::could not read the consumer list" >&2; return 1; }
   [ -n "$list_text" ] || { echo "::error::the consumer list is empty" >&2; return 1; }
   mapfile -t list <<<"$list_text"
@@ -349,7 +369,7 @@ EOF
     "$BASH" "$(command -v python3)" >"$t/bin/python3"
   chmod +x "$t/bin/gh" "$t/bin/git" "$t/bin/python3"
   export PATH="$t/bin:$PATH" FAKE_GH="$t/gh" GH_TOKEN=app GH_READ_TOKEN=read
-  unset AUTO_MERGE BUMP_SOAK_HOURS
+  unset AUTO_MERGE BUMP_SOAK_HOURS BUMP_CANARY_HOURS
 
   # The devkit: v0.10.0 then patches, and a v1.0.0.
   export BUMP_DEVKIT_URL="file://$t/devkit" BUMP_CONSUMERS_URL="file://$t/remote" BUMP_CONSUMERS_FILE="$t/consumers.txt"
@@ -446,6 +466,8 @@ EOF
   commented() { grep -cF -- "$1" "$t/gh/last-comment" 2>/dev/null || true; }
 
   echo "-- merges_patch_after_soak --"
+  export BUMP_SOAK_HOURS=24
+  export BUMP_CANARY_HOURS=1
   reset
   pr marola 7 0.10.1
   echo 'inputs.marola-devkit.url = "github:marola-dev/marola-devkit/v0.10.0";' >"$t/gh/marola/flake.nix"
@@ -454,11 +476,14 @@ EOF
   ok "$(calls)" "merge marola 7 --squash --admin --match-head-commit ${head[marola-0.10.1]} -R marola-dev/marola" "the umbrella merges first and alone: the app waits for the umbrella's main"
   reset
   pr marola-app 8 0.10.1
+  printf '[{"merged_at":"%s","merge_commit_sha":"m1"}]' "$(date -u -d "@$epoch" +%FT%TZ)" >"$t/gh/marola/closed.json"
   go --now "$after"
   ok "$(calls)" "merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" "a code repo merges once the umbrella's main is pinned and green"
   ok "$(said 'marola-dev/marola-app #8: merged')" 1 "it says so"
+  unset BUMP_CANARY_HOURS
 
   echo "-- waits_during_soak --"
+  export BUMP_SOAK_HOURS=24
   reset
   pr marola 7 0.10.1
   go --now "$before"
@@ -472,14 +497,39 @@ EOF
   ok "$(calls)" "" "a newer patch inside the soak restarts it for its own PR"
   BUMP_SOAK_HOURS=1 go --now "$after"
   ok "$(calls)" "merge marola 7 --squash --admin --match-head-commit ${head[marola-0.10.2]} -R marola-dev/marola" "BUMP_SOAK_HOURS sets the soak"
+  unset BUMP_SOAK_HOURS
+
+  echo "-- merges_with_no_soak_by_default --"
+  reset
+  pr marola 7 0.10.1
+  go --now "$((epoch + 60))"
+  ok "$(calls)" "merge marola 7 --squash --admin --match-head-commit ${head[marola-0.10.1]} -R marola-dev/marola" "a release one minute old, no variables: the PR merges"
+  BUMP_SOAK_HOURS= go --now "$((epoch + 60))"
+  ok "$(calls)" "merge marola 7 --squash --admin --match-head-commit ${head[marola-0.10.1]} -R marola-dev/marola" "an empty BUMP_SOAK_HOURS is no soak"
+
+  echo "-- no_canary_by_default --"
+  reset
+  pr marola 7 0.10.1
+  pr marola-app 8 0.10.1
+  echo 'inputs.marola-devkit.url = "github:marola-dev/marola-devkit/v0.10.0";' >"$t/gh/marola/flake.nix"
+  go --now "$after"
+  ok "$(calls)" "merge marola 7 --squash --admin --match-head-commit ${head[marola-0.10.1]} -R marola-dev/marola"$'\n'"merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" \
+    "no variables: the code repo merges in the same run as the umbrella, whose PR is still open and main unpinned"
+  ok "$(grep -cE 'contents/flake.nix|state=closed' "$t/gh/all" || true)" 0 "it made no canary read"
+  reset
+  pr marola-app 8 0.10.1
+  echo "$red_ci" >"$t/gh/marola/cr-mainsha.json"
+  BUMP_CANARY_HOURS= go --now "$after"
+  ok "$(calls)" "merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" "an empty BUMP_CANARY_HOURS is no canary: a red umbrella main does not hold it"
 
   echo "-- waits_for_canary --"
+  export BUMP_CANARY_HOURS=1
   reset
   pr marola-app 8 0.10.1
   echo 'inputs.marola-devkit.url = "github:marola-dev/marola-devkit/v0.10.0";' >"$t/gh/marola/flake.nix"
   go --now "$after"
   ok "$(calls)" "" "the umbrella's main has not pinned the tag: no merge, no comment"
-  ok "$(said 'waits: ')" 1 "it says why"
+  ok "$(said 'does not pin v0.10.1 yet')" 1 "it says why"
   reset
   pr marola-app 8 0.10.1
   echo "$pending_ci" >"$t/gh/marola/cr-mainsha.json"
@@ -499,6 +549,37 @@ EOF
   echo '{"check_runs":[{"name":"ci-ok","status":"completed","conclusion":"cancelled","app":{"id":15368}}]}' >"$t/gh/marola/cr-m1.json"
   go --now "$after"
   ok "$(calls)" "merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" "a cancelled run (main CI cancels older ones) does not block"
+  unset BUMP_CANARY_HOURS
+
+  echo "-- canary_hours_waits_after_umbrella_merge --"
+  export BUMP_CANARY_HOURS=2
+  reset
+  pr marola-app 8 0.10.1
+  printf '[{"merged_at":"%s","merge_commit_sha":"m1"}]' "$(date -u -d "@$((after - 3600))" +%FT%TZ)" >"$t/gh/marola/closed.json"
+  echo "$green" >"$t/gh/marola/cr-m1.json"
+  go --now "$after"
+  ok "$(calls)" "" "the umbrella's bump PR merged 1 h ago, canary 2 h: no merge, no comment"
+  ok "$(said 'merged less than 2 h ago')" 1 "it says why"
+  printf '[{"merged_at":"%s","merge_commit_sha":"m1"}]' "$(date -u -d "@$((after - 3 * 3600))" +%FT%TZ)" >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" "merged 3 h ago and green: it merges"
+  printf '[{"merged_at":"%s","merge_commit_sha":"m1"}]' "$(date -u -d "@$((after - 2 * 3600))" +%FT%TZ)" >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "merge marola-app 8 --squash --admin --match-head-commit ${head[marola-app-0.10.1]} -R marola-dev/marola-app" "merged exactly 2 h ago: it merges"
+  echo '[]' >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "" "no merged bump PR on the umbrella while the canary is on: it waits"
+  ok "$(said 'is not merged yet')" 1 "it says why"
+  printf '[{"merged_at":"yesterday-ish","merge_commit_sha":"m1"}]' >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "exit 1" "a merged_at that is not a time: red, no merge"
+  printf '[{"merged_at":"","merge_commit_sha":"m1"}]' >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "exit 1" "an empty merged_at (date -d reads it as midnight): red, no merge"
+  printf '[{"merged_at":"%s","merge_commit_sha":null}]' "$(date -u -d "@$((after - 3 * 3600))" +%FT%TZ)" >"$t/gh/marola/closed.json"
+  go --now "$after"
+  ok "$(calls)" "exit 1" "a merged PR with no merge commit: red, no merge"
+  unset BUMP_CANARY_HOURS
 
   echo "-- refuses_major --"
   reset
@@ -625,6 +706,7 @@ EOF
   ok "$(calls)" "" "a ci-ok from another app is no ci-ok: no merge, no comment"
 
   echo "-- waits_for_canary_status --"
+  export BUMP_CANARY_HOURS=1
   reset
   pr marola-app 8 0.10.1
   echo '{"statuses":[{"context":"ext/lint","state":"pending"}]}' >"$t/gh/marola/st-mainsha.json"
@@ -634,6 +716,7 @@ EOF
   go --now "$after"
   ok "$(calls)" "" "a failed status on the umbrella's head"
   ok "$(grep -c 'contents/flake.nix$' "$t/gh/all" || true)" 0 "the pin is read at a commit, never at a branch name"
+  unset BUMP_CANARY_HOURS
 
   echo "-- one_consumer_failure_does_not_stop_the_next --"
   reset
@@ -645,10 +728,11 @@ EOF
   reset
   pr marola-app 8 0.10.1
   touch "$t/gh/marola/fail-cr"
-  go --now "$after"
+  BUMP_CANARY_HOURS=1 go --now "$after"
   ok "$(calls)" "exit 1" "an unreadable umbrella: the code repo does not merge"
 
   echo "-- fails_closed_on_canary_merge_commit_read --"
+  export BUMP_CANARY_HOURS=1
   reset
   pr marola-app 8 0.10.1
   printf '[{"merged_at":"2026-10-16T00:00:00Z","merge_commit_sha":"m1"}]' >"$t/gh/marola/closed.json"
@@ -658,6 +742,7 @@ EOF
   touch "$t/gh/marola/fail-cr-m1"
   go --now "$after"
   ok "$(calls)" "exit 1" "the merge commit's runs unreadable: no code repo merges, the run is red"
+  unset BUMP_CANARY_HOURS
 
   echo "-- unparseable_comment_read_comments_nothing --"
   reset
@@ -668,12 +753,14 @@ EOF
   ok "$(said 'not commenting')" 1 "it says so"
 
   echo "-- fails_closed_on_malformed_merge_commit_runs --"
+  export BUMP_CANARY_HOURS=1
   reset
   pr marola-app 8 0.10.1
   printf '[{"merged_at":"2026-10-16T00:00:00Z","merge_commit_sha":"m1"}]' >"$t/gh/marola/closed.json"
   echo '{"check_runs":["x"]}' >"$t/gh/marola/cr-m1.json"
   go --now "$after"
   ok "$(calls)" "exit 1" "runs that are not check runs: no code repo merges, the run is red"
+  unset BUMP_CANARY_HOURS
 
   echo "-- bump_check_crash_is_an_error --"
   reset
@@ -686,6 +773,30 @@ EOF
   pr marola 7 0.10.1
   BUMP_SOAK_HOURS=soon go --now "$after"
   ok "$(calls)" "exit 1" "a soak that is not a number: red, no merge"
+
+  echo "-- fails_closed_on_out_of_range_hours --"
+  reset
+  pr marola 7 0.10.1
+  pr marola-app 8 0.10.1
+  local v
+  for v in 99999999999999999999 2562047788015216 08 010 10000; do
+    BUMP_SOAK_HOURS=$v go --now "$after"
+    ok "$(calls)" "exit 1" "BUMP_SOAK_HOURS=$v: red, no merge"
+    BUMP_CANARY_HOURS=$v go --now "$after"
+    ok "$(calls)" "exit 1" "BUMP_CANARY_HOURS=$v: red, no merge"
+  done
+  BUMP_SOAK_HOURS=0 BUMP_CANARY_HOURS=0 go --now "$after"
+  ok "$(grep -c '^merge' "$t/gh/calls")" 2 "0 is off, not an error"
+
+  echo "-- fails_closed_on_bad_canary_hours --"
+  reset
+  pr marola 7 0.10.1
+  pr marola-app 8 0.10.1
+  BUMP_CANARY_HOURS=soon go --now "$after"
+  ok "$(calls)" "exit 1" "a canary that is not a number: red, no merge"
+  ok "$(said BUMP_CANARY_HOURS)" 1 "the error names the variable"
+  BUMP_CANARY_HOURS=-1 go --now "$after"
+  ok "$(calls)" "exit 1" "a negative canary: red, no merge"
 
   echo "-- holds_after_listing --"
   reset

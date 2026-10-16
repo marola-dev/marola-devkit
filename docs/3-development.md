@@ -73,9 +73,11 @@ scripts (`merge-key-check` enforces it), so the PRs are authored by `marola-merg
 start CI. h0ffmann/ww3-gpu is outside the App's reach and not listed: bump the `@v…` and
 `devkit-ref` in its `skills.yml` by hand. Dispatch `bump-consumers.yml` by hand to retry a version:
 it updates the open PRs instead of adding more. Once the PRs are open, `bump-merge.yml` merges the
-newest release's PRs after a 24 h soak, the umbrella first and the other repos once its `main` is
-green on the tag; a major, a PR labelled `hold`, a red check or a change outside the devkit pins
-waits for a person, and org variable `AUTO_MERGE=false` stops it
+newest release's PRs at the first run where each is green, the umbrella first; variables
+`BUMP_SOAK_HOURS` (a wait after the release) and `BUMP_CANARY_HOURS` (the other repos wait for the
+umbrella's merge and its green `main`) are 0 by default and turn those waits on; a major, a PR
+labelled `hold`, a red check or a change outside the devkit pins waits for a person, and org variable
+`AUTO_MERGE=false` stops it
 ([rules](4-reference_workflows.md#bump-merge-not-reusable)).
 Adding a consumer is one line in `.github/consumers.txt`.
 
