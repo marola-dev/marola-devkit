@@ -26,18 +26,6 @@ good() { printf '  ok    %s\n' "$*"; }
 
 # --- pure verdicts (what --self-test covers) ---------------------------------------------------
 
-# The create-PR endpoint, probed with a head branch that cannot exist: a token allowed to open PRs
-# is refused by validation (422), a blocked one never gets that far (403). Verified against the
-# live API on 2026-09-12 — 422 body is {"message":"Validation Failed", field "head" invalid}.
-pr_create_verdict() {
-  case "$1" in
-    422 | 201) echo allowed ;;
-    403) echo blocked ;;
-    401) echo unauthorized ;;
-    *) echo unknown ;;
-  esac
-}
-
 disk_verdict() {   # free_gb min_gb -> ok | low
   awk -v f="$1" -v m="$2" 'BEGIN { print (f + 0 < m + 0) ? "low" : "ok" }'
 }
@@ -60,61 +48,6 @@ check_tools() {
     warn "passwordless sudo is available — nothing here should need it; a workflow that calls sudo is a bug, not a feature"
   else
     good "no passwordless sudo (correct — a workflow that calls it hangs until the job times out)"
-  fi
-}
-
-token() {   # the host's token, by the same rule jail-claude uses
-  if [ -n "${GH_TOKEN:-}" ]; then printf '%s' "$GH_TOKEN"; return 0; fi
-  gh-token 2>/dev/null || true   # labs/agentic (h0ffmann/nix-config), on PATH via flake.nix
-}
-
-check_pr_creation() {
-  local tok status body verdict
-  tok="$(token)"
-  if [ -z "$tok" ]; then
-    warn "no GitHub token on the host (GH_TOKEN or gh auth login) — cannot check whether scala-steward may open PRs"
-    return 0
-  fi
-  body="$(mktemp)"
-  status="$(curl -sS -o "$body" -w '%{http_code}' -X POST \
-    -H "Authorization: Bearer $tok" -H "Accept: application/vnd.github+json" \
-    "https://api.github.com/repos/$repo/pulls" \
-    -d '{"title":"runner preflight","head":"marola-runner-preflight-never-exists","base":"main"}' 2>/dev/null || echo 000)"
-  verdict="$(pr_create_verdict "$status")"
-  rm -f "$body"
-  case "$verdict" in
-    allowed) good "this host's token may open PRs (scala-steward's own token is separate — see below)" ;;
-    unauthorized) warn "the host token is not valid for $repo (401)" ;;
-    blocked) warn "this host's token may not open PRs (403)" ;;
-    *) warn "PR-creation probe returned $status — inconclusive" ;;
-  esac
-
-  # The failure this check exists for: scala-steward.yml falls back to GITHUB_TOKEN, and GITHUB_TOKEN
-  # cannot open a PR while the repo forbids it. Read the setting rather than infer it.
-  local perms secrets
-  perms="$(gh api "repos/$repo/actions/permissions/workflow" 2>/dev/null || true)"
-  secrets="$(gh api "repos/$repo/actions/secrets" --jq '[.secrets[].name] | join(" ")' 2>/dev/null || true)"
-  if [ -z "$perms" ]; then
-    warn "could not read $repo's Actions workflow permissions (token lacks admin) — skipping the scala-steward check"
-    return 0
-  fi
-  local can_create
-  can_create="$(printf '%s' "$perms" | python3 -c 'import json,sys; print(json.load(sys.stdin)["can_approve_pull_request_reviews"])' 2>/dev/null || echo False)"
-  case " $secrets " in
-    *" STEWARD_GH_TOKEN "*) good "STEWARD_GH_TOKEN is set — scala-steward opens PRs as that PAT" ; return 0 ;;
-  esac
-  if [ "$can_create" = "True" ]; then
-    warn "scala-steward will use GITHUB_TOKEN: allowed to open PRs, but PRs it opens trigger no workflows, so they arrive with no CI and 'just deps-merge' will skip them"
-  else
-    # A warning, not a failure, even though scala-steward fails 100% of the time without it: this
-    # runner also serves CI, the publish job and the site build, and none of those care.
-    warn "scala-steward cannot open PRs: no STEWARD_GH_TOKEN secret, and $repo forbids Actions from creating them.
-        Fix A (recommended): a fine-grained PAT on $repo with Contents: read/write and Pull
-          requests: read/write, saved as the STEWARD_GH_TOKEN secret —
-          gh secret set STEWARD_GH_TOKEN --repo $repo
-        Fix B: gh api --method PUT repos/$repo/actions/permissions/workflow \\
-          -F default_workflow_permissions=write -F can_approve_pull_request_reviews=true
-          (works, but those PRs run no workflows)"
   fi
 }
 
@@ -146,10 +79,6 @@ check_disk() {
 self_test() {
   local f=0
   t() { if [ "$2" = "$3" ]; then echo "  ok   $1"; else echo "  FAIL $1 — got $2, want $3" >&2; f=$((f + 1)); fi; }
-  t "422 means the token may open PRs (only the fake branch was refused)" "$(pr_create_verdict 422)" allowed
-  t "403 is the blocked case this check exists for" "$(pr_create_verdict 403)" blocked
-  t "401 is a bad token, not a policy" "$(pr_create_verdict 401)" unauthorized
-  t "anything else is inconclusive, never fatal" "$(pr_create_verdict 500)" unknown
   t "a full disk is caught" "$(disk_verdict 3 20)" low
   t "a roomy one is not" "$(disk_verdict 900 20)" ok
   t "the boundary is not low" "$(disk_verdict 20 20)" ok
@@ -163,7 +92,6 @@ if [ "$self_test" -eq 1 ]; then self_test; exit $?; fi
 
 echo "runner-preflight: $repo"
 check_tools
-check_pr_creation
 check_runner_labels
 check_disk
 echo "runner-preflight: $fails failing, $warns warning(s)"
