@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.17.0 — 2026-10-17
 
 - **Breaking** for a caller that passes `token:` to `skills-update`: the secret is no longer declared,
   so the caller's workflow fails at the bump. `skills-update` drops the `token` (old PAT) fallback and
