@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.18.0 — 2026-10-17
 
 - `deps-merge --repo OWNER/REPO --unattended` merges only a green Dependabot PR that changes Python
   manifests alone, every version by a patch or minor (read from the diff), with no `hold` label and no
