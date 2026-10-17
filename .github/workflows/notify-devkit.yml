@@ -56,6 +56,8 @@ jobs:
         env:
           TOKEN: ${{ steps.app.outputs.token }}
           REPO: ${{ github.repository }}
+          # In env, not inline in the curl body: scripts/wiring.py reads a dispatch type from here (#161).
+          EVENT_TYPE: bump-ready
         run: |
           set -euo pipefail
           if [ -z "$TOKEN" ]; then
@@ -65,9 +67,9 @@ jobs:
           code="$(curl -sS -o "$RUNNER_TEMP/notify-devkit-response.txt" -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/marola-dev/marola-devkit/dispatches" \
-            -d '{"event_type":"bump-ready","client_payload":{}}')"
+            -d "{\"event_type\":\"$EVENT_TYPE\",\"client_payload\":{}}")"
           if [ "$code" != 204 ]; then
-            echo "::warning::dispatch of bump-ready to marola-dev/marola-devkit answered HTTP $code: $(head -c 300 "$RUNNER_TEMP/notify-devkit-response.txt")"
+            echo "::warning::dispatch of $EVENT_TYPE to marola-dev/marola-devkit answered HTTP $code: $(head -c 300 "$RUNNER_TEMP/notify-devkit-response.txt")"
           else
-            echo "dispatched bump-ready for $REPO to marola-dev/marola-devkit"
+            echo "dispatched $EVENT_TYPE for $REPO to marola-dev/marola-devkit"
           fi

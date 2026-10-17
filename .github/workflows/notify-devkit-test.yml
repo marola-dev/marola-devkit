@@ -1,4 +1,5 @@
 # The live test of #158: a run of this must start a bump-merge run with event repository_dispatch.
+# It calls the released workflow by its tagged path, so the devkit is a `bump-ready` sender in the umbrella's wiring (#161).
 name: notify-devkit test
 
 on: workflow_dispatch
@@ -7,6 +8,6 @@ permissions: {}
 
 jobs:
   notify:
-    uses: ./.github/workflows/notify-devkit.yml
+    uses: marola-dev/marola-devkit/.github/workflows/notify-devkit.yml@v0.15.0
     secrets:
       pr_bot_key: ${{ secrets.PR_BOT_KEY }}

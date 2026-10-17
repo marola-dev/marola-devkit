@@ -213,7 +213,7 @@ jobs:
 This repo calls five of them on its own pull requests (`python-ci`, `static-ci` and
 `agents-check` in `.github/workflows/devkit-ci.yml` under `ci-ok`; `pr-body` and `ci-short-circuit`
 in `.github/workflows/pr.yml`) and `labels-sync` by hand
-(`labels.yml`) and `notify-devkit` by hand (`notify-devkit-test.yml`), so a change to those is exercised by a real caller before a tag is cut.
+(`labels.yml`) and `notify-devkit` by hand (`notify-devkit-test.yml`, at the last released tag), so a change to the others is exercised by a real caller before a tag is cut.
 `scala-ci`, `notify-umbrella` and `api-docs` have no caller here: no Scala, no API docs
 generator, and nothing to announce, since the umbrella's docs take the devkit at its pinned
 version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming repo.
