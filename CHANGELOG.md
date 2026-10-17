@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.15.1 — 2026-10-17
 
 - `notify-devkit.yml` takes the dispatch type from an `EVENT_TYPE` env key and `notify-devkit-test.yml` calls it by its tagged path, so `wiring.py` lists the devkit as a `bump-ready` sender and the umbrella's `wiring --check` stops failing on it (#161).
 
