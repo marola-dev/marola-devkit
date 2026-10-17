@@ -24,7 +24,7 @@ has a default, so a repo that sets none of them gets the org's behaviour.
 | `AUTO_MERGE` | `bump-merge.yml`, passed to `bump-merge` | unset | Not an environment variable of a tool you run: the org variable. `false` stops `bump-merge` before it reads anything |
 | `BUMP_SOAK_HOURS` | `bump-merge.yml`, passed to `bump-merge` | `0` | Not an environment variable of a tool you run: a repo or org variable, 0 to 9999. Above 0, no bump PR merges before that many hours after the release |
 | `BUMP_CANARY_HOURS` | `bump-merge.yml`, passed to `bump-merge` | `0` | Not an environment variable of a tool you run: a repo or org variable, 0 to 9999. Above 0, other repos wait until the umbrella's bump PR merged that many hours ago and its `main` is green on the tag |
-| `PR_BOT_KEY`, `PR_BOT_APP_ID` | a caller of `notify-umbrella` and `gemini-review` | — | Not environment variables: the org secret and variable of the `marola-pr-bot` App, passed as `notify-umbrella`'s `pr_bot_key` ([workflows](4-reference_workflows.md#notify-umbrella)) |
+| `PR_BOT_KEY`, `PR_BOT_APP_ID` | a caller of `notify-umbrella`, `notify-devkit` and `gemini-review` | — | Not environment variables: the org secret and variable of the `marola-pr-bot` App, passed as `notify-umbrella`'s or `notify-devkit`'s `pr_bot_key` ([workflows](4-reference_workflows.md#notify-umbrella)) |
 
 `MAROLA_TRACES` also appears in `scripts/`, but only as sample text in `tasks_issues.py`'s
 self-test (a marola-app task row); the devkit does not read it.
