@@ -6,7 +6,7 @@
 #   just deps-stack --dry-run          # print every git/gh command; no push, no gh mutation
 #   just deps-stack --resume           # continue after a conflict (see below)
 #   just deps-stack --skip 123         # drop PR #123 from the chain (repeatable)
-#   just deps-stack --include-steward  # append scala-steward PRs after the dependabot ones
+#   just deps-stack --include-steward  # append Scala Steward's update/* PRs after the dependabot ones
 #   just deps-stack --from-json f.json # use this file instead of `gh pr list` (testing, no gh)
 #   just deps-stack status             # print the current chain + each PR's state
 #   just deps-stack clean              # delete deps/* chain branches whose stacked PR is MERGED
@@ -22,8 +22,9 @@
 # can't change, and force-pushing dependabot's own branches gets undone by its next rebase — so
 # dependabot's branches are never touched (--retarget-dependabot only explains this).
 #
-# --include-steward's author:app/scala-steward query is UNVERIFIED with the default GITHUB_TOKEN
-# (scala-steward.yml uses no PAT); check `gh pr list --search "is:pr author:app/scala-steward"`.
+# --include-steward finds Scala Steward's PRs as author app/marola-pr-bot (marola-app's
+# scala-steward.yml opens them with that App's token) on an update/ branch: the App also opens
+# compiled-prompt, pointer-sync and skills PRs, so its login alone is not Steward.
 #
 # Needs `gh auth status` except for --dry-run/--from-json/--self-test. Run from the host, not ai-jail.
 set -euo pipefail
@@ -171,7 +172,9 @@ order_prs() {   # stdin: gh-pr-list-shaped JSON array -> stdout: same, filtered 
       elif eco == "pip" then 1
       elif eco == "scala-steward" then 2
       else 3 end;
+    def pr_bot: (.author.login // "") == "app/marola-pr-bot";
     map(select(.number as $n | ($skip | index($n)) == null))
+    | map(select((pr_bot | not) or eco == "scala-steward"))
     | map(select($include_steward == 1 or eco != "scala-steward"))
     | map(. + {ecosystem: eco, rank: rank})
     | sort_by([.rank, .number])
@@ -195,7 +198,7 @@ discover() {   # -> ordered JSON array on stdout
     raw="$(cat "$from_json")"
   elif [ "$dry" -eq 1 ]; then
     echo "+ gh pr list --state open --search \"author:app/dependabot\" --json number,headRefName,title,baseRefName,mergeable,files" >&2
-    [ "$include_steward" -eq 1 ] && echo "+ gh pr list --state open --search \"author:app/scala-steward\" --json number,headRefName,title,baseRefName,mergeable,files" >&2
+    [ "$include_steward" -eq 1 ] && echo "+ gh pr list --state open --search \"author:app/marola-pr-bot\" --json number,headRefName,title,baseRefName,mergeable,files,author" >&2
     echo "[]"
     return 0
   else
@@ -203,7 +206,7 @@ discover() {   # -> ordered JSON array on stdout
     raw="$(gh pr list --state open --search "author:app/dependabot" --json number,headRefName,title,baseRefName,mergeable,files)"
     if [ "$include_steward" -eq 1 ]; then
       local steward
-      steward="$(gh pr list --state open --search "author:app/scala-steward" --json number,headRefName,title,baseRefName,mergeable,files)"
+      steward="$(gh pr list --state open --search "author:app/marola-pr-bot" --json number,headRefName,title,baseRefName,mergeable,files,author)"
       raw="$(jq -s 'add' <<<"$raw"$'\n'"$steward")"
     fi
   fi
@@ -214,18 +217,21 @@ discover() {   # -> ordered JSON array on stdout
 self_test() {
   local fixture="$script_dir/fixtures/deps-stack-prs.json"
   [ -f "$fixture" ] || { echo "deps-stack self-test: fixture not found: $fixture" >&2; exit 1; }
-  local include_steward=0 skip_nums=()   # the fixture has no steward/skip entries to exercise
-  local ordered
-  ordered="$(order_prs <"$fixture")"
-  local got expected
-  got="$(jq -c '[.[].number]' <<<"$ordered")"
-  expected="[101,103,102]"   # github-actions (101, 103) by number, then pip (102)
-  echo "order: $got"
-  jq -r '.[] | "  #\(.number) \(.ecosystem) \(.headRefName)"' <<<"$ordered"
-  if [ "$got" != "$expected" ]; then
-    echo "deps-stack self-test: FAILED — order $got, expected $expected" >&2
-    exit 1
-  fi
+  local include_steward skip_nums=()   # the fixture has no skip entries to exercise
+  local ordered got expected
+  # github-actions (101, 103) by number, then pip (102), then Steward's 104 only when asked for;
+  # 105 is marola-pr-bot off an update/ branch, never a Steward PR.
+  for include_steward in 0 1; do
+    ordered="$(order_prs <"$fixture")"
+    got="$(jq -c '[.[].number]' <<<"$ordered")"
+    expected="$([ "$include_steward" -eq 1 ] && echo "[101,103,102,104]" || echo "[101,103,102]")"
+    echo "order (include_steward=$include_steward): $got"
+    jq -r '.[] | "  #\(.number) \(.ecosystem) \(.headRefName)"' <<<"$ordered"
+    if [ "$got" != "$expected" ]; then
+      echo "deps-stack self-test: FAILED — order $got, expected $expected" >&2
+      exit 1
+    fi
+  done
   local slug
   slug="$(slug_of "dependabot/github_actions/actions/checkout-5")"
   [ "$slug" = "actions-checkout-5" ] || { echo "deps-stack self-test: FAILED — slug_of gave '$slug', expected 'actions-checkout-5'" >&2; exit 1; }

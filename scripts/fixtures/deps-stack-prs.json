@@ -22,5 +22,23 @@
     "baseRefName": "main",
     "mergeable": "MERGEABLE",
     "files": [{ "path": ".github/workflows/ci.yml" }]
+  },
+  {
+    "number": 104,
+    "headRefName": "update/sbt-2.0.10",
+    "title": "Update sbt to 2.0.10",
+    "baseRefName": "main",
+    "mergeable": "MERGEABLE",
+    "author": { "login": "app/marola-pr-bot" },
+    "files": [{ "path": "project/build.properties" }]
+  },
+  {
+    "number": 105,
+    "headRefName": "ml/compiled-prompt-38761019113",
+    "title": "feat(prompt): recompile the prompts on llama3.2 (marola-ml)",
+    "baseRefName": "main",
+    "mergeable": "MERGEABLE",
+    "author": { "login": "app/marola-pr-bot" },
+    "files": [{ "path": "prompts/compiled.json" }]
   }
 ]

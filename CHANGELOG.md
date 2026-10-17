@@ -18,6 +18,9 @@ marketplace `ref` at once.
 - `wiring.py` counts a pin as a trigger of a workflow that runs on a push to `main` when a
   `dorny/paths-filter` filter lists it and that filter's output gates a job's `if:`, so marola-app's
   `ci.yml` is listed again for `corpus.version` (#169).
+- `deps-stack --include-steward` and `pr-label`'s `kind/deps` find Scala Steward's PRs as
+  `app/marola-pr-bot` on an `update/` branch, not as `app/scala-steward`, a login no Steward PR ever
+  had. `pr_label_kind` now takes the head branch, and `pr-label` has a `--self-test` (#167).
 
 ## v0.16.0 — 2026-10-17
 
