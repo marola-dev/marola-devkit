@@ -9,6 +9,9 @@ marketplace `ref` at once.
 - **Breaking** for a caller that passes `token:` to `skills-update`: the secret is no longer declared,
   so the caller's workflow fails at the bump. `skills-update` drops the `token` (old PAT) fallback and
   uses `pr_bot_key`, else the default `GITHUB_TOKEN` (MIP-0086, #148).
+- `runner-preflight` drops its PR-creation check, which advised a `STEWARD_GH_TOKEN` PAT. Scala
+  Steward opens PRs as marola-pr-bot on a GitHub-hosted runner, so nothing on the self-hosted
+  runner depends on a token that may open PRs (MIP-0086, #149).
 
 ## v0.16.0 — 2026-10-17
 
