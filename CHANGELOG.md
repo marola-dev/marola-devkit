@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.15.0 — 2026-10-17
 
 - `bump-merge` soak and canary become variables, both 0 by default: bump PRs merge at the first run
   where each is green. Repo or org variables `BUMP_SOAK_HOURS` (a wait after the release) and
