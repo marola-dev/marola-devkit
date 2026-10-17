@@ -20,6 +20,7 @@ quality:
     shellcheck --severity=error scripts/*.sh scripts/lib/*.sh plugins/marola-devkit/hooks/*.sh .githooks/* .claude/statusline.sh tests/*.sh
     actionlint
     bash tests/self-tests.sh
+    python3 scripts/wiring.py --lint-devkit
     scripts/agents-check.sh
     python3 scripts/merge_key_check.py .
     python3 scripts/docs_lint.py

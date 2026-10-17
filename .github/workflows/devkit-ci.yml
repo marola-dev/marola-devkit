@@ -90,6 +90,7 @@ jobs:
       self-test-commands: |
         pip install "pyyaml==6.0.3"
         bash tests/self-tests.sh
+        python3 scripts/wiring.py --lint-devkit
 
   static:
     if: github.event_name == 'pull_request'
