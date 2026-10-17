@@ -1,20 +1,20 @@
 # Reusable workflows
 
-Eleven `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
+Twelve `workflow_call` workflows under `.github/workflows/`. Eight took over what the umbrella's
 `ci.yml`, `pr-body.yml` and `ci-short-circuit-pr-close.yml` did for one tree before the split
 (MIP-0070 §5.6), `api-docs.yml` is MIP-0074 §5.2's, `gemini-review.yml` is
-marola-dev/marola#641's and `skills-update.yml` is MIP-0080's. A twelfth,
-`devkit-ci.yml`, is this repo's own CI — not reusable, nothing to call.
+marola-dev/marola#641's, `skills-update.yml` is MIP-0080's and `notify-devkit.yml` is
+marola-dev/marola-devkit#158's. A thirteenth, `devkit-ci.yml`, is this repo's own CI — not reusable, nothing to call.
 
 Every workflow pins its third-party actions and tools. Where a tool has no action (ruff,
 actionlint, hadolint, shellcheck, which a repo's flake supplies locally), the default below is the
 version the umbrella's flake pinned when the workflow was written. Bump the input, not the
 workflow file, when a newer version is wanted.
 
-Six of the eleven (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`,
+Six of the twelve (`labels-sync`, `agents-check`, `pr-body`, `api-docs`, `gemini-review`,
 `skills-update`) take a required `devkit-ref` input: they run scripts that live in *this* repo, not the caller's, so they check this
 repo out a second time at that ref. Pin it to the same tag as the `uses:` line below — nothing
-keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `scala-ci`,
+keeps the two in sync automatically. `ci-short-circuit`, `notify-umbrella`, `notify-devkit`, `scala-ci`,
 `python-ci` and `static-ci` need no such checkout.
 
 `devkit-ref` stays required because a called workflow cannot find out its own ref: inside one,
@@ -148,6 +148,35 @@ still passes `token:` fails, because the secret is no longer declared.
 A zero `github.event.before` (a branch's first push), a compare API call that doesn't answer 200
 (e.g. `before` unknown to it after a force-push), or a truncated compare (the API caps its file
 list at 300) all count as a docs change too, so both events go rather than silently dropping one.
+
+## notify-devkit
+
+Wakes `bump-merge.yml` when a consumer's devkit-bump PR goes green, so it merges within minutes
+instead of at the next hourly run. A plain `repository_dispatch` (`bump-ready`) to the devkit, no
+checkout. The event carries nothing bump-merge reads, so a forged or repeated one cannot cause a
+merge. `workflow_run` runs the caller's file on the default branch, so a caller works once it is
+on `main`.
+
+```yaml
+name: bump ready
+on:
+  workflow_run:
+    workflows: [ci]   # this repo's CI workflow `name:`
+    types: [completed]
+    branches: ['chore/devkit-v*']
+permissions: {}
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
+    uses: marola-dev/marola-devkit/.github/workflows/notify-devkit.yml@v0.14.0
+    secrets:
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}
+```
+
+**Secret** `pr_bot_key` (optional): the org secret `PR_BOT_KEY`. The workflow mints a
+`marola-pr-bot` token (`vars.PR_BOT_APP_ID`) for the devkit alone, with Contents write
+(`repository_dispatch` needs it). Without it the run is a notice, not a failure: the hourly
+bump-merge still picks the PR up.
 
 ## labels-sync
 
@@ -435,11 +464,12 @@ moves its `@v…` pin with the other devkit pins.
 
 ## bump-merge (not reusable)
 
-`bump-merge.yml` runs `scripts/bump-merge.sh` from `main` at minute 20 of every hour and on
-`workflow_dispatch` (boolean input `dry-run`: print each decision and command, change nothing). It
-mints a `marola-merge-bot` token for the `consumers.txt` repos (`contents` and `pull-requests`
-write, `workflows` write, `checks` and `statuses` read), reads the devkit's release with the job's
-own `github.token`, and merges with `--squash --admin --match-head-commit`. The rules, one each:
+`bump-merge.yml` runs `scripts/bump-merge.sh` from `main` at minute 20 of every hour, on
+`repository_dispatch` `bump-ready` (from [notify-devkit](#notify-devkit); the event carries nothing
+the script reads) and on `workflow_dispatch` (boolean input `dry-run`: print each decision and
+command, change nothing). It mints a `marola-merge-bot` token for the `consumers.txt` repos
+(`contents` and `pull-requests` write, `workflows` write, `checks` and `statuses` read), reads the
+devkit's release with the job's own `github.token`, and merges with `--squash --admin --match-head-commit`. The rules, one each:
 
 - Only the newest release's PRs: a PR for another tag is refused as not the latest release. If the
   latest release is not the highest `v*` tag (a backport), every repo waits.

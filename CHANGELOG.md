@@ -10,6 +10,8 @@ marketplace `ref` at once.
   where each is green. Repo or org variables `BUMP_SOAK_HOURS` (a wait after the release) and
   `BUMP_CANARY_HOURS` (other repos wait for the umbrella's merged bump PR, that many hours old, and
   green `main`) turn them back on (#156).
+- `notify-devkit.yml` (reusable) sends `bump-ready` when a consumer's devkit-bump CI goes green, and
+  `bump-merge.yml` runs on it, so a bump PR merges within minutes; the hourly cron stays (#158).
 
 ## v0.14.0 — 2026-10-17
 

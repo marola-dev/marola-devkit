@@ -1,0 +1,73 @@
+# notify-devkit — a consumer's green devkit-bump PR wakes bump-merge.yml (`bump-ready`) within
+# minutes instead of at the next hourly run. Same shape as notify-umbrella.yml: a plain
+# repository_dispatch, no checkout. It does not use ./.github/actions/bot-token: in a reusable
+# workflow a `./` path resolves in the caller's workspace, where nothing is checked out.
+#
+# A consumer adds a workflow_run caller (workflow_run runs the file on the default branch):
+#
+#   name: bump ready
+#   on:
+#     workflow_run:
+#       workflows: [ci]   # this repo's CI workflow `name:`
+#       types: [completed]
+#       branches: ['chore/devkit-v*']
+#   permissions: {}
+#   jobs:
+#     notify:
+#       if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
+#       uses: marola-dev/marola-devkit/.github/workflows/notify-devkit.yml@v0.14.0
+#       secrets:
+#         pr_bot_key: ${{ secrets.PR_BOT_KEY }}
+#
+# The event carries nothing bump-merge reads, so a forged or repeated one cannot cause a merge.
+# pr_bot_key: marola-pr-bot's key (MIP-0086), minted into a token for the devkit only, with
+# Contents write, which repository_dispatch needs. Without it this is a notice, never a failure:
+# the hourly bump-merge still picks the PR up.
+name: notify-devkit
+
+on:
+  workflow_call:
+    secrets:
+      pr_bot_key:
+        description: "secrets.PR_BOT_KEY"
+        required: false
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      HAS_PR_BOT_KEY: ${{ secrets.pr_bot_key != '' }}
+    steps:
+      - name: marola-pr-bot token for the devkit
+        id: app
+        if: env.HAS_PR_BOT_KEY == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.PR_BOT_APP_ID }}
+          private-key: ${{ secrets.pr_bot_key }}
+          owner: marola-dev
+          repositories: marola-devkit
+          permission-contents: write
+
+      - name: repository_dispatch -> marola-dev/marola-devkit
+        env:
+          TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::no pr_bot_key passed in $REPO — skipping; the devkit's hourly bump-merge still picks the PR up"
+            exit 0
+          fi
+          code="$(curl -sS -o "$RUNNER_TEMP/notify-devkit-response.txt" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/marola-dev/marola-devkit/dispatches" \
+            -d '{"event_type":"bump-ready","client_payload":{}}')"
+          if [ "$code" != 204 ]; then
+            echo "::warning::dispatch of bump-ready to marola-dev/marola-devkit answered HTTP $code: $(head -c 300 "$RUNNER_TEMP/notify-devkit-response.txt")"
+          else
+            echo "dispatched bump-ready for $REPO to marola-dev/marola-devkit"
+          fi

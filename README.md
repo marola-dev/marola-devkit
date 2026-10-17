@@ -196,9 +196,9 @@ adds it to its quality recipe once its README is the landing.
 checkout), then `gh api repos/$MAROLA_UMBRELLA/contents/docs/MIPs`. `MAROLA_UMBRELLA` defaults to
 `marola-dev/marola`.
 
-**Reusable workflows** — ten `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
-`notify-umbrella`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`, `api-docs`,
-`gemini-review`);
+**Reusable workflows** — twelve `workflow_call` workflows (`scala-ci`, `python-ci`, `static-ci`,
+`notify-umbrella`, `notify-devkit`, `labels-sync`, `agents-check`, `pr-body`, `ci-short-circuit`,
+`api-docs`, `gemini-review`, `skills-update`);
 every input, secret and example caller is in [docs/4-reference_workflows.md](docs/4-reference_workflows.md).
 One caller, needing a second checkout of this repo for its own scripts:
 
@@ -213,7 +213,7 @@ jobs:
 This repo calls five of them on its own pull requests (`python-ci`, `static-ci` and
 `agents-check` in `.github/workflows/devkit-ci.yml` under `ci-ok`; `pr-body` and `ci-short-circuit`
 in `.github/workflows/pr.yml`) and `labels-sync` by hand
-(`labels.yml`), so a change to those is exercised by a real caller before a tag is cut.
+(`labels.yml`) and `notify-devkit` by hand (`notify-devkit-test.yml`), so a change to those is exercised by a real caller before a tag is cut.
 `scala-ci`, `notify-umbrella` and `api-docs` have no caller here: no Scala, no API docs
 generator, and nothing to announce, since the umbrella's docs take the devkit at its pinned
 version, not its `main` (MIP-0074 §5.3). Their first real run is in a consuming repo.

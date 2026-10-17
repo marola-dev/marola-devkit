@@ -1,0 +1,12 @@
+# The live test of #158: a run of this must start a bump-merge run with event repository_dispatch.
+name: notify-devkit test
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  notify:
+    uses: ./.github/workflows/notify-devkit.yml
+    secrets:
+      pr_bot_key: ${{ secrets.PR_BOT_KEY }}

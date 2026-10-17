@@ -43,7 +43,7 @@ at the real repo, and `git -C <tmp> config` once rewrote this repo's `.git/confi
 - **`devkit-ci.yml`** runs `python-ci`, `static-ci` and `agents-check` under `ci-ok`, and
   **`pr.yml`** keeps the `pr-body` and `ci-short-circuit` calls, all at the PR's head, so
   a change to one of them runs in a real caller before a tag. `labels.yml` calls `labels-sync` by
-  hand (`workflow_dispatch`). `scala-ci`, `notify-umbrella` and `api-docs` have no caller here.
+  hand (`workflow_dispatch`). `notify-devkit` has `notify-devkit-test.yml` (`workflow_dispatch`); `scala-ci`, `notify-umbrella` and `api-docs` have no caller here.
 
 ## Releases
 
