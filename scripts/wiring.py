@@ -202,6 +202,42 @@ def triggers(doc: dict) -> dict:
     return {k: v or {} for k, v in on.items()}
 
 
+def gated_paths(doc: dict) -> set[str]:
+    """Paths a `dorny/paths-filter` filter lists, when that filter's output gates a job's `if:`."""
+    jobs = doc.get("jobs") or {}
+    ifs = "\n".join(str(j.get("if", "")) for j in jobs.values())
+    out: set[str] = set()
+    for name, job in jobs.items():
+        for step in job.get("steps") or []:
+            if not str(step.get("uses", "")).startswith("dorny/paths-filter"):
+                continue
+            filters = (step.get("with") or {}).get("filters")
+            if isinstance(filters, str):  # a file path stays a str and is not read
+                filters = load(filters, f"{name}'s paths-filter")
+            if not isinstance(filters, dict):
+                continue
+            for o, v in (job.get("outputs") or {}).items():
+                gates = re.search(
+                    rf"\bneeds\.{re.escape(name)}\.outputs\.{re.escape(o)}(?![\w-])", ifs
+                )
+                for sid, f in re.findall(r"steps\.([\w-]+)\.outputs\.([\w-]+)", str(v)):
+                    if gates and sid == step.get("id") and isinstance(filters.get(f), list):
+                        out |= {p for p in filters[f] if isinstance(p, str)}
+    return out
+
+
+def pin_triggers(on: dict, doc: dict) -> set[str]:
+    if "push" not in on:
+        return set()
+    push, pins = on["push"], set(PINS + ("flake.lock",))
+    if push.get("paths"):
+        return pins & set(push["paths"])
+    # a push filtered to tags alone never runs on a branch
+    if "main" not in (push.get("branches") or ([] if push.get("tags") else ["main"])):
+        return set()
+    return (pins & gated_paths(doc)) - set(push.get("paths-ignore") or [])
+
+
 def when(on: dict) -> str:
     push = on.get("push", {})
     if push.get("tags"):
@@ -346,7 +382,7 @@ def scan(root: Path, name: str = "marola", devkit: Path | None = None) -> Wiring
         label = f"{repo} `{file}`"
         for t in on.get("repository_dispatch", {}).get("types") or []:
             add(w.dispatch.setdefault(t, {"sent": [], "listen": []})["listen"], label)
-        for pin in set(PINS + ("flake.lock",)) & set(on.get("push", {}).get("paths") or []):
+        for pin in pin_triggers(on, doc):
             add(w.bumps.setdefault(f"{repo} `{pin}`", []), label)
         repo_dir = dict(rs)[repo]
         for kind, v, via in effects(doc, repo, {}, callee, dirs[repo]):
@@ -555,6 +591,11 @@ def check(w: Wiring, block: str, path: Path | None, allow: str) -> list[str]:
 
 
 CO = "      - uses: actions/checkout@v7\n        with: {repository: %s, path: %s%s}\n"
+CHANGES = (
+    "  changes:\n    outputs:\n      %s: ${{ steps.filter.outputs.%s }}\n    steps:\n"
+    "      - uses: dorny/paths-filter@v4\n        id: filter\n        with:\n"
+    "          filters: |\n            %s:\n              - 'Dockerfile'\n              - %s\n"
+)
 FIXTURE = {
     ".gitmodules": "".join(
         f'[submodule "{r}"]\n\tpath = {r}\n'
@@ -605,6 +646,15 @@ FIXTURE = {
     ".devkit/.github/workflows/ping.yml": 'on: {workflow_call: {}}\njobs:\n  p:\n    steps:\n      - run: curl https://api.github.com/repos/x/dispatches -d \'{"event_type":"x"}\'\n',
     "marola-ml/.github/workflows/ping.yml": "on: {push: {branches: [main]}}\njobs:\n  a:\n    uses: marola-dev/marola-devkit/.github/workflows/ping.yml@v0.3.1\n  b:\n    uses: marola-dev/marola-devkit/.github/workflows/ping.yml@v0.3.1\n",
     "marola-ml/scripts/corpus-fetch.sh": 'pin="$(<"$root/corpus.version")"\nbase="https://github.com/marola-dev/marola-corpus/releases/download"\n',
+    "marola-ml/.github/workflows/ci.yml": "on: {push: {branches: [main]}, pull_request: {}}\njobs:\n"
+    + CHANGES % ("docker", "docker", "docker", "'corpus.version'")
+    + "  jvm:\n    needs: [changes]\n    if: needs.changes.outputs.docker == 'true' || github.event_name == 'workflow_dispatch'\n    steps: []\n",
+    "marola-corpus/.github/workflows/ci.yml": "on: {push: {branches: [main]}}\njobs:\n"
+    + CHANGES % ("pins", "pins", "pins", "'resources.version'")
+    + "  x:\n    needs: [changes]\n    if: needs.changes.outputs.pins-x == 'true'\n    steps: []\n",
+    "marola-corpus/.github/workflows/pr.yml": "on: {pull_request: {}}\njobs:\n"
+    + CHANGES % ("docker", "docker", "docker", "'corpus.version'")
+    + "  b:\n    needs: changes\n    if: needs.changes.outputs.docker == 'true'\n    steps: []\n",
 }
 
 API_ROW = "| `api-docs` branch | marola-app `api-docs.yml` (`api-docs.yml@v0.4.1`, on a push to `main`), marola-corpus `api-docs.yml` (`api-docs.yml@v9.9.9` (resolved at v0.6.0), on a push to `main`) | — | marola `scripts/fetch-api-docs.sh` |"
@@ -632,6 +682,9 @@ CASES = {
     "own_repo_pr_dropped": "!self-pr.yml",
     "image_reader_forms": "| `ghcr.io/marola-dev/marola-corpus` image | marola-corpus `docker.yml` (on a push to `main`) | — | marola-site `docker-compose.yml`, marola-ml `Dockerfile`, marola-ml `docker-compose.yml` |",
     "commented_pin_not_a_reader": "!marola-ml `justfile`",
+    "paths_filter_gating_a_job_is_a_pin_trigger": "| marola-ml `corpus.version` | marola-ml `ci.yml` |",
+    "paths_filter_gating_no_job_adds_no_row": "!marola-corpus `resources.version`",
+    "paths_filter_without_push_adds_no_row": "!marola-corpus `corpus.version`",
 }
 
 

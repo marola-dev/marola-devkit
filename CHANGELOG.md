@@ -15,6 +15,9 @@ marketplace `ref` at once.
 - **Breaking** for a workflow named `marola-sea-publish.yml` on `self-hosted`: `workflow-runners`
   drops that exemption, so no workflow may name `self-hosted` or an expression in `runs-on:` or
   `runner:`. marola-ml removed that workflow, and nothing else is self-hosted (#168).
+- `wiring.py` counts a pin as a trigger of a workflow that runs on a push to `main` when a
+  `dorny/paths-filter` filter lists it and that filter's output gates a job's `if:`, so marola-app's
+  `ci.yml` is listed again for `corpus.version` (#169).
 
 ## v0.16.0 — 2026-10-17
 
