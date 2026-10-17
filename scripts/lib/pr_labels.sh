@@ -107,11 +107,13 @@ pr_label_layers() {
   printf '%s\n' "${labels[@]}"
 }
 
-# pr_label_kind <author-login> <changed-paths-newline-separated> — best-effort, only when certain.
+# pr_label_kind <author-login> <headRefName> <changed-paths-newline-separated> — best-effort, only
+# when certain. marola-pr-bot opens Scala Steward's PRs and others too; update/ tells them apart.
 pr_label_kind() {
-  local author="$1" paths="$2"
+  local author="$1" ref="$2" paths="$3"
   case "$author" in
-    dependabot\[bot\]|app/dependabot|scala-steward\[bot\]|app/scala-steward) echo "kind/deps"; return ;;
+    dependabot\[bot\]|app/dependabot) echo "kind/deps"; return ;;
+    app/marola-pr-bot) [[ "$ref" == update/* ]] && { echo "kind/deps"; return; } ;;
   esac
   if [ -n "$paths" ] && ! grep -qvE '\.md$|^docs/' <<<"$paths"; then
     echo "kind/docs-only"
@@ -137,6 +139,6 @@ pr_label_classify() {
   printf '%s\n' $areas
   layers="$(pr_label_layers "$paths")"
   [ -n "$layers" ] && printf '%s\n' "$layers"
-  kind="$(pr_label_kind "$author" "$paths")"
+  kind="$(pr_label_kind "$author" "$ref" "$paths")"
   [ -n "$kind" ] && printf '%s\n' "$kind"
 }
