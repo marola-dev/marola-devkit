@@ -441,8 +441,8 @@ jobs:
 
 Secret `pr_bot_key`, optional: `marola-pr-bot`'s private key (`vars.PR_BOT_APP_ID` is its id). The
 workflow mints a token for the caller's repo and pushes and opens the PR with it, so the PR starts
-CI; a PR opened with the default `GITHUB_TOKEN` starts none. Secret `token`, optional: a PAT used
-when `pr_bot_key` is absent. With neither, the job behaves as before.
+CI. Without it, the job pushes and opens the PR with the default `GITHUB_TOKEN`, and that PR starts
+no CI. A caller that still passes `token` fails, because the secret is no longer declared (MIP-0086).
 
 ## bot-token (composite action)
 
