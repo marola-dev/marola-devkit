@@ -6,8 +6,8 @@ list. Neither starts on its own: a human runs the command.
 
 ## Self-hosted Actions runner
 
-Only one workflow may use it, marola-ml's GPU publish (`marola-sea-publish.yml`); the guard
-below enforces that. The tools ([tools](4-reference_tools.md#self-hosted-runner)):
+No workflow may use it: none names `self-hosted` today, and the guard below keeps it so. The
+tools ([tools](4-reference_tools.md#self-hosted-runner)):
 
 1. **`runner-preflight`** checks the machine can run the workflows: nix, python3, node, jq,
    curl, a usable docker, *no* passwordless sudo (a workflow that calls it would hang), disk, and
@@ -26,10 +26,8 @@ below enforces that. The tools ([tools](4-reference_tools.md#self-hosted-runner)
    own throttle and shutdown points.
 
 **The guard.** A public repo's self-hosted runner runs whatever a pull request asks it to.
-`workflow-runners [.github/workflows]` fails when a `runs-on:` or reusable-workflow `runner:`
-outside `marola-sea-publish.yml` names `self-hosted` or is an expression, or when that workflow
-gains a trigger a pull request can reach (`pull_request`, `pull_request_target`,
-`workflow_call`). MIP-0065 §5.2.
+`workflow-runners [.github/workflows]` fails when any `runs-on:` or reusable-workflow `runner:`
+names `self-hosted` or is an expression. No workflow is exempt. MIP-0065 §5.2.
 
 The variables are on [config](4-reference_config.md).
 

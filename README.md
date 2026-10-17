@@ -51,7 +51,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `mip-stack`, `docs-mip-stack`, `deps-stack`, `deps-merge`, `branches` | Stack and merge helpers |
 | `pr-label`, `backfill-pr-labels` | Apply the deterministic `area/*` label taxonomy to one PR; to every finalized unlabelled PR |
 | `pr-label-nlp` | A local TF-IDF classifier for the same labels, to compare against the deterministic one |
-| `workflow-runners` | Fail when a workflow other than the GPU publish one can reach the self-hosted runner |
+| `workflow-runners` | Fail when any workflow can reach a self-hosted runner |
 | `gha-runner`, `setup-runners`, `runner-preflight`, `temps` | The self-hosted Actions runner |
 
 Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
