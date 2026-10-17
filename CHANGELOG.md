@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- `deps-merge --repo OWNER/REPO --unattended` merges only a green Dependabot PR that changes Python
+  manifests alone, every version by a patch or minor (read from the diff), with no `hold` label and no
+  commit by anyone else, pinned to the head commit its checks ran on. The interactive mode is unchanged
+  (marola-dev/marola#740, #150).
+
 ## v0.17.0 — 2026-10-17
 
 - **Breaking** for a caller that passes `token:` to `skills-update`: the secret is no longer declared,
