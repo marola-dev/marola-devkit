@@ -4,7 +4,7 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
-## Unreleased
+## v0.16.0 — 2026-10-17
 
 - `wiring.py` reports a `/dispatches` call whose type it cannot read, and `--check` fails on it; `wiring.py --lint-devkit` fails on that, or on a `repository_dispatch` type no devkit workflow sends, in the devkit's own workflows, and devkit CI runs it on every PR (#163).
 
