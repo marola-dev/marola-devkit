@@ -8,8 +8,11 @@ wiring [--root DIR] [--devkit DIR] [--name NAME] [FILE]
     lets each reusable-workflow call be read at its own @ref, else it is fetched from GitHub
     (a tag is cached under ~/.cache/marola-wiring)
 wiring --check [FILE]
-    fail on a stale block in FILE, an orphan dispatch, or an artifact nobody reads that
+    fail on a stale block in FILE, an orphan or unreadable dispatch, or an artifact nobody reads that
     <root>/wiring.allow does not list as `<artifact>: <reason>`
+wiring --lint-devkit [DIR]
+    fail on a dispatch in the devkit's own workflows (DIR, default this script's repo) whose type
+    wiring cannot read, or a type they listen for that none of them sends
 wiring --self-test
 """
 
@@ -49,6 +52,7 @@ ASSIGN = re.compile(r"""^\s*(\w+)=["']?([^"'\s]+)""", re.M)
 ARRAY = re.compile(r"\b\w+\+?=\(([^)]*)\)")
 TYPE = re.compile(r"[a-z][a-z0-9-]*")
 SHVAR = re.compile(r"\$\{?(\w+)\}?")
+WORKFLOW_DISPATCH = re.compile(r"/actions/workflows/[^/\s\"']+/dispatches")
 EXPR = re.compile(r"\$\{\{\s*(env|inputs|github)\.([\w-]+)\s*\}\}")
 
 
@@ -60,6 +64,7 @@ class Wiring:
         self.deploys: list[tuple[str, str]] = []
         self.devkit: dict[str, list[str]] = {}
         self.calls: dict[str, dict[str, list[str]]] = {}
+        self.unread: list[str] = []
 
     def art(self, key: str, repo: str = "", match: str = "") -> dict:
         a = self.artifacts.setdefault(key, {"pub": [], "pin": [], "read": [], "repos": set()})
@@ -258,13 +263,16 @@ def effects(doc: dict, repo: str, inputs: dict, callee, d: Path) -> list[tuple]:
             if not run:
                 continue
             assigned = dict(ASSIGN.findall(run))
-            sent = re.findall(r"event_type=([^\s\"']*)", sub(run, senv, inputs))
-            out += [("send", t, "") for t in sent if t and "$" not in t]
+            sent = [t for t in re.findall(r"event_type=([^\s\"']*)", sub(run, senv, inputs)) if t]
             if "/dispatches" in run:
-                evs = [sub(v, {}, inputs) for k, v in senv.items() if "EVENT" in k]
+                sent += [sub(v, {}, inputs) for k, v in senv.items() if "EVENT" in k]
                 # v0.7.0's notify-umbrella builds its types in an array (`events+=(…)`, #69).
-                evs += [w for a in ARRAY.findall(run) for w in a.split() if TYPE.fullmatch(w)]
-                out += [("send", t, "") for t in evs if "$" not in t]
+                sent += [w for a in ARRAY.findall(run) for w in a.split() if TYPE.fullmatch(w)]
+                repo_dispatch = "/dispatches" in WORKFLOW_DISPATCH.sub("", run)
+                # v0.15.0's JSON literal (#163); a workflow_dispatch call has no event type.
+                if repo_dispatch and not any(t and "$" not in t for t in sent):
+                    out.append(("unread-dispatch", "", ""))
+            out += [("send", t, "") for t in sent if "$" not in t]
             for asset in release_files(run):
                 name = sub(asset, assigned, {}).rsplit("/", 1)[-1]
                 out.append(("asset", SHVAR.sub("<tag>", name), ""))
@@ -346,6 +354,8 @@ def scan(root: Path, name: str = "marola", devkit: Path | None = None) -> Wiring
             pub = label + (f" ({', '.join(parts)})" if parts else "")
             if kind == "send":
                 add(w.dispatch.setdefault(v, {"sent": [], "listen": []})["sent"], pub)
+            elif kind == "unread-dispatch":
+                add(w.unread, label)
             elif kind == "image":
                 add(w.art(f"`{v}` image", repo, v)["pub"], pub)
             elif kind == "asset":
@@ -465,6 +475,51 @@ def write_block(path: Path, block: str) -> None:
     path.write_text(f"{head}{START}\n\n{block}\n{END}{tail}", encoding="utf-8")
 
 
+UNREAD = "a dispatch whose type wiring cannot read"
+ORPHAN = "dispatch `%s` is listened for but never sent"
+
+
+def lint_devkit(d: Path) -> list[str]:
+    """The devkit's own dispatch problems, its calls of itself read from DIR's working tree."""
+    files = sorted((d / ".github" / "workflows").glob("*.y*ml"))
+    docs = {f.name: load(read(f), f) for f in files}
+    for doc in docs.values():
+        for job in (doc.get("jobs") or {}).values():
+            if (u := str(job.get("uses", ""))).startswith("./.github/workflows/"):
+                job["uses"] = f"{ORG}/marola-devkit/{u[2:]}@HEAD"
+
+    calls = {
+        f: {
+            m[2]
+            for job in (doc.get("jobs") or {}).values()
+            if (m := USES.match(str(job.get("uses", "")))) and m[1] == "marola-devkit"
+        }
+        for f, doc in docs.items()
+    }
+
+    def cyclic(f: str, path: tuple[str, ...] = ()) -> bool:
+        return f in path or any(cyclic(g, (*path, f)) for g in calls.get(f, ()))
+
+    def callee(repo: str, file: str, ref: str) -> tuple[dict | None, str]:
+        return (docs.get(file) if repo == "marola-devkit" else None), ""
+
+    sent, listen, problems = set(), set(), []
+    for file, doc in docs.items():
+        on = triggers(doc)
+        if set(on) == {"workflow_call"}:
+            continue
+        if cyclic(file):  # effects() would recurse forever; GitHub rejects such a call too
+            add(problems, f"marola-devkit `{file}`: a reusable-workflow call cycle")
+            continue
+        listen |= set(on.get("repository_dispatch", {}).get("types") or [])
+        for kind, v, _ in effects(doc, "marola-devkit", {}, callee, d):
+            if kind == "send":
+                sent.add(v)
+            elif kind == "unread-dispatch":
+                add(problems, f"marola-devkit `{file}`: {UNREAD}")
+    return problems + [ORPHAN % t for t in sorted(listen - sent)]
+
+
 def check(w: Wiring, block: str, path: Path | None, allow: str) -> list[str]:
     out: list[str] = []
     if path:
@@ -474,8 +529,10 @@ def check(w: Wiring, block: str, path: Path | None, allow: str) -> list[str]:
             out.append(f"{path}'s wiring block is stale: run `just wiring {path}`")
     for t, d in sorted(w.dispatch.items()):
         if not (d["sent"] and d["listen"]):
-            side = "sent but never listened for" if d["sent"] else "listened for but never sent"
-            out.append(f"dispatch `{t}` is {side}")
+            out.append(
+                f"dispatch `{t}` is sent but never listened for" if d["sent"] else ORPHAN % t
+            )
+    out += [f"{label}: {UNREAD}" for label in sorted(w.unread)]
     names = {k.replace("`", ""): a for k, a in w.artifacts.items()}
     allowed = set()
     for ln in map(str.strip, allow.splitlines()):
@@ -545,6 +602,8 @@ FIXTURE = {
     ".devkit/.github/workflows/bump-consumers.yml": 'on: {workflow_dispatch: {}}\njobs:\n  b:\n    steps:\n      - run: scripts/bump-consumers.sh "$VERSION"\n',
     ".devkit/scripts/bump-consumers.sh": 'repos() { grep -v "^#" "$root/.github/consumers.txt"; }\nwhile read -r repo; do\n  gh pr create -R "$repo" --head x\ndone < <(repos)\n',
     ".devkit/.github/consumers.txt": "# pin the devkit\nmarola-dev/marola\nmarola-dev/marola-app\n",
+    ".devkit/.github/workflows/ping.yml": 'on: {workflow_call: {}}\njobs:\n  p:\n    steps:\n      - run: curl https://api.github.com/repos/x/dispatches -d \'{"event_type":"x"}\'\n',
+    "marola-ml/.github/workflows/ping.yml": "on: {push: {branches: [main]}}\njobs:\n  a:\n    uses: marola-dev/marola-devkit/.github/workflows/ping.yml@v0.3.1\n  b:\n    uses: marola-dev/marola-devkit/.github/workflows/ping.yml@v0.3.1\n",
     "marola-ml/scripts/corpus-fetch.sh": 'pin="$(<"$root/corpus.version")"\nbase="https://github.com/marola-dev/marola-corpus/releases/download"\n',
 }
 
@@ -554,7 +613,7 @@ API_ROW = "| `api-docs` branch | marola-app `api-docs.yml` (`api-docs.yml@v0.4.1
 CASES = {
     "dispatch_types_listened": "| `site-data-updated` | marola-app `ci.yml` (on a push to `main`) | marola-site `site.yml` |\n| `submodule-docs-updated` | marola-site `notify-umbrella.yml` (`notify-umbrella.yml@v0.3.1`, on a push to `main` touching `README.md`, `docs/**`) | marola `pointer-sync.yml` |",
     "dispatch_send_step": "| `site-data-updated` | marola-app `ci.yml` (on a push to `main`) | marola-site `site.yml` |",
-    "reusable_workflow_ref_and_event_type": "| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n| a marola-devkit tag | marola-devkit | marola-app `flake.lock` v0.4.1 | `api-docs.yml` v0.4.1 (marola-app), v9.9.9 (marola-corpus); `gemini-review.yml` v0.5.0 (marola-site); `notify-umbrella.yml` v0.3.1 (marola-site), v0.6.0 (marola-app) |",
+    "reusable_workflow_ref_and_event_type": "| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n| a marola-devkit tag | marola-devkit | marola-app `flake.lock` v0.4.1 | `api-docs.yml` v0.4.1 (marola-app), v9.9.9 (marola-corpus); `gemini-review.yml` v0.5.0 (marola-site); `notify-umbrella.yml` v0.3.1 (marola-site), v0.6.0 (marola-app); `ping.yml` v0.3.1 (marola-ml) |",
     "reusable_workflow_resolved_at_caller_ref": "| `submodule-docs-updated` | marola-site `notify-umbrella.yml` (`notify-umbrella.yml@v0.3.1`, on a push to `main` touching `README.md`, `docs/**`) | marola `pointer-sync.yml` |\n| `submodule-updated` | marola-app `notify-umbrella.yml` (`notify-umbrella.yml@v0.6.0`, on a push to `main`) | marola `pointer-sync.yml` |\n"
     + API_ROW,
     "release_upload_assets": "| `marola-corpus-<tag>.tar.gz` release asset | marola-corpus `release.yml` (on a `v*` tag) | marola-ml `corpus.version` | marola-ml `scripts/corpus-fetch.sh` |",
@@ -618,6 +677,8 @@ def self_test() -> int:
         with contextlib.redirect_stderr(err):
             w = scan(root)
         block = render(w)
+        unreadable = check(w, block, None, "")
+        w.unread.clear()  # the check cases below count the other problems only
         shutil.rmtree(root / ".devkit" / ".git")  # a Nix store path
         raw = f"https://raw.githubusercontent.com/{ORG}/%s/%s/.github/workflows/%s"
         served[raw % ("marola-devkit", "v0.3.1", "notify-umbrella.yml")] = FIXTURE[
@@ -672,6 +733,14 @@ def self_test() -> int:
         v for k, v, _ in effects(array, "r", {}, lambda *a: (None, ""), root) if k == "send"
     )
     cases.append(("dispatch_array_send", sent == ["submodule-docs-updated", "submodule-updated"]))
+    wf_dispatch = load(
+        "on: {workflow_dispatch: {}}\njobs:\n  d:\n    steps:\n      - run: |\n"
+        "          gh api repos/o/r/actions/workflows/x.yml/dispatches -f ref=main\n"
+        '          curl -X POST "https://api.github.com/repos/o/r/actions/workflows/1/dispatches"\n',
+        "workflow_dispatch fixture",
+    )
+    kinds = {k for k, _, _ in effects(wf_dispatch, "r", {}, lambda *a: (None, ""), root)}
+    cases.append(("workflow_dispatch_api_not_unread", "unread-dispatch" not in kinds))
     cases.append(("release_files_shell_forms", release_files(shell) == ["$f", "dist/a.tgz"]))
     cases.append(("missing_callee_warns", "gemini-review.yml@v0.5.0 not found" in err.getvalue()))
     cases.append(("uncloned_callee_warns", "marola-infra/x.yml@v1 not found" in err.getvalue()))
@@ -713,6 +782,53 @@ def self_test() -> int:
         )
     )
     cases.append(("check_reports_every_problem", len(every) == 4))
+    cases.append(
+        (
+            "check_fails_on_unreadable_dispatch_once_per_caller",
+            unreadable
+            == [
+                f"marola-ml `ping.yml`: {UNREAD}",
+                f"marola-site `odd.yml`: {UNREAD}",
+            ],
+        )
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        wf = Path(tmp) / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "l.yml").write_text(
+            "on:\n  repository_dispatch:\n    types: [x]\njobs: {}\n", encoding="utf-8"
+        )
+        lonely = lint_devkit(Path(tmp))
+        n = "on: {workflow_call: {}}\njobs:\n  n:\n    steps:\n      - env: {EVENT_TYPE: x}\n        run: curl https://api.github.com/repos/x/dispatches -d y\n"
+        (wf / "n.yml").write_text(n, encoding="utf-8")
+        caller = "on: {workflow_dispatch: {}}\njobs:\n  c:\n    uses: %s\n"
+        (wf / "c.yml").write_text(caller % "./.github/workflows/n.yml", encoding="utf-8")
+        local = lint_devkit(Path(tmp))
+        tagged = f"{ORG}/marola-devkit/.github/workflows/n.yml@v9.9.9"
+        (wf / "c.yml").write_text(caller % tagged, encoding="utf-8")
+        self_path = lint_devkit(Path(tmp))
+        (wf / "n.yml").write_text(
+            n.replace("{EVENT_TYPE: x}", "{TOKEN: t}").replace("-d y", '-d \'{"event_type":"x"}\''),
+            encoding="utf-8",
+        )
+        json_body = lint_devkit(Path(tmp))
+        (wf / "c.yml").write_text(caller % "./.github/workflows/c.yml", encoding="utf-8")
+        loop = lint_devkit(Path(tmp))
+    cases.append(("lint_devkit_fails_on_listener_without_sender", lonely == [ORPHAN % "x"]))
+    cases.append(("lint_devkit_local_call_sends", local == []))
+    cases.append(
+        (
+            "lint_devkit_call_cycle",
+            loop[0] == "marola-devkit `c.yml`: a reusable-workflow call cycle",
+        )
+    )
+    cases.append(("lint_devkit_tagged_self_path_resolves_locally", self_path == []))
+    cases.append(
+        (
+            "lint_devkit_fails_on_unreadable_dispatch",
+            json_body == [f"marola-devkit `c.yml`: {UNREAD}", ORPHAN % "x"],
+        )
+    )
     fails = [n for n, ok in cases if not ok]
     for name, ok in cases:
         print(f"  {'ok  ' if ok else 'FAIL'} {name}")
@@ -734,11 +850,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, default=Path.cwd())
     ap.add_argument("--devkit", type=Path, help="default: <root>/.devkit, else this script's repo")
     ap.add_argument("--name", default="marola", help="the umbrella's repo name")
-    ap.add_argument("--check", action="store_true")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true")
+    mode.add_argument(
+        "--lint-devkit",
+        nargs="?",
+        const=Path(__file__).resolve().parents[1],
+        type=Path,
+        metavar="DIR",
+    )
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     if args.self_test:
         return self_test()
+    if args.lint_devkit:
+        problems = lint_devkit(args.lint_devkit)
+        for p in problems:
+            print(f"wiring: {p}", file=sys.stderr)
+        return 1 if problems else 0
     w = scan(args.root, args.name, args.devkit)
     block = render(w)
     if args.check:
