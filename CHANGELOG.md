@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## Unreleased
+
+- **Breaking** for a caller that passes `token:` to `skills-update`: the secret is no longer declared,
+  so the caller's workflow fails at the bump. `skills-update` drops the `token` (old PAT) fallback and
+  uses `pr_bot_key`, else the default `GITHUB_TOKEN` (MIP-0086, #148).
+
 ## v0.16.0 — 2026-10-17
 
 - `wiring.py` reports a `/dispatches` call whose type it cannot read, and `--check` fails on it; `wiring.py --lint-devkit` fails on that, or on a `repository_dispatch` type no devkit workflow sends, in the devkit's own workflows, and devkit CI runs it on every PR (#163).
