@@ -12,6 +12,9 @@ marketplace `ref` at once.
 - `runner-preflight` drops its PR-creation check, which advised a `STEWARD_GH_TOKEN` PAT. Scala
   Steward opens PRs as marola-pr-bot on a GitHub-hosted runner, so nothing on the self-hosted
   runner depends on a token that may open PRs (MIP-0086, #149).
+- **Breaking** for a workflow named `marola-sea-publish.yml` on `self-hosted`: `workflow-runners`
+  drops that exemption, so no workflow may name `self-hosted` or an expression in `runs-on:` or
+  `runner:`. marola-ml removed that workflow, and nothing else is self-hosted (#168).
 
 ## v0.16.0 — 2026-10-17
 
