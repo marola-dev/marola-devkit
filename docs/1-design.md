@@ -12,6 +12,7 @@ product code and reads no other repo's tree.
 | `devkit.just` | One recipe per everyday command, each calling a tool by its `PATH` name | `import? '.devkit/devkit.just'` |
 | `.githooks/` | `pre-commit` and `pre-push`, which run the consuming repo's own recipes | `core.hooksPath`, opt-in ([hooks](4-reference_hooks.md)) |
 | `plugins/marola-devkit/` | The Claude Code plugin: skills, agents, hooks ([plugin](4-reference_plugin.md)) | The marketplace in `.claude-plugin/marketplace.json`, pinned by `ref` |
+| `skills/routing/` | The `routing` skill with `route.py` and `session-check.sh` beside it, outside the plugin (MIP-0084 §5.1) | Vendored into a repo's `.claude/skills/` with a `skills.lock` row; `route` is also on `PATH` |
 | `agents/invariants.md` | The org invariants block | `agents-check` compares a repo's AGENTS.md with it |
 | `.github/` | `labels.yml`, `ISSUE_TEMPLATE/`, the PR template, `rulesets/` (`main-rule.json`, `ci-rule.json`), the reusable workflows ([workflows](4-reference_workflows.md)) | Labels by `issues labels sync`, the rulesets by `ruleset-sync`, the forms and template copied as they are; workflows by `uses:` |
 | `.claude/statusline.sh` | A generic status line | `.devkit/.claude/statusline.sh` |
