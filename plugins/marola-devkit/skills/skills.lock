@@ -31,10 +31,10 @@
     "ponytail-audit": {
       "upstream": "DietrichGebert/ponytail",
       "path": "skills/ponytail-audit",
-      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "commit": "1b1a0c51629436cf7831017648f7f3f0827196e4",
       "files": {
         "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
-        "SKILL.md": "5582d10335daff5b5947f9b77927fbc97f2047f3"
+        "SKILL.md": "a8302b0037c9749e5353aa4a561ebbeff97ae018"
       },
       "license": "MIT",
       "local_edits": null,
@@ -46,10 +46,10 @@
     "ponytail-review": {
       "upstream": "DietrichGebert/ponytail",
       "path": "skills/ponytail-review",
-      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "commit": "1b1a0c51629436cf7831017648f7f3f0827196e4",
       "files": {
         "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
-        "SKILL.md": "e137a855bd87119a4517895a1000a59b0999e1b8"
+        "SKILL.md": "b92e98304c1d0c101fc5e02aa33c4252f9a8db85"
       },
       "license": "MIT",
       "local_edits": null,
