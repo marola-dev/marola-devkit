@@ -17,7 +17,7 @@ quality:
     ruff check .
     ruff format --check .
     # Errors only: the warnings/infos came over from marola, which never gated shellcheck.
-    shellcheck --severity=error scripts/*.sh scripts/lib/*.sh plugins/marola-devkit/hooks/*.sh .githooks/* .claude/statusline.sh tests/*.sh
+    shellcheck --severity=error scripts/*.sh scripts/lib/*.sh plugins/marola-devkit/hooks/*.sh skills/*/scripts/*.sh .githooks/* .claude/statusline.sh tests/*.sh
     actionlint
     bash tests/self-tests.sh
     python3 scripts/wiring.py --lint-devkit
