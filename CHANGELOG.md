@@ -4,6 +4,26 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.19.0 — 2026-10-19
+
+- `route` answers code-graph and wiring questions with no Nix and no graphify (MIP-0084 §5.2). It
+  is Python stdlib only and reads the umbrella's `routing-bundle` branch through git
+  (`refs/marola/routing-bundle` after `route fetch`, else `origin/routing-bundle`), or a local
+  `graph build` whose `HEAD` matches. It has `query`, `explain`, `path`, `wiring`, `fetch`, `status`
+  and `bench`, and `wiring --json` writes the bundle's `wiring.json`. On `PATH`, and `just route`
+  (#87, #179).
+- `skills/routing/scripts/session-check.sh` is the read-only `SessionStart` hook a repo runs once it
+  vendors the skill. On `startup` it prints at most three lines: the bundle's age, the plugin opt-in
+  when the plugin is missing and the person has not opted out, and the submodules not checked out.
+  It makes no network call and takes about 30 ms (#88, #181).
+- **Breaking** for a session that uses `/marola-devkit:routing`: the `routing` skill leaves the plugin
+  for `skills/routing/`, beside `route` and `session-check`, and each repo vendors it into
+  `.claude/skills/` (MIP-0084 tasks 6 to 11). Until a repo does, its sessions have no `routing` skill
+  (#89, #182).
+- `route-usage` (`just route-usage`) prints one line per local Claude Code session that ran `route`
+  or `graph` or read the umbrella's wiring block, with whether a person asked first and whether the
+  session saw the hook's line. It prints counts, never transcript text (#89, #182).
+
 ## v0.18.0 — 2026-10-17
 
 - `deps-merge --repo OWNER/REPO --unattended` merges only a green Dependabot PR that changes Python
