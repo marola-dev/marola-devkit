@@ -23,6 +23,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 |---|---|
 | `scripts/` | The tools the flake puts on `PATH`, each with its `lib/` and `fixtures/` beside it |
 | `plugins/marola-devkit/` | The Claude Code plugin: skills, agents, hooks; listed by `.claude-plugin/marketplace.json` |
+| `skills/routing/` | The `routing` skill with `route` and `session-check` beside it; each repo vendors it (MIP-0084) |
 | `agents/invariants.md` | The org invariants block every repo's AGENTS.md carries |
 | `.github/` | `labels.yml`, `ISSUE_TEMPLATE/`, the PR template, `rulesets/` (`main-rule.json`, `ci-rule.json`), and the reusable workflows |
 | `.githooks/` | The opt-in pre-commit and pre-push hooks |
@@ -47,6 +48,7 @@ claude --plugin-dir plugins/marola-devkit   # the plugin, from this checkout
 | `ruleset-sync` | Check or apply the branch rulesets in `.github/rulesets/` (`main-rule`, `ci-rule`) to a repo, or every repo of an org |
 | `api-docs-push` | Force-push a directory as one orphan commit to a branch; the `api-docs` workflow's push step |
 | `graph` | A pinned graphify, offline and keyless, its graph in the user cache: `build`, `query`, `path`, `explain` |
+| `route` / `route-usage` | The same graph and the wiring from the umbrella's `routing-bundle` branch, stdlib only; which local sessions used them |
 | `mip-resolve` | Find a MIP or `.tasks.md` in the repo, the umbrella checkout, or via `gh api` |
 | `mip-stack`, `docs-mip-stack`, `deps-stack`, `deps-merge`, `branches` | Stack and merge helpers |
 | `pr-label`, `backfill-pr-labels` | Apply the deterministic `area/*` label taxonomy to one PR; to every finalized unlabelled PR |
@@ -60,7 +62,7 @@ Every tool has a `--self-test` that runs offline. Usage, flags and recipes:
 ### Claude Code plugin
 
 `marola-devkit@marola-devkit`: the `mip`, `mip-tasks`, `mip-solve-perpetual`, `triage`, `easy-issue-solver`,
-`humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `routing`, `obsidian-vault`,
+`humanizer`, `ponytail*`, `sharingan`, `skill-copy`, `obsidian-vault`,
 `voice-note-ingest` and `voice-to-feature` skills; the `mip-reviewer` and `mip-claims-auditor`
 agents; and three hooks (format on edit, a once-per-session nudge to run the repo's gate, a
 session-start summary).

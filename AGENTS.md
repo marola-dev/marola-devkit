@@ -26,6 +26,8 @@ The shared dev-flow harness every marola repo consumes at a pinned version:
   and `fixtures/` next to itself, never through the caller's cwd.
 - `plugins/marola-devkit/`: the Claude Code plugin (generic skills, the MIP reviewer agents, the
   format/stop/session hooks), listed by `.claude-plugin/marketplace.json`.
+- `skills/routing/`: the `routing` skill with `route` and `session-check` beside it, outside the
+  plugin so each repo vendors it into `.claude/skills/` (MIP-0084).
 - `agents/invariants.md`: the org invariants block; a consuming repo's `agents-check` compares its
   AGENTS.md against this file in its pinned devkit.
 - `.github/`: `labels.yml`, `ISSUE_TEMPLATE/` and the PR template, synced into every repo, and

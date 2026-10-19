@@ -26,8 +26,10 @@ model cannot start it on its own.
 | `ponytail-audit` | Auditing the whole tree for over-engineering | Same source; a ranked list, no edits |
 | `sharingan` | A URL to a skill, workflow or pattern elsewhere that should exist here | Runs on Opus 5.5. Fetches the unit at a pinned sha, lets the licence decide vendor, adapt or rewrite, and maps each upstream concept to what Claude Code or marola already has |
 | `skill-copy` | Same as `sharingan` | An alias. human-only |
-| `routing` | A cross-repo question (what produces, consumes, pins or triggers X) or "where is X" in an unfamiliar repo | Four rules: the wiring block in the umbrella's [REPOS](https://docs.marola.dev/2-Building-marola/REPOS/), `just graph query` for an unknown keyword, `git grep` for a known one, never a graph file whole (MIP-0076 §5.3) |
 | `obsidian-vault` | Saving or resuming a session handoff, or refreshing the marola note in the maintainer's vault | Vault at `MAROLA_OBSIDIAN_VAULT`; usually invisible inside ai-jail. Has evals |
+
+`routing` is not in the plugin: it lives at `skills/routing/` with `route` beside it, and each repo
+vendors it into `.claude/skills/` so it loads with no plugin (MIP-0084 §5.1).
 
 Where a vendored skill disagrees with a repo's AGENTS.md, AGENTS.md wins. The four vendored
 skills are pinned in `skills.lock` beside them ([skills-vendor](4-reference_tools.md#skills-vendor)).

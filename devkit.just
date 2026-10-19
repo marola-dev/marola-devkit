@@ -163,3 +163,7 @@ graph *args:
 # The same graph and the wiring from the umbrella's routing-bundle branch, no build (MIP-0084 §5.2).
 route *args:
     route {{ args }}
+
+# Which local Claude Code sessions routed a question, counts only, read-only (MIP-0084 §5.5).
+route-usage *args:
+    route-usage {{ args }}

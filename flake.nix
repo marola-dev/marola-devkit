@@ -60,6 +60,7 @@
           skills-vendor = "scripts/skills_vendor.py";
           wiring = "scripts/wiring.py";
           route = "skills/routing/scripts/route.py";
+          route-usage = "scripts/route_usage.py";
         };
 
         # The whole tree is installed with its layout intact under share/marola-devkit: the scripts
