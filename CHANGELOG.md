@@ -4,6 +4,10 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.2 — 2026-10-20
+
+- fix(routing): route impact follows references edges (#196)
+
 ## v0.20.1 — 2026-10-20
 
 - `docs-lint` skips REPOS.md's generated wiring block. Its contracts table names other repos' paths on
