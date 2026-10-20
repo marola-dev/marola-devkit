@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.4 — 2026-10-20
+
+- `deps-merge --unattended` passes `--admin`, as `bump-merge` does. gh refused marola-ml#90, which
+  v0.20.3 had made ready, because the repo's main ruleset requires a review; the merge bot is that
+  ruleset's pull-request bypass actor, and GitHub still decides. A person's run never passes it
+  (#200, marola-dev/marola#740).
+
 ## v0.20.3 — 2026-10-20
 
 - `deps-merge` ignores a cancelled check when a newer run of the same check exists; an older
