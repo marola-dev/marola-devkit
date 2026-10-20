@@ -122,6 +122,10 @@ wiring *args:
 decisions *args:
     decisions {{ args }}
 
+# Which docs name which code (MIP-0085 §5.4): DOC-CODE.md and the bundle's doc_code.json.
+doc-code *args:
+    doc-code {{ args }}
+
 # The invariants block in AGENTS.md against the pinned devkit's copy.
 agents-check *args:
     agents-check {{ args }}

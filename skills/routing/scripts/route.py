@@ -7,6 +7,7 @@ route explain <node>  |  route path <a> <b>  a node's neighbours / the shortest 
 route wiring <term>                          the wiring rows that mention <term>
 route impact <node|file> [--depth 2]         what calls it, by file; its contract copies and readers
 route why "<words>"                          the MIPs' decision rows, ranked by BM25 (MIP-0085 §5.6)
+route docs <symbol|path>  |  route code <MIP-NNNN|doc>   the docs naming it / the code it names
 route fetch                                  the bundle into refs/marola/routing-bundle
 route status [--line]                        the bundle's commit and age, and which graph answers
 route bench [file]                           right-first per question (JSON, a YAML subset)
@@ -594,6 +595,125 @@ def why_lines(data: dict | None, question: str, k: int = 5) -> list[str]:
     ]
 
 
+# ---------------------------------------------------------------- doc↔code (MIP-0085 §5.4)
+
+DOC_CODE = "doc_code.json"
+DOC_CODE_MAX = 20
+_doc_code: dict[int, dict] = {}
+
+
+def bare(s: str) -> str:
+    return str(s).strip().strip("`").lstrip(".").removesuffix("()")
+
+
+def names_it(link: dict, file: str, want: str) -> bool:
+    base = file.rsplit("/", 1)[-1]
+    return (
+        want in (file, base, base.rsplit(".", 1)[0], bare(link.get("token", "")))
+        or file.endswith("/" + want)
+        or (link.get("symbol") is not None and bare(link["symbol"]) == bare(want))
+    )
+
+
+def ranked(groups: dict[str, list[dict]], key=None) -> list[str]:
+    return sorted(groups, key=key or (lambda k: (-len(groups[k]), k)))
+
+
+def uniq(xs) -> list[str]:
+    return list(dict.fromkeys(x for x in xs if x))
+
+
+def more(lines: list[str], n: int, what: str) -> list[str]:
+    return lines if n <= DOC_CODE_MAX else [*lines, f"… and {n - DOC_CODE_MAX} more {what}"]
+
+
+def docs_lines(data: dict, arg: str) -> list[str]:
+    """`route docs`: the docs that name a symbol or a file, the most mentions first and, among
+    equals, a doc in the file's own repo."""
+    want = arg.strip().strip("`").removeprefix("./")
+    subs = set(data.get("repos", []))
+
+    def repo(p: str) -> str:
+        head = p.split("/", 1)[0]
+        return head if head in subs else ""
+
+    def same(tok: str) -> bool:
+        tail = bare(want).rsplit("/", 1)[-1]
+        return bare(tok) == bare(want) or any(w.rsplit("/", 1)[-1] == tail for w in tok.split())
+
+    hits: dict[str, list[dict]] = {}
+    amb: dict[str, list[dict]] = {}
+    for doc, d in data.get("docs", {}).items():
+        for x in d.get("links", []):
+            if names_it(x, str(x.get("file", "")), want):
+                hits.setdefault(doc, []).append(x)
+        for x in d.get("ambiguous", []):
+            if same(str(x.get("token", ""))):
+                amb.setdefault(doc, []).append(x)
+
+    def own(doc: str) -> bool:
+        return any(repo(doc) == repo(str(x.get("file", ""))) for x in hits[doc])
+
+    out = []
+    for doc in ranked(hits, lambda k: (-len(hits[k]), not own(k), k))[:DOC_CODE_MAX]:
+        secs = " ".join(uniq(x.get("section") for x in hits[doc])[:3])
+        toks = ", ".join(f"`{t}`" for t in uniq(x.get("token") for x in hits[doc])[:3])
+        out.append(clean(f"{doc} {secs}  {toks}" if secs else f"{doc}  {toks}"))
+    out = more(out, len(hits), "docs")
+    for doc in ranked(amb)[:DOC_CODE_MAX]:
+        x = amb[doc][0]
+        cands = ", ".join(x.get("candidates", []))
+        out.append(clean(f"{doc} {x.get('section', '')}  `{x.get('token')}` ambiguous: {cands}"))
+    return out or [f"no doc names {arg!r}"]
+
+
+def code_lines(data: dict, arg: str) -> list[str]:
+    """`route code`: the files a MIP (all its docs) or one doc names, by tf·idf, so a file every
+    doc names (`AppConfig`, `Main`) ranks below the ones this doc is about."""
+    want = arg.strip().strip("`").removeprefix("./")
+    alld = data.get("docs", {})
+    docs = [
+        d
+        for doc, d in alld.items()
+        if (d.get("mip") or "").upper() == want.upper()
+        or want in (doc, doc.rsplit("/", 1)[-1])
+        or doc.endswith("/" + want)
+    ]
+    if not docs:
+        return [f"no doc matches {arg!r}"]
+    files: dict[str, list[dict]] = {}
+    for d in docs:
+        for x in d.get("links", []):
+            files.setdefault(str(x.get("file", "")), []).append(x)
+    code = data.get("code", {})
+
+    def weight(f: str) -> float:
+        df = len({x.get("doc") for x in code.get(f, [])}) or 1
+        return (1 + math.log(len(files[f]))) * math.log(1 + len(alld) / df)
+
+    out = []
+    for f in ranked(files, lambda k: (-weight(k), k))[:DOC_CODE_MAX]:
+        toks = ", ".join(f"`{t}`" for t in uniq(x.get("token") for x in files[f])[:3])
+        out.append(clean(f"{f} · {toks}"))
+    out = more(out, len(files), "files")
+    amb: dict[tuple, str] = {}
+    for d in docs:
+        for x in d.get("ambiguous", []):
+            cands = tuple(x.get("candidates", []))
+            amb.setdefault(cands, f"ambiguous `{x.get('token')}`: {', '.join(cands)}")
+    out += [clean(a) for a in list(amb.values())[:DOC_CODE_MAX]]
+    return out or [f"{arg} names no code file"]
+
+
+def doc_code_answer(src: Source | None, verb: str, arg: str) -> list[str]:
+    if src is None:
+        return []
+    if id(src) not in _doc_code:
+        _doc_code[id(src)] = src.read(DOC_CODE) or {}
+    data = _doc_code[id(src)]
+    return (docs_lines if verb == "docs" else code_lines)(data, arg) if data else []
+
+
 # ---------------------------------------------------------------- commands
 
 
@@ -670,6 +790,8 @@ def bench(
             # Right first: an expected MIP in the first three answer lines.
             dec = src_wiring.read("decisions.json") if src_wiring else None
             got = "\n".join(why_lines(dec, q["ask"])[:3])
+        elif q.get("via") in ("docs", "code"):
+            got = "\n".join(doc_code_answer(src_wiring, q["via"], q["ask"])[:3])
         else:
             got = render_query(g, q["ask"], 400) if g else ""
             # Right first: an expected file in the first three NODE lines' src=.
@@ -791,6 +913,23 @@ def main(argv: list[str]) -> int:
                 return 0
             lines = why_lines(data, " ".join(rest))
             print("\n".join(lines) if lines else f"no decision row matches {' '.join(rest)!r}")
+            return 0
+        if verb in ("docs", "code"):
+            if not rest:
+                print(
+                    f"usage: route {verb} "
+                    + ("<symbol|path>" if verb == "docs" else "<MIP-NNNN|doc>")
+                )
+                return 2
+            src = pick(cwd, graph=False)
+            if src is None:
+                print(NO_BUNDLE)
+                return 0
+            if not src.read(DOC_CODE):
+                print(f"route: the bundle has no {DOC_CODE} yet (MIP-0085 §5.4); use `git grep`")
+                return 0
+            print(src.label())
+            print("\n".join(doc_code_answer(src, verb, " ".join(rest))))
             return 0
         if verb in ("query", "explain", "path"):
             budget = 400
