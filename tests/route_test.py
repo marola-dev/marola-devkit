@@ -282,6 +282,81 @@ class Route(unittest.TestCase):
         self.assertIn("right first: 2/3", out)
         self.assertIn("MISS   2", out)
 
+    def test_impact_reverse_depth(self) -> None:
+        self.bundle()
+        _, out = self.route("impact", "OpenMeteoClient")
+        rows = [x for x in out.splitlines() if x.startswith("  ")]
+        self.assertEqual(rows[0].split()[:2], ["1", "app/scoring/Veto.scala"])
+        self.assertIn("SafetyVeto", rows[0])
+        self.assertEqual(rows[1].split()[:2], ["2", "app/scoring/Swimability.scala"])
+        self.assertIn(".score()", rows[1])
+        # `method` is not a call: Swimability's 40 callees never appear.
+        self.assertNotIn("f0.scala", out)
+        _, out = self.route("impact", "OpenMeteoClient", "--depth", "1")
+        self.assertNotIn("Swimability.scala", out)
+        _, out = self.route("impact", "app/scoring/Veto.scala")
+        self.assertIn("1  app/scoring/Swimability.scala", out)
+        self.assertNotIn("app/scoring/Veto.scala  ", out.split("\n", 2)[2])
+
+    def test_impact_adds_contract_readers(self) -> None:
+        wiring = {
+            **WIRING,
+            "artifacts": {
+                **WIRING["artifacts"],
+                "`marola-corpus-<tag>.tar.gz` release asset": {
+                    "pub": ["marola-corpus `release.yml`"],
+                    "pin": ["marola-ml `corpus.version`"],
+                    "read": ["marola-ml `scripts/corpus-fetch.sh`"],
+                    "repos": ["marola-corpus"],
+                },
+            },
+            "bumps": {"marola-ml `corpus.version`": ["marola-ml `ci.yml`"]},
+        }
+        self.bundle(**{"wiring.json": json.dumps(wiring)})
+        _, out = self.route("impact", "board.schema.json")
+        lines = out.splitlines()
+        self.assertEqual(lines[1], "contract  marola-app/cli/src/main/resources/board.schema.json")
+        self.assertEqual(lines[2], "  copied to     marola-site/site/board.schema.json")
+        self.assertIn("  read by       marola-site `scripts/board-schema.sh`", out)
+        self.assertIn("  pinned in     marola-site `marola-image`", out)
+        _, out = self.route("impact", "corpus.version")
+        rows = [x for x in out.splitlines() if x.startswith("  ")]
+        self.assertEqual(rows[0], "  read by       marola-ml `scripts/corpus-fetch.sh`")
+        self.assertIn("  bumped by     marola-ml `ci.yml`", out)
+        f = self.tmp / "bench.yaml"
+        f.write_text(
+            json.dumps(
+                [
+                    {
+                        "id": 1,
+                        "via": "impact",
+                        "ask": "board.schema.json",
+                        "expect": ["board-schema.sh"],
+                    },
+                    {"id": 2, "via": "impact", "ask": "OpenMeteoClient", "expect": ["Veto.scala"]},
+                    {
+                        "id": 3,
+                        "via": "impact",
+                        "ask": "OpenMeteoClient",
+                        "expect": ["OpenMeteoClient.scala"],
+                    },
+                ]
+            )
+        )
+        _, out = self.route("bench", str(f))
+        self.assertIn("right first: 2/3", out)
+        self.assertIn("MISS   3", out)
+
+    def test_impact_prints_lower_bound(self) -> None:
+        self.bundle()
+        for x in ("OpenMeteoClient", "board.schema.json", "Lonely", "nothing.json"):
+            rc, out = self.route("impact", x)
+            lines = out.strip().splitlines()
+            self.assertEqual(rc, 0, x)
+            self.assertEqual(lines[0], "answers from main@abcdef1 (bundle)", x)
+            self.assertEqual(lines[-1], "(lower bound: name-resolved calls only)", x)
+        self.assertIn("no graph node or wiring row names nothing.json", out)
+
 
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
