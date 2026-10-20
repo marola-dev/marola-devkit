@@ -36,7 +36,7 @@ those if it wants them.
 ```yaml
 jobs:
   build-test:
-    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/scala-ci.yml@v0.20.0
 ```
 
 | Input | Default | Notes |
@@ -55,7 +55,7 @@ Ruff check + format, then a caller-supplied newline list of self-test commands (
 ```yaml
 jobs:
   python-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/python-ci.yml@v0.20.0
     with:
       self-test-commands: |
         python3 scripts/release.py --self-test
@@ -88,7 +88,7 @@ with a justfile:
 ```yaml
 jobs:
   static-ci:
-    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/static-ci.yml@v0.20.0
     with:
       hadolint-files: |
         Dockerfile
@@ -129,7 +129,7 @@ on:
     branches: [main]
 jobs:
   notify:
-    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/notify-umbrella.yml@v0.20.0
     secrets:
       pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 ```
@@ -168,7 +168,7 @@ permissions: {}
 jobs:
   notify:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository
-    uses: marola-dev/marola-devkit/.github/workflows/notify-devkit.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/notify-devkit.yml@v0.20.0
     secrets:
       pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 ```
@@ -195,9 +195,9 @@ on:
   workflow_dispatch:
 jobs:
   sync:
-    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/labels-sync.yml@v0.20.0
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
 ```
 
 | Input | Default | Notes |
@@ -231,9 +231,9 @@ Compares this repo's `AGENTS.md` invariants block against the pinned devkit's `a
 ```yaml
 jobs:
   agents-check:
-    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/agents-check.yml@v0.20.0
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
 ```
 
 | Input | Default | Notes |
@@ -271,11 +271,11 @@ on:
     branches: [main]
 jobs:
   api-docs:
-    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/api-docs.yml@v0.20.0
     permissions:
       contents: write
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
 ```
 
 The calling job needs `permissions: contents: write` even though only the `publish` sub-job uses
@@ -312,9 +312,9 @@ on:
     types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
 jobs:
   fill:
-    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/pr-body.yml@v0.20.0
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
 ```
 
 | Input | Default | Notes |
@@ -344,7 +344,7 @@ on:
     types: [closed]
 jobs:
   cancel:
-    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/ci-short-circuit.yml@v0.20.0
 ```
 
 No inputs, no secrets. Uses the default `GITHUB_TOKEN` (`actions: write`, declared in the
@@ -383,12 +383,12 @@ on:
 jobs:
   gemini:
     if: github.event.requested_team.slug == 'gemini'
-    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/gemini-review.yml@v0.20.0
     secrets:   # not `inherit`: merge-key-check rejects it in a repo that holds the merge key
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       PR_BOT_KEY: ${{ secrets.PR_BOT_KEY }}
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
       check-command: ""          # e.g. node scripts/site_check.js
 ```
 
@@ -425,9 +425,9 @@ permissions:
   pull-requests: write
 jobs:
   update:
-    uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.19.0
+    uses: marola-dev/marola-devkit/.github/workflows/skills-update.yml@v0.20.0
     with:
-      devkit-ref: v0.19.0
+      devkit-ref: v0.20.0
     secrets:
       pr_bot_key: ${{ secrets.PR_BOT_KEY }}
 ```
@@ -446,7 +446,7 @@ no CI. A caller that still passes `token` fails, because the secret is no longer
 
 ## bot-token (composite action)
 
-`uses: marola-dev/marola-devkit/.github/actions/bot-token@v0.19.0` mints an installation token for
+`uses: marola-dev/marola-devkit/.github/actions/bot-token@v0.20.0` mints an installation token for
 `marola-pr-bot` or `marola-merge-bot` on named `marola-dev` repos, and points git at that bot's
 identity for the rest of the job (MIP-0086 §5.4). A composite action cannot read secrets, so the
 caller passes `app-id` (`vars.PR_BOT_APP_ID` or `vars.MERGE_BOT_APP_ID`) and `private-key`

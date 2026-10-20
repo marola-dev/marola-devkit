@@ -4,6 +4,40 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.0 — 2026-10-20
+
+- `route` answers four more kinds of question from the routing bundle (MIP-0085). Each reads a file
+  the umbrella's bundle job must publish (MIP-0085 task 10); until it does, the command says the
+  file is missing and exits 0.
+  - `route impact <node|file> [--depth 2]`: what calls it, nearest file first, then a file's copies
+    in other repos with their readers, or an artifact's readers and pins. Always a lower bound
+    (#93, #187).
+  - `route docs <symbol|path>` and `route code <MIP-NNNN|doc>`: which docs name a piece of code, and
+    which code a MIP or doc names, from `doc_code.json`; a name defined in several files is listed
+    as ambiguous, never guessed (#94, #190).
+  - `route why "<words>"`: the MIPs' summaries, rejected alternatives and `**Decided …**` lines,
+    ranked by BM25, from `decisions.json` (#95, #188).
+  - `route query --meaning "<question>"`: code nodes ranked by BM25 over their names, docstrings and
+    leading comments, from `meaning.json` (#97, #192).
+- New generators for those files, each with `--self-test`: `doc-code` (writes `DOC-CODE.md` and
+  `doc_code.json`, with `--check` and a guard that refuses a file under half the previous one's
+  rows), `decisions` (writes `DECISIONS.md` and `decisions.json`, with `--check`) and
+  `meaning-text` (writes `meaning.json`).
+- `route query` splits identifiers on case (`OpenMeteoClient` is open, meteo, client), drops stop
+  words such as entry and point, and boosts entry points, which `graph build` now tags (`def
+  main(`, `@main`, `object X extends …App`, a `__main__` guard) (#91, #185).
+- `wiring` gains a fifth table, contracts: a data file copied byte for byte into another repo, such
+  as `board.schema.json`. A `contract <canonical> <copy>…: <reason>` line in `wiring.allow` names
+  the canonical file or links copies that differ on purpose, and `wiring --check` fails when a path
+  in such a line is gone. A consumer's REPOS.md block changes on the bump, which `bump-consumers`
+  regenerates (#92, #186).
+- **Breaking** for a repo with MIPs: `docs-lint` fails a MIP §11 bullet that says "decided" without
+  `**Decided YYYY-MM-DD:**` (MIP-0085 §5.6). The umbrella's three were marked in marola-dev/marola#891
+  (#95, #188).
+- The routing skill names `route impact`, `route why`, `route docs`, `route code` and `route query
+  --meaning` (#191, #190, #192), and `session-check` reads the devkit ref when `settings.json` spreads
+  the marketplace entry over several lines (#184).
+
 ## v0.19.0 — 2026-10-19
 
 - `route` answers code-graph and wiring questions with no Nix and no graphify (MIP-0084 §5.2). It
