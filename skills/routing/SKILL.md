@@ -27,9 +27,10 @@ every clone, run it from inside the umbrella's clone.
   artifact's readers and pins. It is a lower bound: calls are resolved by name only.
 - **Why was something decided, or rejected?** `route why "<words>"` ranks the MIPs' summaries,
   rejected alternatives and `**Decided …**` lines; read the MIP section it names.
-- **A concept or behaviour ("where is the safety veto applied?"), or a known keyword.** `git grep`
-  the concept word first, with `--recurse-submodules` in the umbrella; query the graph with the
-  identifiers it turns up.
+- **A concept or behaviour ("where is the safety veto applied?"), or a known keyword.**
+  `route query --meaning "<question>"` ranks code by the words in its names, docstrings and
+  leading comments, so it takes plain words; or `git grep` the concept word, with
+  `--recurse-submodules` in the umbrella. Then query the graph with the identifiers either turns up.
 - The bundle reflects `main`, not your branch. A local `graph build` whose `HEAD` matches wins over
   it, and `route status` says which one answers.
 - Never read `graph.json`, `GRAPH_REPORT.md` or a bundle file whole.

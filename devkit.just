@@ -126,6 +126,10 @@ decisions *args:
 doc-code *args:
     doc-code {{ args }}
 
+# One text per code-graph node, the bundle's meaning.json that `route query --meaning` ranks (MIP-0085 §5.7).
+meaning-text *args:
+    meaning-text {{ args }}
+
 # The invariants block in AGENTS.md against the pinned devkit's copy.
 agents-check *args:
     agents-check {{ args }}
