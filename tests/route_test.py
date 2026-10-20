@@ -59,6 +59,12 @@ WIRING = {
     "deploys": [],
     "devkit": {},
     "calls": {},
+    "contracts": {
+        "marola-app/cli/src/main/resources/board.schema.json": {
+            "copies": ["marola-site/site/board.schema.json"],
+            "note": "identical",
+        }
+    },
 }
 
 
@@ -207,6 +213,15 @@ class Route(unittest.TestCase):
         self.assertNotIn("dispatch", out)
         _, out = self.route("wiring", "submodule-updated")
         self.assertIn("triggers marola `pointer-sync.yml`", out)
+
+    def test_wiring_lists_contracts(self) -> None:
+        self.bundle()
+        _, out = self.route("wiring", "board.schema")
+        self.assertIn(
+            "contract marola-app/cli/src/main/resources/board.schema.json  copied to "
+            "marola-site/site/board.schema.json · identical",
+            out,
+        )
 
     def test_reads_origin_branch_when_private_ref_absent(self) -> None:
         self.bundle(ref="refs/remotes/origin/routing-bundle")

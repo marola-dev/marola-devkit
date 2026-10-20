@@ -413,6 +413,8 @@ def wiring_rows(w: dict) -> list[str]:
         rows.append(f"deploy {wf}  → {site}")
     for repo, pins in sorted(w.get("devkit", {}).items()):
         rows.append(f"marola-devkit pin in {repo}  {cell(pins)}")
+    for c, v in sorted(w.get("contracts", {}).items()):
+        rows.append(f"contract {c}  copied to {cell(v.get('copies'))} · {v.get('note', '')}")
     return [clean(r) for r in rows]
 
 
