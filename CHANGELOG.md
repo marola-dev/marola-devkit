@@ -4,6 +4,10 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.4 — 2026-10-20
+
+- fix(deps-merge): the unattended merge passes --admin, as bump-merge does (#200)
+
 ## v0.20.3 — 2026-10-20
 
 - `deps-merge` ignores a cancelled check when a newer run of the same check exists; an older
