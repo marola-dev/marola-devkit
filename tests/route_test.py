@@ -298,6 +298,14 @@ class Route(unittest.TestCase):
         self.assertIn("1  app/scoring/Swimability.scala", out)
         self.assertNotIn("app/scoring/Veto.scala  ", out.split("\n", 2)[2])
 
+    def test_impact_follows_references(self) -> None:
+        # graphify 0.9.74 keeps one edge per pair; `Lonely(x: List[OpenMeteoClient]) = OpenMeteoClient()`
+        # comes out as `references`, and the `calls` is gone.
+        ref = {"source": "lone", "target": "om", "relation": "references"}
+        self.bundle(graph={**GRAPH, "links": GRAPH["links"] + [ref]})
+        _, out = self.route("impact", "OpenMeteoClient")
+        self.assertIn("1  x/Lonely.scala  Lonely", out)
+
     def test_impact_adds_contract_readers(self) -> None:
         wiring = {
             **WIRING,
