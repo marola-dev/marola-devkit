@@ -129,6 +129,61 @@ class Route(unittest.TestCase):
         self.assertIn("raise --budget", small)
         self.assertIn("NODE Swimability", small)
 
+    def first_node(self, graph: dict, question: str) -> tuple[str, str]:
+        self.bundle(graph=graph)
+        _, out = self.route("query", question)
+        start = next((x for x in out.splitlines() if x.startswith("start: ")), "")
+        return next((x for x in out.splitlines() if x.startswith("NODE ")), ""), start
+
+    def test_query_splits_identifiers(self) -> None:
+        graph = {
+            "nodes": [
+                {
+                    "id": "om",
+                    "label": "OpenMeteoClient",
+                    "source_file": "app/OpenMeteoClient.scala",
+                },
+                {"id": "doc", "label": "Open meteo client notes", "source_file": "app/notes.scala"},
+            ],
+            "links": [{"source": "doc", "target": "om", "relation": "references"}],
+        }
+        first, _ = self.first_node(graph, "open meteo client")
+        self.assertIn("NODE OpenMeteoClient ", first)
+
+    def test_stop_words_dropped(self) -> None:
+        graph = {
+            "nodes": [
+                {"id": "sw", "label": "Swimability", "source_file": "app/Swimability.scala"},
+                {"id": "pt", "label": "Pointer", "source_file": "app/Pointer.scala"},
+            ],
+            "links": [],
+        }
+        first, start = self.first_node(graph, "the entry point of Swimability")
+        self.assertIn("NODE Swimability ", first)
+        self.assertNotIn("Pointer", start)
+
+    def test_entry_point_boosted(self) -> None:
+        graph = {
+            "nodes": [
+                {"id": "a_old", "label": "Main", "source_file": "app/old/Main.scala"},
+                {
+                    "id": "z_cli",
+                    "label": "Main",
+                    "source_file": "app/cli/Main.scala",
+                    "entry": True,
+                },
+            ]
+            + [
+                {"id": f"h{i}", "label": f"helper{i}", "source_file": "app/old/H.scala"}
+                for i in range(3)
+            ],
+            "links": [
+                {"source": "a_old", "target": f"h{i}", "relation": "calls"} for i in range(3)
+            ],
+        }
+        first, _ = self.first_node(graph, "Main entry point")
+        self.assertIn("src=app/cli/Main.scala", first)
+
     def test_explain_lists_neighbours(self) -> None:
         self.bundle()
         _, out = self.route("explain", "SafetyVeto")

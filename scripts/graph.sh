@@ -28,7 +28,7 @@ self_test() {
   mkdir -p "$bin" && : >"$log"
   # extract's graph: library nodes (no source_file), edges to them, a self-loop, and file nodes
   # (label = file name). cluster-only puts f, run, go in 0; alfa, beta in 1; g alone in 2.
-  FAKE_GRAPH='{"nodes":[{"id":"f","label":"a.py","source_file":"a.py"},{"id":"run","label":"run()","source_file":"a.py"},{"id":"go","label":"go","source_file":"a.py"},{"id":"alfa","label":"alfa","source_file":"c.py"},{"id":"beta","label":"beta","source_file":"c.py"},{"id":"g","label":"b.py","source_file":"b.py"},{"id":"String","source_file":""},{"id":"kyo"}],"links":[{"source":"f","target":"run"},{"source":"f","target":"go"},{"source":"f","target":"g"},{"source":"run","target":"go"},{"source":"alfa","target":"beta"},{"source":"f","target":"String"},{"source":"kyo","target":"alfa"},{"source":"beta","target":"beta"}]}'
+  FAKE_GRAPH='{"nodes":[{"id":"f","label":"a.py","source_file":"a.py"},{"id":"run","label":"run()","source_file":"a.py","source_location":"L2"},{"id":"go","label":"go","source_file":"a.py"},{"id":"alfa","label":"alfa","source_file":"c.py"},{"id":"beta","label":"beta","source_file":"c.py"},{"id":"g","label":"b.py","source_file":"b.py"},{"id":"String","source_file":""},{"id":"kyo"}],"links":[{"source":"f","target":"run"},{"source":"f","target":"go"},{"source":"f","target":"g"},{"source":"run","target":"go"},{"source":"alfa","target":"beta"},{"source":"f","target":"String"},{"source":"kyo","target":"alfa"},{"source":"beta","target":"beta"}]}'
   echo '.nodes |= map(.community = ({"f":0,"run":0,"go":0,"alfa":1,"beta":1,"g":2}[.id]))' >"$tmp/assign.jq"
   # env -i strips anything that could point the fake at its log, so the path is baked in.
   cat >"$bin/graphify" <<EOF
@@ -49,7 +49,8 @@ EOF
   cache="$XDG_CACHE_HOME/marola-graph/r"
 
   git init -q "$sub" && git -C "$sub" commit -q --allow-empty -m s
-  git init -q "$repo" && echo 'x = 1' >"$repo/a.py"
+  git init -q "$repo" && printf 'x = 1\ndef main():\n    pass\n' >"$repo/a.py"
+  printf 'import sys\nif __name__ == "__main__":\n    sys.exit(0)\n' >"$repo/b.py"
   git -C "$repo" submodule -q add "$sub" s 2>/dev/null
   git -C "$repo" add -A && git -C "$repo" commit -q -m init
   g() { (cd "$repo" && bash "$self" "$@" 2>&1); }
@@ -78,6 +79,10 @@ EOF
   check "edges touching them and self-loops are gone" "$(jq -c '[.links[] | .source + "-" + .target]' "$cache/graph.json")" \
     '["f-run","f-go","f-g","run-go","alfa-beta"]'
   check "cluster-only read the pruned graph" "$(grep -c '^CLUSTERED 6 ' "$log")" "2"
+
+  echo "entry_points_tagged"
+  check "a def main( line and a __main__ guard's file node, nothing else" \
+    "$(jq -c '[.nodes[] | select(.entry) | .id]' "$cache/graph.json")" '["run","g"]'
 
   echo "communities_named_by_hub"
   check "the first cluster-only sees no labels" "$(grep '^CLUSTERED' "$log" | head -1)" "CLUSTERED 6 LABELS "
@@ -192,6 +197,42 @@ name_communities() {
     | from_entries' "$OUT/graph.json" >"$OUT/.graphify_labels.json"
 }
 
+# Entry points, which `route query` boosts when a question says entry, start or main (MIP-0085 §5.2):
+# a node whose own line is `def main(`, `@main` or `object X extends …App`, and the file node of a
+# file with a `__main__` guard.
+tag_entries() {
+  python3 - "$OUT/graph.json" "$TOP" <<'PY'
+import json, re, sys
+from pathlib import Path
+
+out, top = Path(sys.argv[1]), Path(sys.argv[2])
+line_rx = re.compile(r"\s*(def main\s*\(|@main\b|object \w+ extends \w*App\b)")
+guard_rx = re.compile(r"""^if __name__ == ['"]__main__['"]""", re.M)
+texts: dict[str, str] = {}
+
+
+def text(rel: str) -> str:
+    if rel not in texts:
+        try:
+            texts[rel] = (top / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            texts[rel] = ""
+    return texts[rel]
+
+
+g = json.loads(out.read_text())
+for n in g.get("nodes", []):
+    rel = n.get("source_file") or ""
+    at = re.fullmatch(r"L(\d+)", str(n.get("source_location") or ""))
+    lines = text(rel).splitlines() if rel else []
+    if at and 0 < int(at.group(1)) <= len(lines) and line_rx.match(lines[int(at.group(1)) - 1]):
+        n["entry"] = True
+    elif rel and n.get("label") == Path(rel).name and guard_rx.search(text(rel)):
+        n["entry"] = True
+out.write_text(json.dumps(g))
+PY
+}
+
 # No `update`: its Markdown pass filled the graph with section headings (#82). The first cluster-only
 # assigns communities; given a labels file and no .sig, the second keeps those names when the
 # community count matches and hub-names the rest itself. --no-label: no model call either way.
@@ -208,6 +249,7 @@ build() {
   (cd "$TOP" && run cluster-only . --no-label --graph "$OUT/graph.json")
   # Trap: with named labels present, cluster-only first copies the graph to a dated backup dir.
   rm -rf "$OUT"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]
+  tag_entries
   stamp >"$OUT/build.json"
   echo "graph: built $OUT/graph.json"
 }
