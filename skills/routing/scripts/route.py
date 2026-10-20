@@ -5,6 +5,7 @@ tables the umbrella's CI publishes on its `routing-bundle` branch (MIP-0084 §5.
 route query "<identifiers>" [--budget 400]   label-matched start nodes, a breadth-first walk
 route explain <node>  |  route path <a> <b>  a node's neighbours / the shortest path
 route wiring <term>                          the wiring rows that mention <term>
+route impact <node|file> [--depth 2]         what calls it, by file; its contract copies and readers
 route fetch                                  the bundle into refs/marola/routing-bundle
 route status [--line]                        the bundle's commit and age, and which graph answers
 route bench [file]                           right-first per question (JSON, a YAML subset)
@@ -423,6 +424,137 @@ def match_rows(w: dict, term: str) -> list[str]:
     return [r for r in wiring_rows(w) if all(x in r.lower() for x in words)]
 
 
+# ---------------------------------------------------------------- impact (MIP-0085 §5.5)
+
+IMPACT_RELS = frozenset({"calls", "imports", "indirect_call"})
+LOWER_BOUND = "(lower bound: name-resolved calls only)"
+FILEISH = re.compile(r"[/.][A-Za-z0-9_-]+$")
+
+
+def impact_row(kind: str, value: str) -> str:
+    return clean(f"  {kind:<12}  {value}")
+
+
+def cell_path(e: str) -> tuple[str, str]:
+    """A wiring cell `marola-ml `scripts/x.sh` (…)` → (repo, path)."""
+    m = re.match(r"(\S+) `([^`]+)`", e)
+    return (m[1], m[2]) if m else (e.split(" ", 1)[0], "")
+
+
+def names_entry(name: str, e: str) -> bool:
+    repo, path = cell_path(e)
+    full = f"{repo}/{path}"
+    # A workflow cell says `ci.yml`, the file is .github/workflows/ci.yml.
+    return bool(path) and (
+        name == full
+        or full.endswith("/" + name)
+        or (name.startswith(repo + "/") and name.endswith("/" + path))
+    )
+
+
+def reverse_walk(g: Graph, start: list[str], depth: int) -> dict[str, int]:
+    callers: dict[str, list[str]] = {}
+    for e in g.edges.values():
+        if e.get("relation") in IMPACT_RELS:
+            callers.setdefault(e["target"], []).append(e["source"])
+    dist = {n: 0 for n in start}
+    frontier = list(start)
+    for hop in range(1, depth + 1):
+        nxt = []
+        for n in frontier:
+            for m in callers.get(n, []):
+                if m not in dist:
+                    dist[m] = hop
+                    nxt.append(m)
+        frontier = nxt
+    return dist
+
+
+def code_impact(g: Graph, start: list[str], depth: int) -> list[str]:
+    own = {g.nodes[n].get("source_file") for n in start}
+    files: dict[str, list[tuple[int, str]]] = {}
+    for n, d in reverse_walk(g, start, depth).items():
+        if d:
+            files.setdefault(str(g.nodes[n].get("source_file") or "?"), []).append((d, g.lab(n)))
+    if not files:
+        return ["(nothing reaches it by calls, imports or indirect_call)"]
+    out = []
+    for f, hits in sorted(
+        files.items(), key=lambda x: (min(x[1])[0], x[0] in own, -len(x[1]), x[0])
+    ):
+        labs = [lab for _, lab in sorted(hits)]
+        more = f" +{len(labs) - 4} more" if len(labs) > 4 else ""
+        out.append(clean(f"  {min(hits)[0]}  {f}  {', '.join(labs[:4])}{more}"))
+    return out
+
+
+def wiring_impact(w: dict, names: list[str]) -> list[str]:
+    out, arts = [], w.get("artifacts") or {}
+    for c, v in sorted((w.get("contracts") or {}).items()):
+        copies = v.get("copies") or []
+        if not any(p == n or p.endswith("/" + n) for p in [c, *copies] for n in names):
+            continue
+        out.append(clean(f"contract  {c}"))
+        out += [impact_row("copied to", p) for p in copies]
+        # A copy reaches its repo through an artifact of the canonical's repo that the copy's repo
+        # reads; the wiring cannot say which reader takes this file, so one named after it leads.
+        home = c.split("/", 1)[0]
+        there = {p.split("/", 1)[0] for p in copies} - {home}
+        stem = set(tokens(Path(c).stem))
+        readers, pins = [], []
+        for key, a in sorted(arts.items()):
+            if home not in (a.get("repos") or []):
+                continue
+            readers += [(e, key) for e in a.get("read") or [] if cell_path(e)[0] in there]
+            pins += [e for e in a.get("pin") or [] if cell_path(e)[0] in there]
+        readers.sort(key=lambda r: -len(stem & set(tokens(r[0]))))
+        out += [impact_row("read by", f"{e} (wiring: reads {key})") for e, key in readers]
+        out += [impact_row("pinned in", e) for e in pins]
+    for key, a in sorted(arts.items()):
+        hit = [
+            e
+            for e in (a.get("pin") or []) + (a.get("pub") or [])
+            if any(names_entry(n, e) for n in names)
+        ]
+        if not hit:
+            continue
+        out.append(clean(f"artifact  {key}"))
+        out += [impact_row("read by", e) for e in a.get("read") or []]
+        out += [impact_row("pinned in", e) for e in a.get("pin") or []]
+        out += [impact_row("published by", e) for e in a.get("pub") or []]
+        out += [impact_row("bumped by", b) for e in hit for b in (w.get("bumps") or {}).get(e, [])]
+    return out
+
+
+def render_impact(g: Graph | None, w: dict, x: str, depth: int = 2) -> str:
+    """Reverse calls, imports and indirect_call from a node or every node of a file, grouped by file,
+    then the wiring: a contract's copies and readers, an artifact's readers and pins."""
+    out, start, names = [], [], [x]
+    if g:
+        files = sorted(
+            {
+                str(sf)
+                for d in g.nodes.values()
+                if (sf := d.get("source_file")) and (sf == x or str(sf).endswith("/" + x))
+            }
+        )
+        if files:
+            start = [n for n, d in g.nodes.items() if d.get("source_file") in files]
+            names = files
+            out.append(clean(f"impact of {', '.join(files)} · {len(start)} nodes · depth {depth}"))
+        elif not FILEISH.search(x) and not wiring_impact(w, names) and (n := g.find(x)):
+            start = [n]
+            names = [str(g.nodes[n].get("source_file") or x)]
+            sf = g.nodes[n].get("source_file", "")
+            out.append(clean(f"impact of {g.lab(n)}  {sf} · depth {depth}"))
+    if start:
+        out += code_impact(g, start, depth)
+    out += wiring_impact(w, names)
+    if not out:
+        out.append(clean(f"no graph node or wiring row names {x}"))
+    return "\n".join([*out, LOWER_BOUND])
+
+
 # ---------------------------------------------------------------- commands
 
 
@@ -490,6 +622,11 @@ def bench(
     for q in qs.get("questions", qs) if isinstance(qs, dict) else qs:
         if q.get("via") == "wiring":
             got = "\n".join(match_rows(w, q["ask"]))
+        elif q.get("via") == "impact":
+            # Right first: an expected path in the first three rows under impact's headers (a file
+            # reached, a copy, a reader, a pin), never in the header naming the asked-about X.
+            got = render_impact(g, w, q["ask"])
+            got = "\n".join([x for x in got.splitlines() if x.startswith("  ")][:3])
         else:
             got = render_query(g, q["ask"], 400) if g else ""
             # Right first: an expected file in the first three NODE lines' src=.
@@ -569,6 +706,30 @@ def main(argv: list[str]) -> int:
             print(src.label())
             rows = match_rows(data, " ".join(rest))
             print("\n".join(rows) if rows else f"no wiring row mentions {' '.join(rest)!r}")
+            return 0
+        if verb == "impact":
+            depth = 2
+            if "--depth" in rest:
+                i = rest.index("--depth")
+                if i + 1 >= len(rest) or not rest[i + 1].isdigit():
+                    print("usage: route impact <node|file> [--depth N]")
+                    return 2
+                depth = int(rest[i + 1])
+                rest = rest[:i] + rest[i + 2 :]
+            if not rest:
+                print("usage: route impact <node|file> [--depth N]")
+                return 2
+            gs, ws = pick(cwd), pick(cwd, graph=False)
+            if gs is None and ws is None:
+                print(NO_BUNDLE)
+                return 0
+            g = load_graph(gs) if gs else None
+            w = (ws.read("wiring.json") if ws else None) or {}
+            label = (gs or ws).label()
+            if gs and ws and gs.kind != ws.kind:
+                label += f"; the wiring {ws.label()}"
+            print(label)
+            print(render_impact(g, w, " ".join(rest), depth))
             return 0
         if verb in ("query", "explain", "path"):
             budget = 400
