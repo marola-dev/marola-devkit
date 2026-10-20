@@ -231,8 +231,11 @@ EOF
   out="$(bash "${BASH_SOURCE[0]}" --unattended --repo o/r --from-json "$fixture" --dry-run 2>"$err")"
   got="$(grep -c '^+ gh pr merge' <<<"$out")"
   check "unattended dry run merges three" "$got" "3"
-  got="$(grep -c -- '+ gh pr merge 401 -R o/r --squash --delete-branch --match-head-commit 401aaaa$' <<<"$out")"
-  check "the merge pins the head commit the checks ran on" "$got" "1"
+  got="$(grep -c -- '+ gh pr merge 401 -R o/r --squash --delete-branch --admin --match-head-commit 401aaaa$' <<<"$out")"
+  check "the merge pins the head commit the checks ran on, past the review rule" "$got" "1"
+  out="$(bash "${BASH_SOURCE[0]}" --from-json "$fixture" --dry-run 2>/dev/null)"
+  got="$(grep -c -- '--admin' <<<"$out" || true)"
+  check "a person's run never passes --admin" "$got" "0"
   got="$(grep -c '^deps-merge: #[0-9]* refused: ' "$err")"
   check "one stderr line per refused PR" "$got" "13"
   rm -f "$err"
@@ -291,7 +294,11 @@ failed=0
 while read -r n oid; do
   [ -n "$n" ] || continue
   cmd=(gh pr merge "$n" "${repo_args[@]}" --squash --delete-branch)
-  [ "$unattended" = false ] || cmd+=(--match-head-commit "$oid")
+  # Unattended, the merge bot is a pull-request-only bypass actor of the repo's main ruleset, and
+  # these rules stand in for the review it requires. --admin only skips gh's client-side refusal of
+  # a BLOCKED PR, as in bump-merge.sh; GitHub still decides (marola-ml#90 failed without it). A
+  # person's run never passes it, so their merge still needs the review.
+  [ "$unattended" = false ] || cmd+=(--admin --match-head-commit "$oid")
   if [ "$dry" -eq 1 ]; then
     echo "+ ${cmd[*]}"
     continue
