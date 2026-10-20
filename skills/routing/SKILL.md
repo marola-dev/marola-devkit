@@ -19,6 +19,9 @@ every clone, run it from inside the umbrella's clone.
   files it names. Ask with the code's own words, a class, file or function name ("Telegram Main",
   "Recommender"), not a description: the graph matches symbol names, not meanings. `route explain
   <node>` lists a node's neighbours, `route path <a> <b>` the shortest path between two.
+- **Which doc explains this code, or which code does a MIP touch?** `route docs <symbol|file>`
+  lists the docs that name it, `route code <MIP-NNNN|doc>` the files a MIP or a doc names. A name
+  defined in several files is shown as `ambiguous` with its candidates, not guessed.
 - **A concept or behaviour ("where is the safety veto applied?"), or a known keyword.** `git grep`
   the concept word first, with `--recurse-submodules` in the umbrella; query the graph with the
   identifiers it turns up.

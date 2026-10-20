@@ -402,6 +402,55 @@ class Route(unittest.TestCase):
         self.assertIn("right first: 1/2", out)
         self.assertIn("MISS   2  why", out)
 
+    def test_docs_and_code_directions(self) -> None:
+        sw = "marola-app/core/src/main/scala/marola/scoring/Swimability.scala"
+        mip = "docs/MIPs/MIP-0031-swimability.md"
+        link = {"doc": mip, "section": "§5", "token": "Swimability.score", "line": 9}
+        dc = {
+            "docs": {
+                mip: {
+                    "mip": "MIP-0031",
+                    "links": [{**link, "file": sw, "symbol": ".score()"}],
+                    "ambiguous": [],
+                },
+                "marola-site/docs/4-reference.md": {
+                    "mip": None,
+                    "links": [],
+                    "ambiguous": [
+                        {
+                            "section": "Reference",
+                            "token": "Swimability",
+                            "line": 3,
+                            "candidates": [sw, "marola-site/x/Swimability.js"],
+                        }
+                    ],
+                },
+            },
+            "code": {sw: [{**link, "symbol": ".score()"}]},
+        }
+        self.bundle(**{"doc_code.json": json.dumps(dc)})
+        _, out = self.route("docs", "Swimability")
+        lines = out.splitlines()
+        self.assertEqual(lines[0], "answers from main@abcdef1 (bundle)")
+        self.assertTrue(lines[1].startswith(f"{mip} §5  `Swimability.score`"), lines)
+        self.assertIn("ambiguous", lines[2])
+        self.assertIn("marola-site/x/Swimability.js", lines[2])
+        _, out = self.route("docs", "scoring/Swimability.scala")
+        self.assertIn(mip, out)
+        _, out = self.route("code", "MIP-0031")
+        self.assertTrue(out.splitlines()[1].startswith(sw), out)
+        self.assertIn("`Swimability.score`", out)
+        _, out = self.route("code", "MIP-0099")
+        self.assertIn("no doc matches 'MIP-0099'", out)
+        qs = [
+            {"id": 1, "via": "docs", "ask": "Swimability", "expect": ["MIP-0031"]},
+            {"id": 2, "via": "code", "ask": "MIP-0031", "expect": ["scoring/Swimability.scala"]},
+        ]
+        f = self.tmp / "bench.yaml"
+        f.write_text(json.dumps(qs))
+        _, out = self.route("bench", str(f))
+        self.assertIn("right first: 2/2", out)
+
 
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
