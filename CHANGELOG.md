@@ -4,6 +4,12 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.1 — 2026-10-20
+
+- `docs-lint` skips REPOS.md's generated wiring block. Its contracts table names other repos' paths on
+  purpose, which rule (b) flagged, so the umbrella's v0.20.0 bump failed; `wiring --check` already
+  gates that block (#194).
+
 ## v0.20.0 — 2026-10-20
 
 - `route` answers four more kinds of question from the routing bundle (MIP-0085). Each reads a file
