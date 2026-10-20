@@ -87,9 +87,22 @@ def split(lines: list[str]):
         yield "prose", start, block
 
 
+def unwired(lines: list[str]) -> list[str]:
+    """Blank REPOS.md's wiring block: `wiring` generates it, names other repos' paths on purpose, and
+    `wiring --check` already gates it (MIP-0076, MIP-0085 §5.3)."""
+    out, inside = [], False
+    for line in lines:
+        if line.strip() == "<!-- wiring:start -->":
+            inside = True
+        out.append("" if inside else line)
+        if line.strip() == "<!-- wiring:end -->":
+            inside = False
+    return out
+
+
 def lint_file(text: str, rel: Path, known: set[str], owned: set[str], umbrella: bool):
     out = []
-    lines = text.splitlines()
+    lines = unwired(text.splitlines())
     for n, line in enumerate(lines, 1):
         for pat, what in STALE:
             if pat.search(line):
@@ -282,6 +295,22 @@ CASES = [
         set(),
     ),
     ("app_path_in_fence_fails", {"docs/x.md": "```bash\ncat core/src/Parse.scala\n```\n"}, {"b"}),
+    (
+        "wiring_block_not_linted_ok",
+        {
+            "docs/REPOS.md": "<!-- wiring:start -->\n\n| marola-app `cli/src/main/x.json` "
+            "| marola-site `site/x.json` | identical |\n<!-- wiring:end -->\n"
+        },
+        set(),
+    ),
+    (
+        "app_path_after_wiring_block_fails",
+        {
+            "docs/REPOS.md": "<!-- wiring:start -->\n| a |\n<!-- wiring:end -->\n\n"
+            "The parser is in core/src/Parse.scala.\n"
+        },
+        {"b"},
+    ),
     ("monorepo_word_fails", {"README.md": "Back in the Monorepo days.\n"}, {"c"}),
     (
         "mips_dir_allowlisted",
