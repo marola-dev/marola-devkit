@@ -15,7 +15,7 @@ sh_tests=(
 )
 py_tests=(
   scripts/gemini_review.py scripts/pr_label_nlp.py scripts/workflow_runners.py scripts/docs_lint.py
-  scripts/skills_vendor.py scripts/release.py scripts/wiring.py scripts/merge_key_check.py
+  scripts/skills_vendor.py scripts/release.py scripts/wiring.py scripts/decisions.py scripts/merge_key_check.py
   scripts/lib/req_merge.py scripts/lib/uses_merge.py scripts/lib/mip_index_merge.py
   scripts/lib/tasks_issues.py plugins/marola-devkit/skills/voice-note-ingest/scripts/transcribe.py
   tests/route_test.py scripts/route_usage.py

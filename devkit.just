@@ -118,6 +118,10 @@ branches-open *args:
 wiring *args:
     wiring {{ args }}
 
+# The MIPs' decisions table, written or checked (MIP-0085 §5.6).
+decisions *args:
+    decisions {{ args }}
+
 # The invariants block in AGENTS.md against the pinned devkit's copy.
 agents-check *args:
     agents-check {{ args }}

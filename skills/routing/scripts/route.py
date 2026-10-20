@@ -6,6 +6,7 @@ route query "<identifiers>" [--budget 400]   label-matched start nodes, a breadt
 route explain <node>  |  route path <a> <b>  a node's neighbours / the shortest path
 route wiring <term>                          the wiring rows that mention <term>
 route impact <node|file> [--depth 2]         what calls it, by file; its contract copies and readers
+route why "<words>"                          the MIPs' decision rows, ranked by BM25 (MIP-0085 §5.6)
 route fetch                                  the bundle into refs/marola/routing-bundle
 route status [--line]                        the bundle's commit and age, and which graph answers
 route bench [file]                           right-first per question (JSON, a YAML subset)
@@ -555,6 +556,44 @@ def render_impact(g: Graph | None, w: dict, x: str, depth: int = 2) -> str:
     return "\n".join([*out, LOWER_BOUND])
 
 
+# ---------------------------------------------------------------- decisions (MIP-0085 §5.6)
+
+
+def bm25(docs: list[list[str]], query: list[str], k1: float = 1.5, b: float = 0.75) -> list[float]:
+    n = len(docs)
+    avg = sum(map(len, docs)) / n if n else 1.0
+    df: dict[str, int] = {}
+    for d in docs:
+        for t in set(d):
+            df[t] = df.get(t, 0) + 1
+    scores = []
+    for d in docs:
+        tf: dict[str, int] = {}
+        for t in d:
+            tf[t] = tf.get(t, 0) + 1
+        s = 0.0
+        for t in set(query) & set(tf):
+            idf = math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5))
+            s += idf * tf[t] * (k1 + 1) / (tf[t] + k1 * (1 - b + b * len(d) / (avg or 1.0)))
+        scores.append(s)
+    return scores
+
+
+def why_lines(data: dict | None, question: str, k: int = 5) -> list[str]:
+    rows = data.get("rows") if isinstance(data, dict) else None
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    raw = tokens(question)
+    q = [t for t in raw if t not in STOP] or raw
+    docs = [tokens(f"{r.get('mip', '')} {r.get('text', '')}") for r in rows]
+    ranked = sorted((-s, i) for i, s in enumerate(bm25(docs, q)) if s > 0)
+    return [
+        clean(
+            f"{r.get('mip', '?')} §{r.get('section', '?')}  {r.get('text', '')} [{r.get('status', '?')}]"
+        )
+        for r in (rows[i] for _, i in ranked[:k])
+    ]
+
+
 # ---------------------------------------------------------------- commands
 
 
@@ -627,6 +666,10 @@ def bench(
             # reached, a copy, a reader, a pin), never in the header naming the asked-about X.
             got = render_impact(g, w, q["ask"])
             got = "\n".join([x for x in got.splitlines() if x.startswith("  ")][:3])
+        elif q.get("via") == "why":
+            # Right first: an expected MIP in the first three answer lines.
+            dec = src_wiring.read("decisions.json") if src_wiring else None
+            got = "\n".join(why_lines(dec, q["ask"])[:3])
         else:
             got = render_query(g, q["ask"], 400) if g else ""
             # Right first: an expected file in the first three NODE lines' src=.
@@ -730,6 +773,24 @@ def main(argv: list[str]) -> int:
                 label += f"; the wiring {ws.label()}"
             print(label)
             print(render_impact(g, w, " ".join(rest), depth))
+            return 0
+        if verb == "why":
+            if not rest:
+                print('usage: route why "<words>"')
+                return 2
+            src = pick(cwd, graph=False)
+            if src is None:
+                print(NO_BUNDLE)
+                return 0
+            data = src.read("decisions.json")
+            print(src.label())
+            if not data:
+                print(
+                    "the bundle has no decisions.json yet; read docs/MIPs/DECISIONS.md or git grep"
+                )
+                return 0
+            lines = why_lines(data, " ".join(rest))
+            print("\n".join(lines) if lines else f"no decision row matches {' '.join(rest)!r}")
             return 0
         if verb in ("query", "explain", "path"):
             budget = 400
