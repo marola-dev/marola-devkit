@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -67,6 +68,8 @@ class Wiring:
         self.devkit: dict[str, list[str]] = {}
         self.calls: dict[str, dict[str, list[str]]] = {}
         self.unread: list[str] = []
+        self.contracts: dict[str, dict] = {}
+        self.bad_contracts: list[str] = []
 
     def art(self, key: str, repo: str = "", match: str = "") -> dict:
         a = self.artifacts.setdefault(key, {"pub": [], "pin": [], "read": [], "repos": set()})
@@ -475,7 +478,66 @@ def scan(root: Path, name: str = "marola", devkit: Path | None = None) -> Wiring
         for m in (settings.get("extraKnownMarketplaces") or {}).values():
             if (m.get("source") or {}).get("repo") == f"{ORG}/marola-devkit":
                 add(w.devkit.setdefault(repo, []), f"marketplace {m['source'].get('ref', '?')}")
+    link_contracts(w, rs, root)
     return w
+
+
+# A contract is a data file copied byte for byte into another repo (MIP-0085 §5.3): change one and
+# the other drifts. Lock files, dot-directories (workflows synced by the devkit, vendored skills) and
+# anything under node_modules are copies by design, not contracts.
+DATA = re.compile(r"\.(json|ya?ml|csv|tsv|sql|proto|avsc|xsd|graphql)$")
+NOT_DATA = {"package.json", "package-lock.json"}
+TEST_DIRS = {"test", "tests", "fixtures", "testdata"}
+
+
+def data_files(d: Path, skip: list[str]) -> list[str]:
+    listed_ = git(d, "ls-files", "-z")
+    rels = (
+        [f for f in listed_.split("\0") if f]
+        if listed_ is not None
+        else [p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file()]
+    )
+    return [
+        r
+        for r in rels
+        if DATA.search(r)
+        and not r.endswith(".lock")
+        and Path(r).name not in NOT_DATA
+        and not any(part.startswith(".") or part == "node_modules" for part in r.split("/"))
+        and not any(r == s or r.startswith(f"{s}/") for s in skip)
+    ]
+
+
+def link_contracts(w: Wiring, rs: list[tuple[str, Path]], root: Path) -> None:
+    dirs = dict(rs)
+    subs = [p.relative_to(root).as_posix() for _, p in rs if p != root and p.is_relative_to(root)]
+    groups: dict[tuple[str, str], list[str]] = {}
+    for repo, d in rs:
+        for rel in data_files(d, subs if d == root else []):
+            digest = hashlib.sha1((d / rel).read_bytes()).hexdigest()  # noqa: S324 - not security
+            groups.setdefault((Path(rel).name, digest), []).append(f"{repo}/{rel}")
+    for keys in groups.values():
+        if len({k.split("/", 1)[0] for k in keys}) > 1:
+            # The canonical file is the first by path, a test copy never: a `contract` line says otherwise.
+            first, *rest = sorted(keys, key=lambda k: (bool(TEST_DIRS & set(k.split("/"))), k))
+            w.contracts[first] = {"copies": rest, "note": "identical"}
+    for ln in read(root / "wiring.allow").splitlines():
+        if not (m := re.match(r"\s*contract\s+([^:]+):(.*)$", ln)):
+            continue
+        paths, reason = m[1].split(), m[2].strip()
+        missing = [
+            p
+            for p in paths
+            if not (dirs.get(p.split("/", 1)[0], root / "-") / p.partition("/")[2]).is_file()
+        ]
+        if missing:
+            w.bad_contracts.append(f"wiring.allow: contract `{missing[0]}` names no file")
+        elif len(paths) < 2 or not reason:
+            w.bad_contracts.append(f"wiring.allow: contract `{paths[0]}` needs a copy and a reason")
+        else:
+            for p in paths:
+                w.contracts.pop(p, None)
+            w.contracts[paths[0]] = {"copies": paths[1:], "note": reason}
 
 
 def render(w: Wiring) -> str:
@@ -501,12 +563,22 @@ def render(w: Wiring) -> str:
     out += [f"| {p} | {cell(wf)} |" for p, wf in sorted(w.bumps.items())]
     out += ["", "| Deploy | Site |", "|---|---|"]
     out += [f"| {wf} | {site} |" for wf, site in w.deploys]
+
+    def at(path: str) -> str:
+        repo, _, rel = path.partition("/")
+        return f"{repo} `{rel}`"
+
+    out += ["", "| Contract | Copied to | Kept |", "|---|---|---|"]
+    out += [
+        f"| {at(c)} | {', '.join(map(at, v['copies']))} | {v['note']} |"
+        for c, v in sorted(w.contracts.items())
+    ]
     return "\n".join(out) + "\n"
 
 
 def to_json(w: Wiring) -> str:
     arts = {k: {**a, "repos": sorted(a["repos"])} for k, a in w.artifacts.items()}
-    keys = ("dispatch", "bumps", "deploys", "devkit", "calls")
+    keys = ("dispatch", "bumps", "deploys", "devkit", "calls", "contracts")
     return json.dumps(
         {"artifacts": arts, **{k: getattr(w, k) for k in keys}}, indent=1, sort_keys=True
     )
@@ -581,8 +653,9 @@ def check(w: Wiring, block: str, path: Path | None, allow: str) -> list[str]:
     out += [f"{label}: {UNREAD}" for label in sorted(w.unread)]
     names = {k.replace("`", ""): a for k, a in w.artifacts.items()}
     allowed = set()
+    out += w.bad_contracts
     for ln in map(str.strip, allow.splitlines()):
-        if not ln or ln.startswith("#"):
+        if not ln or ln.startswith("#") or ln.startswith("contract "):
             continue
         # an artifact name can hold ": " itself (PRs into …: files), so match the known ones first
         name = next((n for n in names if ln.startswith(f"{n}:")), ln.partition(":")[0])
@@ -743,6 +816,30 @@ def self_test() -> int:
         unreadable = check(w, block, None, "")
         w.unread.clear()  # the check cases below count the other problems only
         as_json = json.loads(to_json(w))
+        contract_files = {
+            "marola-app/cli/src/main/resources/board.schema.json": '{"type": "object"}\n',
+            "marola-site/site/board.schema.json": '{"type": "object"}\n',
+            "marola-site/site/areas.json": '["rj"]\n',
+            "marola-app/cli/src/test/resources/areas.json": '["rj"]\n',
+            "marola-ml/a.json": '{"a": 1}\n',
+            "marola-corpus/a.json": '{"a": 2}\n',
+            "marola-ml/conf/drift.yaml": "a: 1\n",
+            "marola-corpus/drift.yaml": "a: 2\n",
+            "marola-ml/.github/x.json": "{}\n",
+            "marola-corpus/.github/x.json": "{}\n",
+            "wiring.allow": "contract marola-ml/conf/drift.yaml marola-corpus/drift.yaml: the corpus adds a key\n"
+            "contract marola-ml/gone.yaml marola-corpus/drift.yaml: stale\n",
+        }
+        for rel, text in contract_files.items():
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text(text, encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()):
+            cw = scan(root)
+        contract_rows = render(cw).splitlines()
+        contract_json = json.loads(to_json(cw)).get("contracts")
+        contract_problems = check(cw, render(cw), None, read(root / "wiring.allow"))
+        for rel in contract_files:
+            (root / rel).unlink()
         shutil.rmtree(root / ".devkit" / ".git")  # a Nix store path
         raw = f"https://raw.githubusercontent.com/{ORG}/%s/%s/.github/workflows/%s"
         served[raw % ("marola-devkit", "v0.3.1", "notify-umbrella.yml")] = FIXTURE[
@@ -797,6 +894,35 @@ def self_test() -> int:
         v for k, v, _ in effects(array, "r", {}, lambda *a: (None, ""), root) if k == "send"
     )
     cases.append(("dispatch_array_send", sent == ["submodule-docs-updated", "submodule-updated"]))
+    cases.append(
+        (
+            "contract_copy_linked",
+            contract_json
+            == {
+                "marola-app/cli/src/main/resources/board.schema.json": {
+                    "copies": ["marola-site/site/board.schema.json"],
+                    "note": "identical",
+                },
+                "marola-ml/conf/drift.yaml": {
+                    "copies": ["marola-corpus/drift.yaml"],
+                    "note": "the corpus adds a key",
+                },
+                "marola-site/site/areas.json": {
+                    "copies": ["marola-app/cli/src/test/resources/areas.json"],
+                    "note": "identical",
+                },
+            }
+            and "| marola-app `cli/src/main/resources/board.schema.json` | marola-site `site/board.schema.json` | identical |"
+            in contract_rows,
+        )
+    )
+    cases.append(
+        (
+            "contract_line_checked_not_an_artifact",
+            [p for p in contract_problems if p.startswith("wiring.allow")]
+            == ["wiring.allow: contract `marola-ml/gone.yaml` names no file"],
+        )
+    )
     wf_dispatch = load(
         "on: {workflow_dispatch: {}}\njobs:\n  d:\n    steps:\n      - run: |\n"
         "          gh api repos/o/r/actions/workflows/x.yml/dispatches -f ref=main\n"
