@@ -4,6 +4,13 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.3 — 2026-10-20
+
+- `deps-merge` ignores a cancelled check when a newer run of the same check exists; an older
+  failure still counts. It also reads an `UNKNOWN` mergeable again, up to five times, before it
+  refuses a PR. The umbrella's first scheduled runs refused marola-ml#90 for each of these, so no
+  Dependabot PR merged by itself (#198, marola-dev/marola#740).
+
 ## v0.20.2 — 2026-10-20
 
 - `route impact` follows `references` edges too. graphify 0.9.74 keeps one edge per pair, often the
