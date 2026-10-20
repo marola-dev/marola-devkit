@@ -4,6 +4,10 @@ Each release moves `plugin.json`'s `version`, the flake package version and ever
 together. A consumer adopts one by bumping its flake input, its workflow `@v…`/`devkit-ref` and its
 marketplace `ref` at once.
 
+## v0.20.3 — 2026-10-20
+
+- fix(deps-merge): ignore superseded cancelled checks, read an UNKNOWN mergeable again (#198)
+
 ## v0.20.2 — 2026-10-20
 
 - `route impact` follows `references` edges too. graphify 0.9.74 keeps one edge per pair, often the
