@@ -22,6 +22,11 @@ every clone, run it from inside the umbrella's clone.
 - **Which doc explains this code, or which code does a MIP touch?** `route docs <symbol|file>`
   lists the docs that name it, `route code <MIP-NNNN|doc>` the files a MIP or a doc names. A name
   defined in several files is shown as `ambiguous` with its candidates, not guessed.
+- **What would changing X reach?** `route impact <symbol|file>` lists what calls it, nearest file
+  first, then, for a file the wiring knows, its copies in other repos with their readers, or an
+  artifact's readers and pins. It is a lower bound: calls are resolved by name only.
+- **Why was something decided, or rejected?** `route why "<words>"` ranks the MIPs' summaries,
+  rejected alternatives and `**Decided …**` lines; read the MIP section it names.
 - **A concept or behaviour ("where is the safety veto applied?"), or a known keyword.** `git grep`
   the concept word first, with `--recurse-submodules` in the umbrella; query the graph with the
   identifiers it turns up.
