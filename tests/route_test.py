@@ -451,6 +451,62 @@ class Route(unittest.TestCase):
         _, out = self.route("bench", str(f))
         self.assertIn("right first: 2/2", out)
 
+    def meaning(self) -> None:
+        texts = {
+            "veto": "SafetyVeto A dangerous flag: the swim is forbidden, whatever the score. "
+            "app/scoring/Veto.scala",
+            "om": "OpenMeteoClient Fetches the sea and weather forecast for a beach. "
+            "app/conditions/OpenMeteoClient.scala",
+            "sw": "Swimability The 0-100 score. app/scoring/Swimability.scala",
+            "lone": "Lonely swim swim swim swim swim swim x/Lonely.scala",
+            "gone": "GoneNode The weather forecast, from an older graph. gone.py",
+        } | {f"f{i}": f"filler{i} app/f{i}.scala" for i in range(40)}
+        self.bundle(**{"meaning.json": json.dumps({"schema": 1, "nodes": texts})})
+
+    def test_meaning_absent_says_so(self) -> None:
+        self.bundle()
+        rc, out = self.route("query", "--meaning", "where is a dangerous swim forbidden")
+        lines = out.strip().splitlines()
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "answers from main@abcdef1 (bundle)")
+        self.assertEqual(len(lines), 2, out)
+        self.assertIn("no meaning.json", lines[1])
+        self.assertIn("`route query` without --meaning", lines[1])
+        self.assertIn("git grep", lines[1])
+
+    def test_meaning_ranks_bm25(self) -> None:
+        self.meaning()
+        rc, out = self.route("query", "--meaning", "where is a dangerous swim forbidden")
+        nodes = [x for x in out.splitlines() if x.startswith("NODE ")]
+        self.assertEqual(rc, 0)
+        self.assertEqual(out.splitlines()[0], "answers from main@abcdef1 (bundle)")
+        # Two rare words beat six repeats of a common one: BM25 saturates a term's count.
+        self.assertTrue(nodes[0].startswith("NODE SafetyVeto [src=app/scoring/Veto.scala "), out)
+        self.assertTrue(nodes[1].startswith("NODE Lonely [src=x/Lonely.scala "), out)
+        _, out = self.route("query", "weather forecast at sea", "--meaning")
+        nodes = [x for x in out.splitlines() if x.startswith("NODE ")]
+        self.assertIn("src=app/conditions/OpenMeteoClient.scala", nodes[0])
+        # A node the graph no longer has prints by its id, never a traceback.
+        self.assertEqual(nodes[1], "NODE gone")
+        _, out = self.route("query", "--meaning", "nothing like it")
+        self.assertIn("no node's text matches 'nothing like it'", out)
+        _, out = self.route("query", "weather forecast at sea")
+        self.assertNotIn("SafetyVeto", out)
+
+    def test_bench_answers_meaning(self) -> None:
+        qs = [
+            {"id": 1, "via": "meaning", "ask": "dangerous swim forbidden", "expect": ["Veto.scala"]}
+        ]
+        f = self.tmp / "bench.yaml"
+        f.write_text(json.dumps(qs))
+        # No meaning.json: the question goes to `route query`, as before MIP-0085 T8.
+        self.bundle()
+        _, out = self.route("bench", str(f))
+        self.assertIn("right first: 0/1", out)
+        self.meaning()
+        _, out = self.route("bench", str(f))
+        self.assertIn("right first: 1/1", out)
+
 
 if __name__ == "__main__":
     if "--self-test" in sys.argv:

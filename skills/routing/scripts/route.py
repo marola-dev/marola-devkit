@@ -3,6 +3,7 @@
 tables the umbrella's CI publishes on its `routing-bundle` branch (MIP-0084 §5.2).
 
 route query "<identifiers>" [--budget 400]   label-matched start nodes, a breadth-first walk
+route query --meaning "<question>"           nodes ranked by BM25 over their text (MIP-0085 §5.7)
 route explain <node>  |  route path <a> <b>  a node's neighbours / the shortest path
 route wiring <term>                          the wiring rows that mention <term>
 route impact <node|file> [--depth 2]         what calls it, by file; its contract copies and readers
@@ -714,6 +715,58 @@ def doc_code_answer(src: Source | None, verb: str, arg: str) -> list[str]:
     return (docs_lines if verb == "docs" else code_lines)(data, arg) if data else []
 
 
+# ---------------------------------------------------------------- meaning (MIP-0085 §5.7)
+
+MEANING_K1 = 1.2  # the one setting the meaning spike ran; nothing was tuned (MIP-0085 Appendix)
+NO_MEANING = "the bundle has no meaning.json yet; ask `route query` without --meaning, with the code's identifiers, or git grep"
+
+
+def meaning_index(*srcs: Source | None) -> tuple[Source, dict, Graph | None] | None:
+    """The first source with a meaning.json, and that source's graph: the ids are that graph's."""
+    seen = set()
+    for s in srcs:
+        if s is None or (s.kind, s.where) in seen:
+            continue
+        seen.add((s.kind, s.where))
+        data = s.read("meaning.json")
+        if isinstance(data, dict) and isinstance(data.get("nodes"), dict):
+            return s, data, load_graph(s)
+    return None
+
+
+def meaning_lines(data: dict, g: Graph | None, question: str, k: int = 10) -> list[str]:
+    """The nodes whose text (meaning_text.py's label, docstring or comment, and path) ranks top by
+    BM25, as NODE lines."""
+    ids = list(data["nodes"])
+    raw = tokens(question)
+    q = [t for t in raw if t not in STOP] or raw
+    docs = [tokens(data["nodes"][n]) for n in ids]
+    ranked = sorted((-s, i) for i, s in enumerate(bm25(docs, q, k1=MEANING_K1)) if s > 0)
+    return [
+        g.node_line(ids[i]) if g and ids[i] in g.nodes else clean(f"NODE {ids[i]}")
+        for _, i in ranked[:k]
+    ]
+
+
+def cmd_meaning(cwd: str | None, question: str) -> int:
+    gs, ws = pick(cwd), pick(cwd, graph=False)
+    if gs is None and ws is None:
+        print(NO_BUNDLE)
+        return 0
+    found = meaning_index(gs, ws)
+    print((found[0] if found else gs or ws).label())
+    if found is None:
+        print(NO_MEANING)
+        return 0
+    lines = meaning_lines(found[1], found[2], question)
+    print(
+        "\n".join(lines)
+        if lines
+        else f"no node's text matches {question!r}; try `route query` without --meaning, or git grep"
+    )
+    return 0
+
+
 # ---------------------------------------------------------------- commands
 
 
@@ -778,7 +831,9 @@ def bench(
     g = load_graph(src_graph) if src_graph else None
     w = (src_wiring.read("wiring.json") if src_wiring else None) or {}
     right, lines = 0, []
-    for q in qs.get("questions", qs) if isinstance(qs, dict) else qs:
+    items = qs.get("questions", qs) if isinstance(qs, dict) else qs
+    meaning = any(q.get("via") == "meaning" for q in items) and meaning_index(src_graph, src_wiring)
+    for q in items:
         if q.get("via") == "wiring":
             got = "\n".join(match_rows(w, q["ask"]))
         elif q.get("via") == "impact":
@@ -792,6 +847,9 @@ def bench(
             got = "\n".join(why_lines(dec, q["ask"])[:3])
         elif q.get("via") in ("docs", "code"):
             got = "\n".join(doc_code_answer(src_wiring, q["via"], q["ask"])[:3])
+        elif q.get("via") == "meaning" and meaning:
+            # Right first as for a query; with no meaning.json, the query below answers it.
+            got = "\n".join(meaning_lines(meaning[1], meaning[2], q["ask"])[:3])
         else:
             got = render_query(g, q["ask"], 400) if g else ""
             # Right first: an expected file in the first three NODE lines' src=.
@@ -937,10 +995,14 @@ def main(argv: list[str]) -> int:
                 i = rest.index("--budget")
                 budget = int(rest[i + 1])
                 rest = rest[:i] + rest[i + 2 :]
+            meaning = verb == "query" and "--meaning" in rest
+            rest = [x for x in rest if not meaning or x != "--meaning"]
             need = 2 if verb == "path" else 1
             if len(rest) < need:
                 print(f"usage: route {verb} " + ("<a> <b>" if verb == "path" else "<identifiers>"))
                 return 2
+            if meaning:
+                return cmd_meaning(cwd, " ".join(rest))
             src = pick(cwd)
             g = load_graph(src) if src else None
             if g is None:
