@@ -357,6 +357,51 @@ class Route(unittest.TestCase):
             self.assertEqual(lines[-1], "(lower bound: name-resolved calls only)", x)
         self.assertIn("no graph node or wiring row names nothing.json", out)
 
+    def decisions(self) -> None:
+        def row(mip: str, text: str, kind: str = "alternative") -> dict:
+            sec = "1" if kind == "summary" else "9"
+            return {"mip": mip, "section": sec, "status": "Draft", "kind": kind, "text": text}
+
+        rows = [
+            row("MIP-0001", "pass pass pass pass the pass", "summary"),
+            row("MIP-0076", "graphify LLM pass (rejected): tokens"),
+            row(
+                "MIP-0085",
+                "graphify LLM pass (rejected): about 0.6M input tokens per run over the "
+                "whole tree of every repo and every doc in it",
+            ),
+        ] + [row(f"MIP-00{i:02d}", f"pass number{i}") for i in range(10, 16)]
+        self.bundle(**{"decisions.json": json.dumps({"rows": rows})})
+
+    def test_why_ranks_bm25(self) -> None:
+        self.bundle()
+        _, out = self.route("why", "graphify LLM pass")
+        self.assertIn("no decisions.json", out)
+        self.decisions()
+        rc, out = self.route("why", "graphify LLM pass")
+        lines = out.splitlines()
+        self.assertEqual(rc, 0)
+        self.assertEqual(lines[0], "answers from main@abcdef1 (bundle)")
+        # The shorter row first (length normalised), then the longer; a common word's repeats
+        # (MIP-0001's five "pass") never outrank two rare words.
+        self.assertEqual(lines[1], "MIP-0076 §9  graphify LLM pass (rejected): tokens [Draft]")
+        self.assertTrue(lines[2].startswith("MIP-0085 §9  graphify LLM pass"), lines[2])
+        self.assertNotIn("MIP-0001", "\n".join(lines[1:3]))
+        _, out = self.route("why", "nothing like it")
+        self.assertIn("no decision row matches 'nothing like it'", out)
+
+    def test_bench_answers_why(self) -> None:
+        self.decisions()
+        qs = [
+            {"id": 1, "via": "why", "ask": "graphify LLM pass", "expect": ["MIP-0085"]},
+            {"id": 2, "via": "why", "ask": "graphify LLM pass", "expect": ["MIP-0099"]},
+        ]
+        f = self.tmp / "bench.yaml"
+        f.write_text(json.dumps(qs))
+        _, out = self.route("bench", str(f))
+        self.assertIn("right first: 1/2", out)
+        self.assertIn("MISS   2  why", out)
+
 
 if __name__ == "__main__":
     if "--self-test" in sys.argv:

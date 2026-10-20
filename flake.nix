@@ -59,6 +59,7 @@
           docs-lint = "scripts/docs_lint.py";
           skills-vendor = "scripts/skills_vendor.py";
           wiring = "scripts/wiring.py";
+          decisions = "scripts/decisions.py";
           route = "skills/routing/scripts/route.py";
           route-usage = "scripts/route_usage.py";
         };

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–g).
+"""Stale-content check over README.md and docs/**/*.md (MIP-0074 §7, rules a–g), and a MIP
+§11 bullet that says decided without its marker (MIP-0085 §5.6, rule h).
 
 docs-lint [repo-root]
 docs-lint --self-test
@@ -181,6 +182,52 @@ def adr_findings(root: Path) -> list[tuple[str, int, str, str]]:
     return out
 
 
+DECIDED = re.compile(r"\bdecided\b", re.I)
+DECIDED_MARKER = re.compile(r"\*\*Decided \d{4}-\d{2}-\d{2}:")
+# "not decided", "once that's decided", "before this is decided" say a decision is still to come.
+PENDING = re.compile(r"\b(?:not|never|once|until|before|after|if|when|whether|yet)\b", re.I)
+BULLET = re.compile(r"^\s*[-*+]\s")
+
+
+def mip_findings(root: Path) -> list[tuple[str, int, str, str]]:
+    """A MIP §11 bullet that records a decision without `**Decided YYYY-MM-DD:**` (MIP-0085 §5.6)."""
+    out = []
+    for f in sorted((root / "docs" / "MIPs").glob("MIP-[0-9][0-9][0-9][0-9]-*.md")):
+        items, cur, on, fence = [], None, False, None
+        for n, line in enumerate(f.read_text(encoding="utf-8").splitlines() + [""], 1):
+            m = FENCE.match(line)
+            if fence:
+                fence = None if m and m.group(1)[0] == fence else fence
+                continue
+            if m:
+                fence = m.group(1)[0]
+                if cur:
+                    items.append(cur)
+                    cur = None
+                continue
+            if line.startswith("## "):
+                on = bool(re.match(r"## 11\.", line))
+            ends = not line.strip() or BULLET.match(line) or line.startswith("#")
+            if cur and ends:
+                items.append(cur)
+                cur = None
+            if on and BULLET.match(line):
+                cur = (n, [line])
+            elif cur:
+                cur[1].append(line)
+        for n, lines in items:
+            text = CODE_SPAN.sub("", " ".join(x.strip() for x in lines))
+            if DECIDED_MARKER.search(text):
+                continue
+            for m in DECIDED.finditer(text):
+                clause = re.split(r"[.;:?!]", text[max(0, m.start() - 40) : m.start()])[-1]
+                if not PENDING.search(clause):
+                    msg = "a §11 bullet says decided without **Decided YYYY-MM-DD:**"
+                    out.append((f.relative_to(root).as_posix(), n, "h", msg))
+                    break
+    return out
+
+
 def lint(root: Path) -> list[tuple[str, int, str, str]]:
     findings = []
     if (root / "docs" / "index.md").is_file():
@@ -196,7 +243,7 @@ def lint(root: Path) -> list[tuple[str, int, str, str]]:
         text = f.read_text(encoding="utf-8")
         for n, rule, msg in lint_file(text, rel, known, owned, umbrella):
             findings.append((rel.as_posix(), n, rule, msg))
-    return findings + adr_findings(root)
+    return findings + adr_findings(root) + mip_findings(root)
 
 
 ADR_OK = "# ADR-0001: Use X\n\n| | |\n|---|---|\n| **Status** | Accepted |\n"
@@ -294,6 +341,41 @@ CASES = [
     ("adr_readme_fails", {"docs/adr/0001-x.md": ADR_OK, "docs/adr/README.md": "# ADRs\n"}, {"f"}),
     ("adr_index_fails", {"docs/adr/0001-x.md": ADR_OK, "docs/adr/index.md": "# ADRs\n"}, {"f"}),
     ("adr_nested_ignored_ok", {"docs/adr/old/notes.md": "# Notes\n"}, set()),
+    (
+        "decided_without_marker",
+        {
+            "docs/MIPs/MIP-0042-x.md": "## 11. Open questions\n\n- Which scope?\n  Decided in #522: user.\n"
+        },
+        {"h"},
+    ),
+    (
+        "decided_with_marker_ok",
+        {
+            "docs/MIPs/MIP-0042-x.md": "## 11. Open questions\n\n- Which scope? **Decided 2026-10-10:** user,\n"
+            "  as decided in review.\n- Which port? **Default:** 8080.\n"
+        },
+        set(),
+    ),
+    (
+        "decided_negated_or_pending_ok",
+        {
+            "docs/MIPs/MIP-0042-x.md": "## 11. Open questions\n\n- CSV or JSONL? Leaning JSONL, but not\n"
+            "  decided; task 3 picks.\n- Publish once that's decided.\n- Merge before this is decided.\n"
+            "\nNone. The maintainer decided the rest.\n```text\n- Decided in a fence\n```\n"
+            "- The `decided` flag.\n"
+        },
+        set(),
+    ),
+    (
+        "decided_outside_section_11_or_mips_ok",
+        {
+            "docs/MIPs/MIP-0042-x.md": "## 5. Design\n\n- Decided in review.\n\n## 11. Open questions\n\n"
+            "- Which? **Default:** x.\n\n## Appendix\n\n- Decided later.\n",
+            "docs/MIPs/MIP-0042.tasks.md": "## 11. Open questions\n\n- Decided in #1.\n",
+            "docs/x.md": "## 11. Open questions\n\n- Decided in #1.\n",
+        },
+        set(),
+    ),
 ]
 UMBRELLA_TEXT = "See docs/1-Using-marola/RUN-LOCALLY.md and docs/2-Building-marola/REPOS.md.\n"
 GITMODULES = '[submodule "marola-app"]\n\tpath = marola-app\n\turl = https://github.com/marola-dev/marola-app.git\n'
