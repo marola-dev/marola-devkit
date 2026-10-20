@@ -36,9 +36,10 @@ EXACT, PREFIX, SUBSTR, SOURCE = 1000.0, 100.0, 1.0, 0.5
 STOP = frozenset(
     "how what why when where which who does did is are was were be been can could should would "
     "will has have had the and but not for from with into that this these those there here its "
-    "their them they about any all some work works working a an of in on to by it do "
+    "their them they about any all some work works working a an of in on to by it do entry point "
     "qual quais quando onde como por para uma não são tem".split()
 )
+ENTRY_WORDS = frozenset({"entry", "entrypoint", "start", "starts", "main"})
 CTRL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -67,9 +68,11 @@ def git(*args: str, cwd: str | None = None, timeout: float = 30) -> str | None:
 
 
 def tokens(text: str) -> list[str]:
+    """Words, with identifiers split on case: `OpenMeteoClient` → open, meteo, client (§5.2)."""
     s = unicodedata.normalize("NFKD", str(text))
-    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
-    return re.findall(r"[^\W_]+", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"([a-z0-9])([A-Z])|([A-Z])([A-Z][a-z])", r"\1\3 \2\4", s)
+    return re.findall(r"[^\W_]+", s.lower())
 
 
 def norm(label: str) -> str:
@@ -216,11 +219,13 @@ class Graph:
             return [], {}
         joined = " ".join(terms)
         jw = max(self.idf(t) for t in terms)
+        wants_entry = bool(ENTRY_WORDS & set(raw))
         scored, best = [], {}
         for nid, d in self.nodes.items():
             nl = norm(d.get("label") or "")
             bare = nl.rstrip("()")
-            lt = " ".join(tokens(d.get("label") or ""))
+            ltoks = tokens(d.get("label") or "")
+            lt = " ".join(ltoks)
             src = str(d.get("source_file") or "").lower()
             score = 0.0
             if joined in (nl, bare, lt, nid.lower()):
@@ -233,7 +238,7 @@ class Graph:
                 tier = sub = 0.0
                 if t in (nl, bare):
                     tier = EXACT * w
-                elif nl.startswith(t) or bare.startswith(t):
+                elif nl.startswith(t) or bare.startswith(t) or t in ltoks:
                     tier = PREFIX * w
                 elif t in nl:
                     sub = SUBSTR * w
@@ -253,6 +258,9 @@ class Graph:
                         best[t] = (key, nid)
             if tiered:
                 score += tiered * (matched / len(terms)) ** 2
+            # Tagged at build (graph.sh); only among nodes the question already matched.
+            if score > 0 and wants_entry and d.get("entry"):
+                score += PREFIX * 10 * jw
             if score > 0:
                 scored.append((score, nid))
         scored.sort(key=lambda s: (-s[0], len(self.lab(s[1])), s[1]))
