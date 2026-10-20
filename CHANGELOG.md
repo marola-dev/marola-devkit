@@ -6,7 +6,10 @@ marketplace `ref` at once.
 
 ## v0.20.3 — 2026-10-20
 
-- fix(deps-merge): ignore superseded cancelled checks, read an UNKNOWN mergeable again (#198)
+- `deps-merge` ignores a cancelled check when a newer run of the same check exists; an older
+  failure still counts. It also reads an `UNKNOWN` mergeable again, up to five times, before it
+  refuses a PR. The umbrella's first scheduled runs refused marola-ml#90 for each of these, so no
+  Dependabot PR merged by itself (#198, marola-dev/marola#740).
 
 ## v0.20.2 — 2026-10-20
 
