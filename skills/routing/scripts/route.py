@@ -429,7 +429,8 @@ def match_rows(w: dict, term: str) -> list[str]:
 
 # ---------------------------------------------------------------- impact (MIP-0085 §5.5)
 
-IMPACT_RELS = frozenset({"calls", "imports", "indirect_call"})
+# `references` too: graphify ≥0.9.74 keeps one edge per pair, often the type use over the call.
+IMPACT_RELS = frozenset({"calls", "imports", "indirect_call", "references"})
 LOWER_BOUND = "(lower bound: name-resolved calls only)"
 FILEISH = re.compile(r"[/.][A-Za-z0-9_-]+$")
 
@@ -480,7 +481,7 @@ def code_impact(g: Graph, start: list[str], depth: int) -> list[str]:
         if d:
             files.setdefault(str(g.nodes[n].get("source_file") or "?"), []).append((d, g.lab(n)))
     if not files:
-        return ["(nothing reaches it by calls, imports or indirect_call)"]
+        return ["(nothing reaches it by calls, imports, indirect_call or references)"]
     out = []
     for f, hits in sorted(
         files.items(), key=lambda x: (min(x[1])[0], x[0] in own, -len(x[1]), x[0])
@@ -530,7 +531,7 @@ def wiring_impact(w: dict, names: list[str]) -> list[str]:
 
 
 def render_impact(g: Graph | None, w: dict, x: str, depth: int = 2) -> str:
-    """Reverse calls, imports and indirect_call from a node or every node of a file, grouped by file,
+    """Reverse calls, imports, indirect_call and references from a node or every node of a file, grouped by file,
     then the wiring: a contract's copies and readers, an artifact's readers and pins."""
     out, start, names = [], [], [x]
     if g:
