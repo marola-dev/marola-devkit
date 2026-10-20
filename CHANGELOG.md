@@ -6,7 +6,10 @@ marketplace `ref` at once.
 
 ## v0.20.4 — 2026-10-20
 
-- fix(deps-merge): the unattended merge passes --admin, as bump-merge does (#200)
+- `deps-merge --unattended` passes `--admin`, as `bump-merge` does. gh refused marola-ml#90, which
+  v0.20.3 had made ready, because the repo's main ruleset requires a review; the merge bot is that
+  ruleset's pull-request bypass actor, and GitHub still decides. A person's run never passes it
+  (#200, marola-dev/marola#740).
 
 ## v0.20.3 — 2026-10-20
 
