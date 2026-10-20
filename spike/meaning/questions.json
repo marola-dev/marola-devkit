@@ -1,0 +1,165 @@
+{
+ "questions": [
+  {
+   "id": 30,
+   "set": "bench",
+   "ask": "where is the safety veto applied",
+   "expect": [
+    "scoring/Swimability.scala"
+   ]
+  },
+  {
+   "id": 31,
+   "set": "bench",
+   "ask": "how are the wind particles drawn on the map",
+   "expect": [
+    "site/static/flow.js"
+   ]
+  },
+  {
+   "id": 32,
+   "set": "bench",
+   "ask": "which hours tomorrow are best for a swim",
+   "expect": [
+    "marola/Recommender.scala"
+   ]
+  },
+  {
+   "id": 33,
+   "set": "bench",
+   "ask": "where are the nearby beaches found",
+   "expect": [
+    "beaches/BeachFinder.scala"
+   ]
+  },
+  {
+   "id": 34,
+   "set": "bench",
+   "ask": "what checks the summary the language model wrote",
+   "expect": [
+    "llm/Reviewer.scala"
+   ]
+  },
+  {
+   "id": "x1",
+   "set": "extra",
+   "ask": "how are high and low tide times worked out",
+   "expect": [
+    "conditions/Tides.scala"
+   ]
+  },
+  {
+   "id": "x2",
+   "set": "extra",
+   "ask": "how does the app guess where I am when no coordinates are given",
+   "expect": [
+    "location/IpGeolocation.scala"
+   ]
+  },
+  {
+   "id": "x3",
+   "set": "extra",
+   "ask": "how are walking paths near a beach found",
+   "expect": [
+    "trails/TrailFinder.scala"
+   ]
+  },
+  {
+   "id": "x4",
+   "set": "extra",
+   "ask": "what emergency note is added to an answer about safety",
+   "expect": [
+    "knowledge/SafetyFooter.scala"
+   ]
+  },
+  {
+   "id": "x5",
+   "set": "extra",
+   "ask": "how does the bot answer an ocean question only from retrieved passages",
+   "expect": [
+    "knowledge/OceanQa.scala"
+   ]
+  },
+  {
+   "id": "x6",
+   "set": "extra",
+   "ask": "where are reported animal sightings saved",
+   "expect": [
+    "sightings/LocalFileSightingStore.scala",
+    "sightings/SightingStore.scala"
+   ]
+  },
+  {
+   "id": "x7",
+   "set": "extra",
+   "ask": "where does the fun fact about the sea at the end of a reply come from",
+   "expect": [
+    "lore/SeaLore.scala"
+   ]
+  },
+  {
+   "id": "x8",
+   "set": "extra",
+   "ask": "how is the training data for fine-tuning the model assembled",
+   "expect": [
+    "finetune/build_dataset.py"
+   ]
+  },
+  {
+   "id": "x9",
+   "set": "extra",
+   "ask": "where are the team members' photos downloaded for the website",
+   "expect": [
+    "scripts/members_build.py"
+   ]
+  },
+  {
+   "id": "x10",
+   "set": "extra",
+   "ask": "how do requests to Brazilian government sites get past the timeouts in CI",
+   "expect": [
+    "scripts/br-proxy"
+   ]
+  },
+  {
+   "id": "x11",
+   "set": "extra",
+   "ask": "which check stops a worse model image from being promoted",
+   "expect": [
+    "scripts/benchmark_gate.py"
+   ]
+  },
+  {
+   "id": "x12",
+   "set": "extra",
+   "ask": "how much GitHub Actions usage is this account billed for",
+   "expect": [
+    "scripts/gh-billing.sh"
+   ]
+  },
+  {
+   "id": "x13",
+   "set": "extra",
+   "ask": "which sampling point belongs to which beach",
+   "expect": [
+    "water/WaterQualityMatcher.scala"
+   ]
+  },
+  {
+   "id": "x14",
+   "set": "extra",
+   "ask": "where are the news posts on the website rendered",
+   "expect": [
+    "scripts/news_build.py"
+   ]
+  },
+  {
+   "id": "x15",
+   "set": "extra",
+   "ask": "where are code review comments posted on a pull request",
+   "expect": [
+    "scripts/ocr-post.py"
+   ]
+  }
+ ]
+}
