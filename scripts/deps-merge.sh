@@ -60,7 +60,18 @@ judge() {
     def rank:
       if eco == "github-actions" then 0 elif eco == "pip" then 1
       elif eco == "scala-steward" then 2 else 3 end;
-    def checks: (.statusCheckRollup // []);
+    # The rollup keeps every run of a check, so a run that concurrency cancelled stays in it after
+    # a newer run of the same check passed (marola-ml#90). Drop only such a CANCELLED entry: an
+    # older FAILURE still counts, so a newer run that skips its jobs cannot hide it. Newer = the
+    # higher job id in detailsUrl (a re-run gets a new one), then the later startedAt.
+    def check_key: if .name then ["run", (.workflowName // ""), .name]
+      elif .context then ["status", .context] else null end;
+    def check_order: [((.detailsUrl // "") | (capture("/job/(?<j>[0-9]+)") | .j | tonumber) // 0),
+      (.startedAt // "")];
+    def checks: (.statusCheckRollup // []) as $all
+      | $all | map(. as $c | ($c | check_key) as $k | select(
+          ((($c.conclusion // "") | ascii_upcase) != "CANCELLED") or $k == null
+          or ([$all[] | select(check_key == $k and check_order > ($c | check_order))] | length) == 0));
     # A CheckRun reports status+conclusion, a StatusContext only state — read both shapes.
     def results: checks | map(.conclusion // .state // "PENDING" | ascii_upcase);
     def running: checks | map(select((.status // "COMPLETED") != "COMPLETED")) | length;
@@ -123,6 +134,24 @@ judge() {
   '
 }
 
+# stdin: gh-pr-list-shaped JSON -> stdout: same, each UNKNOWN mergeable read again. GitHub computes
+# mergeable only when asked, so the first read of a PR nobody has looked at says UNKNOWN
+# (marola-ml#90); a read a few seconds later has the answer. Still UNKNOWN after the tries: refused.
+settle() {
+  local prs n m try
+  prs="$(cat)"
+  for n in $(jq -r '.[] | select(.mergeable == "UNKNOWN") | .number' <<<"$prs"); do
+    m=UNKNOWN
+    for try in 1 2 3 4 5; do
+      sleep "${DEPS_MERGE_RETRY_SLEEP:-3}"
+      m="$(gh pr view "$n" "${repo_args[@]}" --json mergeable -q .mergeable || echo UNKNOWN)"
+      [ "$m" = UNKNOWN ] || break
+    done
+    prs="$(jq --argjson n "$n" --arg m "$m" 'map(if .number == $n then .mergeable = $m else . end)' <<<"$prs")"
+  done
+  printf '%s\n' "$prs"
+}
+
 discover() {
   if [ -n "$from_json" ]; then
     cat "$from_json"
@@ -131,13 +160,13 @@ discover() {
   gh auth status >/dev/null 2>&1 || { echo "gh is not logged in — run: gh auth login" >&2; exit 1; }
   if [ "$unattended" = false ]; then
     gh pr list "${repo_args[@]}" --state open --search "author:app/dependabot" \
-      --json number,title,headRefName,mergeable,statusCheckRollup
+      --json number,title,headRefName,mergeable,statusCheckRollup | settle
     return 0
   fi
   local pr n files
   gh pr list -R "$repo" --state open --search "author:app/dependabot" \
     --json number,title,headRefName,headRefOid,mergeable,statusCheckRollup,author,labels,commits \
-    | jq -c '.[]' | while read -r pr; do
+    | settle | jq -c '.[]' | while read -r pr; do
       n="$(jq -r .number <<<"$pr")"
       # gh pr list has the paths but not the patches the version rule reads.
       files="$(gh api --paginate "repos/$repo/pulls/$n/files" -q '.[] | {path: .filename, patch}' | jq -s .)"
@@ -175,10 +204,10 @@ self_test() {
 
   fixture="$script_dir/fixtures/deps-merge-unattended.json"
   got="$(judge <"$fixture" | jq -c '[.[] | select(.ready) | .number]')"
-  check "interactive mode ignores the unattended rules" "$got" "[401,402,403,404,407,408,409,410,411,412,413,414]"
+  check "interactive mode ignores the unattended rules" "$got" "[401,402,403,404,407,408,409,410,411,412,413,414,415]"
   judged="$(judge true <"$fixture")"
   got="$(jq -c '[.[] | select(.ready) | .number]' <<<"$judged")"
-  check "unattended: only green patch/minor manifest-only Dependabot PRs merge" "$got" "[401,412]"
+  check "unattended: only green patch/minor manifest-only Dependabot PRs merge" "$got" "[401,412,415]"
   while IFS='|' read -r n want; do
     got="$(jq -r --argjson n "$n" '.[] | select(.number == $n) | .reason' <<<"$judged")"
     check "unattended refuses #$n" "$got" "$want"
@@ -195,17 +224,48 @@ self_test() {
 411|Dependabot marks a major update
 413|a major update (mlflow: >=3.17.1,<4 -> >=3.17.1,<5)
 414|changes a manifest line that is not a dependency
+416|checks not green (FAILURE)
 EOF
   local out err
   err="$(mktemp)"
   out="$(bash "${BASH_SOURCE[0]}" --unattended --repo o/r --from-json "$fixture" --dry-run 2>"$err")"
   got="$(grep -c '^+ gh pr merge' <<<"$out")"
-  check "unattended dry run merges two" "$got" "2"
+  check "unattended dry run merges three" "$got" "3"
   got="$(grep -c -- '+ gh pr merge 401 -R o/r --squash --delete-branch --match-head-commit 401aaaa$' <<<"$out")"
   check "the merge pins the head commit the checks ran on" "$got" "1"
   got="$(grep -c '^deps-merge: #[0-9]* refused: ' "$err")"
-  check "one stderr line per refused PR" "$got" "12"
+  check "one stderr line per refused PR" "$got" "13"
   rm -f "$err"
+
+  # A stub gh: pr list says UNKNOWN for #401, pr view says MERGEABLE from read $STUB_AFTER on.
+  local stub
+  stub="$(mktemp -d)"
+  jq '[.[] | select(.number == 401) | .mergeable = "UNKNOWN" | del(.files)]' "$fixture" >"$stub/list.json"
+  jq -c '.[] | select(.number == 401) | .files[]' "$fixture" >"$stub/files.jsonl"
+  printf '#!%s\n' "$BASH" >"$stub/gh"
+  cat >>"$stub/gh" <<'STUB'
+d="$(dirname "$0")"
+case "$1" in
+  auth) exit 0 ;;
+  api) cat "$d/files.jsonl" ;;
+  pr) case "$2" in
+        list) cat "$d/list.json" ;;
+        view) c=$(( $(cat "$d/views" 2>/dev/null || echo 0) + 1 )); echo "$c" >"$d/views"
+              if [ "$c" -ge "$STUB_AFTER" ]; then echo MERGEABLE; else echo UNKNOWN; fi ;;
+      esac ;;
+esac
+STUB
+  chmod +x "$stub/gh"
+  out="$(PATH="$stub:$PATH" STUB_AFTER=2 DEPS_MERGE_RETRY_SLEEP=0 \
+    bash "${BASH_SOURCE[0]}" --unattended --repo o/r --dry-run 2>&1)"
+  got="$(grep -c -- '^+ gh pr merge 401 ' <<<"$out")/$(cat "$stub/views" 2>/dev/null || echo 0)"
+  check "an UNKNOWN mergeable is read again, then merged (merges/reads)" "$got" "1/2"
+  rm -f "$stub/views"
+  out="$(PATH="$stub:$PATH" STUB_AFTER=99 DEPS_MERGE_RETRY_SLEEP=0 \
+    bash "${BASH_SOURCE[0]}" --unattended --repo o/r --dry-run 2>&1)"
+  got="$(grep -c '^deps-merge: #401 refused: not mergeable (UNKNOWN)$' <<<"$out")/$(cat "$stub/views" 2>/dev/null || echo 0)"
+  check "still UNKNOWN after 5 reads: refused (refusals/reads)" "$got" "1/5"
+  rm -rf "$stub"
 
   echo "deps-merge self-test:" "$([ "$fails" -eq 0 ] && echo ok || echo "$fails FAILED")"
   [ "$fails" -eq 0 ]
