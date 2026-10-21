@@ -163,6 +163,9 @@ marketplace `ref` at once.
   `git push --force` and `git reset --hard` disallowed (#36).
 - New human-only skill `easy-issue-solver`: one gated PR per quick-win issue across marola-dev repos,
   one subagent per repo; contributors work from a fork and only on `agent-ready` issues (#139).
+- `ponytail-review` and `ponytail-audit` re-vendored at DietrichGebert/ponytail@2a1fe84: both now review
+  quality broadly (correctness, safety, load, tests, speed) as well as over-engineering, number their
+  findings, tag a `reuse:` of an existing helper, and grep the tree before calling code unused (#40).
 
 ## v0.12.0 — 2026-10-15
 

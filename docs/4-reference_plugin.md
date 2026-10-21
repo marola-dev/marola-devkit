@@ -22,8 +22,8 @@ model cannot start it on its own.
 | `voice-to-feature` | Demoing voice note to Draft PR in one pass | Demo only, not the dev flow; `gh pr merge`/`close` are disallowed tools. human-only |
 | `humanizer` | Prose that reads as generated | Vendored from `blader/humanizer` v3.0.0 (MIT, `LICENSE` beside it); changes wording, never a claim, number or reference |
 | `ponytail` | Writing code | Vendored from `DietrichGebert/ponytail` (MIT): reuse the repo, then the stdlib, then the platform, before new code |
-| `ponytail-review` | Reviewing a diff for over-engineering | Same source; lists findings only |
-| `ponytail-audit` | Auditing the whole tree for over-engineering | Same source; a ranked list, no edits |
+| `ponytail-review` | Reviewing a change: correctness, safety, load, tests, speed and over-engineering | Same source; lists findings only |
+| `ponytail-audit` | Auditing the whole tree: bugs, security, load, untested risk, slow paths and what to cut | Same source; a ranked list, no edits |
 | `sharingan` | A URL to a skill, workflow or pattern elsewhere that should exist here | Runs on Opus 5.5. Fetches the unit at a pinned sha, lets the licence decide vendor, adapt or rewrite, and maps each upstream concept to what Claude Code or marola already has |
 | `skill-copy` | Same as `sharingan` | An alias. human-only |
 | `obsidian-vault` | Saving or resuming a session handoff, or refreshing the marola note in the maintainer's vault | Vault at `MAROLA_OBSIDIAN_VAULT`; usually invisible inside ai-jail. Has evals |
