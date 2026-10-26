@@ -16,10 +16,10 @@
     "ponytail": {
       "upstream": "DietrichGebert/ponytail",
       "path": "skills/ponytail",
-      "commit": "b6c04480c03e8db2f035751d7c46289779ec3362",
+      "commit": "2a1fe842d078cf66ec7f3e6096a8ca4279c2cad7",
       "files": {
         "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
-        "SKILL.md": "02c0712c86277d49d18a77da3a2b825657bf02d1"
+        "SKILL.md": "b76922f76ec6f4db532203c55d710b749fa1f6af"
       },
       "license": "MIT",
       "local_edits": null,
@@ -31,10 +31,10 @@
     "ponytail-audit": {
       "upstream": "DietrichGebert/ponytail",
       "path": "skills/ponytail-audit",
-      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "commit": "2a1fe842d078cf66ec7f3e6096a8ca4279c2cad7",
       "files": {
         "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
-        "SKILL.md": "5582d10335daff5b5947f9b77927fbc97f2047f3"
+        "SKILL.md": "ff9a95480700600fe2664d2d0906a4d750b2da0b"
       },
       "license": "MIT",
       "local_edits": null,
@@ -46,10 +46,10 @@
     "ponytail-review": {
       "upstream": "DietrichGebert/ponytail",
       "path": "skills/ponytail-review",
-      "commit": "bd6176a9b33ab72594ff82e6f34f17b085f25565",
+      "commit": "2a1fe842d078cf66ec7f3e6096a8ca4279c2cad7",
       "files": {
         "LICENSE": "715d483338cea4365f0d91a27799cf61226d6bcf",
-        "SKILL.md": "e137a855bd87119a4517895a1000a59b0999e1b8"
+        "SKILL.md": "a50e3ac6ded6fccc9edae34ce37877bbce11e3fa"
       },
       "license": "MIT",
       "local_edits": null,
